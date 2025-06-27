@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>무한의 탑 Final++</title>
     <link rel="stylesheet" href="styles.css">
+    <script>
+      // 모바일 기기 감지 스크립트
+      if (/Mobi|Android/i.test(navigator.userAgent)) {
+        document.documentElement.classList.add('is-mobile');
+      }
+    </script>
 </head>
 <body>
     <div id="auth-container">
@@ -25,8 +31,11 @@
             <div id="user-info">
                 <span id="welcome-username"></span>님 환영합니다!
             </div>
-            <div id="ranking-container">
-                <button id="ranking-button">🏆 랭킹 보기</button>
+            <div class="top-buttons">
+                <button id="ranking-button">🏆 랭킹</button>
+                <button id="loot-record-button">💎 득템</button>
+                <button id="enhancement-record-button">✨ 강화</button>
+                <button id="online-users-button">👥 접속자</button>
             </div>
             <button id="logout-button">로그아웃</button>
         </div>
@@ -96,15 +105,37 @@
         </div>
     </div>
     
-<div id="ranking-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-content">
-        <span class="close-button">&times;</span>
-        <h2>🏆 무한의 탑 명예의 전당</h2>
-        <ul id="ranking-list">
-            </ul>
+    <div id="ranking-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2>🏆 무한의 탑 명예의 전당</h2>
+            <ul id="ranking-list"></ul>
+        </div>
     </div>
-</div>
 
+    <div id="loot-record-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2>💎 서버 최고 득템 기록</h2>
+            <div id="loot-record-display"></div>
+        </div>
+    </div>
+
+    <div id="enhancement-record-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2>✨ 서버 최고 강화 기록</h2>
+            <div id="enhancement-record-display"></div>
+        </div>
+    </div>
+
+    <div id="online-users-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2>👥 실시간 접속 유저</h2>
+            <ul id="online-users-list" class="feed-list"></ul>
+        </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js"></script>

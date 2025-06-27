@@ -13,12 +13,15 @@ const io     = new Server(server);
 // --- 환경 설정 ---
 const PORT      = 3000;
 const TICK_RATE = 1000;
-const MONGO_URI = process.env.MONGO_URI; // .env 파일의 값을 사용
-const JWT_SECRET = process.env.JWT_SECRET; // .env 파일의 값을 사용
+const MONGO_URI = process.env.MONGO_URI;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // --- MongoDB 연결 ---
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB 데이터베이스에 성공적으로 연결되었습니다.'))
+  .then(() => {
+      console.log('MongoDB 데이터베이스에 성공적으로 연결되었습니다.');
+      loadGlobalRecords(); // DB 연결 후 전역 기록 로드
+  })
   .catch(err => console.error('MongoDB 연결 오류:', err));
 
 // --- Express 미들웨어 및 라우트 ---
@@ -47,22 +50,23 @@ const dropTable = {
     4: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'] }, rates: { Common: 0.65, Rare: 0.25, Legendary: 0.09, Epic: 0.0098, Mystic: 0.0002 } },
 };
 const enhancementTable = {
-    1:  { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 },
-    2:  { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 },
-    3:  { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 },
-    4:  { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 },
-    5:  { success: 0.90, maintain: 0.10, fail: 0.00, destroy: 0.00 },
-    6:  { success: 0.80, maintain: 0.20, fail: 0.00, destroy: 0.00 },
-    7:  { success: 0.60, maintain: 0.25, fail: 0.15, destroy: 0.00 },
-    8:  { success: 0.60, maintain: 0.20, fail: 0.20, destroy: 0.00 },
-    9:  { success: 0.50, maintain: 0.30, fail: 0.20, destroy: 0.00 },
-    10: { success: 0.30, maintain: 0.45, fail: 0.25, destroy: 0.00 },
-    11: { success: 0.20, maintain: 0.00, fail: 0.00, destroy: 0.80 },
-    12: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 },
-    13: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 },
-    14: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 },
-    15: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }
+  1:  { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 },
+  2:  { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 },
+  3:  { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 },
+  4:  { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 },
+  5:  { success: 0.90, maintain: 0.10, fail: 0.00, destroy: 0.00 },
+  6:  { success: 0.80, maintain: 0.20, fail: 0.00, destroy: 0.00 },
+  7:  { success: 0.70, maintain: 0.25, fail: 0.05, destroy: 0.00 },
+  8:  { success: 0.50, maintain: 0.30, fail: 0.20, destroy: 0.00 },
+  9:  { success: 0.40, maintain: 0.40, fail: 0.20, destroy: 0.00 },
+  10: { success: 0.30, maintain: 0.45, fail: 0.25, destroy: 0.00 },
+  11: { success: 0.20, maintain: 0.00, fail: 0.00, destroy: 0.80 },
+  12: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 },
+  13: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 },
+  14: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 },
+  15: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }
 };
+
 const highEnhancementRate = { success: 0.10, maintain: 0.90, fail: 0.00, destroy: 0.00 };
 
 // --- 데이터베이스 스키마 정의 ---
@@ -77,15 +81,24 @@ const GameDataSchema = new mongoose.Schema({
     maxWeaponName: { type: String, default: '' },
     maxArmorEnhancement: { type: Number, default: 0 },
     maxArmorName: { type: String, default: '' },
-    stats: { base: { hp: { type: Number, default: 100 }, attack: { type: Number, default: 10 }, defense: { type: Number, default: 5 } } },
+    stats: { base: { hp: { type: Number, default: 1 }, attack: { type: Number, default: 1 }, defense: { type: Number, default: 1 } } },
     inventory: { type: [Object], default: [] },
     equipment: { weapon: { type: Object, default: null }, armor: { type: Object, default: null } },
     log: { type: [String], default: ["'무한의 탑'에 오신 것을 환영합니다!"] }
+});
+const GlobalRecordSchema = new mongoose.Schema({
+    recordType: { type: String, required: true, unique: true },
+    username: { type: String },
+    itemName: { type: String },
+    itemGrade: { type: String },
+    enhancementLevel: { type: Number },
+    updatedAt: { type: Date, default: Date.now }
 });
 UserSchema.pre('save', async function(next) { if (!this.isModified('password')) return next(); this.password = await bcrypt.hash(this.password, 10); next(); });
 UserSchema.methods.comparePassword = function(plainPassword) { return bcrypt.compare(plainPassword, this.password); };
 const User = mongoose.model('User', UserSchema);
 const GameData = mongoose.model('GameData', GameDataSchema);
+const GlobalRecord = mongoose.model('GlobalRecord', GlobalRecordSchema);
 
 // --- 회원 인증 API ---
 app.post('/api/register', async (req, res) => { try { const { username, password } = req.body; if (!username || !password) return res.status(400).json({ message: '아이디와 비밀번호를 모두 입력해주세요.' }); const existingUser = await User.findOne({ username }); if (existingUser) return res.status(409).json({ message: '이미 사용중인 아이디입니다.' }); const newUser = new User({ username, password }); await newUser.save(); const newGameData = new GameData({ user: newUser._id, username: newUser.username }); await newGameData.save(); res.status(201).json({ message: '회원가입에 성공했습니다!' }); } catch (error) { console.error('회원가입 오류:', error); res.status(500).json({ message: '서버 내부 오류가 발생했습니다.' }); } });
@@ -99,6 +112,35 @@ function calculateTotalStats(player) { if (!player || !player.stats) return; con
 
 // --- 소켓.IO ---
 const onlinePlayers = {};
+let globalRecordsCache = {};
+
+async function loadGlobalRecords() {
+    try {
+        const records = await GlobalRecord.find({});
+        records.forEach(record => {
+            globalRecordsCache[record.recordType] = record;
+        });
+        console.log('전역 최고 기록을 DB에서 로드했습니다.', globalRecordsCache);
+    } catch (error) {
+        console.error('전역 기록 로드 중 오류 발생:', error);
+    }
+}
+
+async function updateGlobalRecord(recordType, data) {
+    try {
+        const updatedRecord = await GlobalRecord.findOneAndUpdate(
+            { recordType },
+            { $set: { ...data, updatedAt: new Date() } },
+            { new: true, upsert: true }
+        );
+        globalRecordsCache[recordType] = updatedRecord;
+        io.emit('globalRecordsUpdate', globalRecordsCache);
+        console.log(`[기록 갱신] ${recordType}:`, data.username, data.itemName || `+${data.enhancementLevel}강`);
+    } catch (error) {
+        console.error(`${recordType} 기록 업데이트 중 오류 발생:`, error);
+    }
+}
+
 io.use(async (socket, next) => { const token = socket.handshake.auth.token; if (!token) { return next(new Error('인증 오류: 토큰이 제공되지 않았습니다.')); } try { const decoded = jwt.verify(token, JWT_SECRET); socket.userId = decoded.userId; socket.username = decoded.username; next(); } catch (error) { return next(new Error('인증 오류: 유효하지 않은 토큰입니다.')); } });
 
 io.on('connection', async (socket) => {
@@ -115,6 +157,7 @@ io.on('connection', async (socket) => {
     if (!onlinePlayers[socket.userId].stats.total) onlinePlayers[socket.userId].stats.total = {};
     onlinePlayers[socket.userId].currentHp = onlinePlayers[socket.userId].stats.total.hp;
     
+    socket.emit('initialGlobalRecords', globalRecordsCache);
     sendState(socket, onlinePlayers[socket.userId], calcMonsterStats(onlinePlayers[socket.userId]));
     
     socket
@@ -123,12 +166,22 @@ io.on('connection', async (socket) => {
         .on('unequipItem', slot => unequipItem(onlinePlayers[socket.userId], slot))
         .on('attemptEnhancement', uid => attemptEnhancement(onlinePlayers[socket.userId], uid, socket))
         .on('requestRanking', async () => { try { const topLevel = await GameData.find({ maxLevel: { $gt: 1 } }).sort({ maxLevel: -1 }).limit(10).lean(); const topGold = await GameData.find({ gold: { $gt: 0 } }).sort({ gold: -1 }).limit(10).lean(); const topWeapon = await GameData.find({ maxWeaponEnhancement: { $gt: 0 } }).sort({ maxWeaponEnhancement: -1 }).limit(10).lean(); const topArmor = await GameData.find({ maxArmorEnhancement: { $gt: 0 } }).sort({ maxArmorEnhancement: -1 }).limit(10).lean(); socket.emit('rankingData', { topLevel, topGold, topWeapon, topArmor }); } catch (error) { console.error("랭킹 데이터 조회 오류:", error); } })
+        .on('requestOnlineUsers', () => {
+            const playersList = Object.values(onlinePlayers).map(p => ({
+                username: p.username,
+                level: p.level,
+                weapon: p.equipment.weapon ? { name: p.equipment.weapon.name, grade: p.equipment.weapon.grade } : null,
+                armor: p.equipment.armor ? { name: p.equipment.armor.name, grade: p.equipment.armor.grade } : null,
+            })).sort((a,b) => b.level - a.level);
+            socket.emit('onlineUsersData', playersList);
+        })
         .on('grantTestItems', () => { const p = onlinePlayers[socket.userId]; if (!p) return; grantTestItems(p); pushLog(p, '[테스트] 아이템 10종 지급 완료!'); sendState(p.socket, p, calcMonsterStats(p)); })
+        // ▼▼▼ TEST_GOLD_AMOUNT 상수를 사용하도록 복원 ▼▼▼
         .on('grantTestGold', () => { const p = onlinePlayers[socket.userId]; if (!p) return; p.gold += TEST_GOLD_AMOUNT; pushLog(p, `[테스트] 골드 +${TEST_GOLD_AMOUNT.toLocaleString()} G`); sendState(p.socket, p, calcMonsterStats(p)); })
         .on('disconnect', () => { console.log(`[연결 해제] 유저: ${socket.username}`); savePlayerData(socket.userId); delete onlinePlayers[socket.userId]; });
 });
 
-// --- 게임 루프 및 관련 함수 ---
+// --- 게임 로직 ---
 function gameTick(player) {
     if (!player || !player.socket) return;
     calculateTotalStats(player);
@@ -148,31 +201,59 @@ function gameTick(player) {
         calculateTotalStats(player);
         player.currentHp = player.stats.total.hp;
         player.monster.currentHp = calcMonsterStats(player).hp;
-        const nextDmg = Math.max(0, calcMonsterStats(player).attack - player.stats.total.defense);
-        if (player.currentHp < nextDmg) { resetPlayer(player, `[${player.level}층] 몬스터의 공격을 버틸 수 없어 1층으로 귀환합니다.`); }
     }
     sendState(player.socket, player, m);
 }
-
 setInterval(() => { for (const userId in onlinePlayers) { gameTick(onlinePlayers[userId]); } }, TICK_RATE);
 
 async function savePlayerData(userId) { const p = onlinePlayers[userId]; if (!p) return; try { await GameData.updateOne({ user: userId }, { $set: { gold: p.gold, level: p.level, maxLevel: p.maxLevel, maxWeaponEnhancement: p.maxWeaponEnhancement, maxWeaponName: p.maxWeaponName, maxArmorEnhancement: p.maxArmorEnhancement, maxArmorName: p.maxArmorName, stats: p.stats, inventory: p.inventory, equipment: p.equipment, log: p.log } }); console.log(`[저장 완료] 유저: ${p.username}의 데이터를 DB에 저장했습니다.`); } catch (error) { console.error(`[저장 실패] 유저: ${p.username} 데이터 저장 중 오류 발생:`, error); } }
-
-// --- 이벤트 핸들러 및 보조 함수 ---
 function sendState(socket, player, monsterStats) { if (!socket || !player) return; const { socket: _, ...playerStateForClient } = player; socket.emit('gameState', { player: playerStateForClient, monster: { ...monsterStats, currentHp: player.monster.currentHp } }); }
 function upgradeStat(player, { stat, amount }) { if (!player) return; const hpBefore = player.stats.total.hp; if (amount === 'MAX') { let base = player.stats.base[stat]; let gold = player.gold; let inc  = 0; let sum  = 0; while (true) { const next = base + inc; if (sum + next > gold) break; sum += next; inc += 1; } if (inc > 0) { player.stats.base[stat] += inc; player.gold -= sum; } } else { const n = Number(amount); let cost = 0; for (let i = 0; i < n; i++) cost += player.stats.base[stat] + i; if (player.gold >= cost) { player.gold -= cost; player.stats.base[stat] += n; } } calculateTotalStats(player); if (stat === 'hp') { const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter; } }
-function equipItem(player, uid) { if (!player) return; const hpBefore = player.stats.total.hp; const idx = player.inventory.findIndex(i => i.uid === uid); if (idx === -1) return; const item = player.inventory[idx]; const slot = item.type; if (player.equipment[slot]) { const currentlyEquipped = player.equipment[slot]; handleItemStacking(player, currentlyEquipped); } if (item.quantity > 1) { item.quantity--; player.equipment[slot] = { ...item, quantity: 1, uid: Date.now() + Math.random().toString(36).slice(2, 11) }; } else { player.equipment[slot] = item; player.inventory.splice(idx, 1); } calculateTotalStats(player); const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 ? player.currentHp * (hpAfter / hpAfter) : hpAfter; if (player.currentHp > hpAfter) player.currentHp = hpAfter; }
-function unequipItem(player, slot) { if (!player || !player.equipment[slot]) return; const hpBefore = player.stats.total.hp; const itemToUnequip = player.equipment[slot]; handleItemStacking(player, itemToUnequip); player.equipment[slot] = null; calculateTotalStats(player); const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 && hpAfter > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter; if(player.currentHp > hpAfter) player.currentHp = hpAfter; }
-function attemptEnhancement(p, uid, socket) { if (!p) return; let item; let isEquipped = false; let idx = p.inventory.findIndex(i => i.uid === uid); if (idx !== -1) { item = p.inventory[idx]; } else { const equipmentKeys = Object.keys(p.equipment); for(const key of equipmentKeys) { if (p.equipment[key] && p.equipment[key].uid === uid) { item = p.equipment[key]; isEquipped = true; break; } } } if (!item) return; if (!isEquipped && item.quantity > 1) { item.quantity--; item = { ...item, quantity: 1, uid: Date.now() + Math.random().toString(36).slice(2, 11) }; p.inventory.push(item); } const cur  = item.enhancement; const cost = Math.floor(1000 * Math.pow(2.1, cur)); if (p.gold < cost) { pushLog(p, '[강화] 골드가 부족합니다.'); return; } p.gold -= cost; const rates = enhancementTable[cur + 1] || highEnhancementRate; const r = Math.random(); let result = 'fail'; let msg = ''; const hpBefore = p.stats.total.hp; if (r < rates.success) { item.enhancement++; result = 'success'; msg = `[+${cur} ${item.name}] 강화 성공! → [+${item.enhancement}]`; if (item.type === 'weapon') { if (item.enhancement > (p.maxWeaponEnhancement || 0)) { p.maxWeaponEnhancement = item.enhancement; p.maxWeaponName = item.name; } } else if (item.type === 'armor') { if (item.enhancement > (p.maxArmorEnhancement || 0)) { p.maxArmorEnhancement = item.enhancement; p.maxArmorName = item.name; } } } else if (r < rates.success + rates.maintain) { result = 'maintain'; msg = `[+${cur} ${item.name}] 강화 유지!`; } else if (r < rates.success + rates.maintain + rates.fail) { item.enhancement = Math.max(0, cur - 1); msg = `[+${cur} ${item.name}] 강화 실패... → [+${item.enhancement}]`; } else { if(isEquipped){ const equipmentKeys = Object.keys(p.equipment); for(const key of equipmentKeys) { if (p.equipment[key] && p.equipment[key].uid === uid) { p.equipment[key] = null; break; } } } else { const itemToRemoveIndex = p.inventory.findIndex(i => i.uid === item.uid); if (itemToRemoveIndex > -1) p.inventory.splice(itemToRemoveIndex, 1); } result = 'destroy'; msg = `[+${cur} ${item.name}] 아이템이 파괴되었습니다...`; } calculateTotalStats(p); const hpAfter = p.stats.total.hp; p.currentHp = hpBefore > 0 && hpAfter > 0 ? p.currentHp * (hpAfter / hpBefore) : hpAfter; if(p.currentHp > hpAfter) p.currentHp = hpAfter; pushLog(p, msg); socket.emit('enhancementResult', { result, newItem: (result !== 'destroy' ? item : null), destroyed: result === 'destroy' }); }
+function equipItem(player, uid) { if (!player) return; const hpBefore = player.stats.total.hp; const idx = player.inventory.findIndex(i => i.uid === uid); if (idx === -1) return; const item = player.inventory[idx]; const slot = item.type; if (player.equipment[slot]) { handleItemStacking(player, player.equipment[slot]); } if (item.quantity > 1) { item.quantity--; player.equipment[slot] = { ...item, quantity: 1, uid: Date.now() + Math.random().toString(36).slice(2, 11) }; } else { player.equipment[slot] = item; player.inventory.splice(idx, 1); } calculateTotalStats(player); const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 ? player.currentHp * (hpAfter / hpAfter) : hpAfter; if (player.currentHp > hpAfter) player.currentHp = hpAfter; }
+function unequipItem(player, slot) { if (!player || !player.equipment[slot]) return; const hpBefore = player.stats.total.hp; handleItemStacking(player, player.equipment[slot]); player.equipment[slot] = null; calculateTotalStats(player); const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 && hpAfter > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter; if(player.currentHp > hpAfter) player.currentHp = hpAfter; }
+function attemptEnhancement(p, uid, socket) { if (!p) return; let item; let isEquipped = false; let idx = p.inventory.findIndex(i => i.uid === uid); if (idx !== -1) { item = p.inventory[idx]; } else { const equipmentKeys = Object.keys(p.equipment); for(const key of equipmentKeys) { if (p.equipment[key] && p.equipment[key].uid === uid) { item = p.equipment[key]; isEquipped = true; break; } } } if (!item) return; if (!isEquipped && item.quantity > 1) { item.quantity--; item = { ...item, quantity: 1, uid: Date.now() + Math.random().toString(36).slice(2, 11) }; p.inventory.push(item); } const cur  = item.enhancement; const cost = Math.floor(1000 * Math.pow(2.1, cur)); if (p.gold < cost) { pushLog(p, '[강화] 골드가 부족합니다.'); return; } p.gold -= cost; const rates = enhancementTable[cur + 1] || highEnhancementRate; const r = Math.random(); let result = 'fail'; let msg = ''; const hpBefore = p.stats.total.hp; if (r < rates.success) { item.enhancement++; result = 'success'; msg = `[+${cur} ${item.name}] 강화 성공! → [+${item.enhancement}]`; if (item.type === 'weapon') { if (item.enhancement > (p.maxWeaponEnhancement || 0)) { p.maxWeaponEnhancement = item.enhancement; p.maxWeaponName = item.name; } } else if (item.type === 'armor') { if (item.enhancement > (p.maxArmorEnhancement || 0)) { p.maxArmorEnhancement = item.enhancement; p.maxArmorName = item.name; } }
+        const currentTopEnh = globalRecordsCache.topEnhancement || { enhancementLevel: 0 };
+        if(item.enhancement >= currentTopEnh.enhancementLevel) {
+            updateGlobalRecord('topEnhancement', {
+                username: p.username,
+                itemName: item.name,
+                itemGrade: item.grade,
+                enhancementLevel: item.enhancement
+            });
+        }
+    } else if (r < rates.success + rates.maintain) { result = 'maintain'; msg = `[+${cur} ${item.name}] 강화 유지!`; } else { if(isEquipped){ const equipmentKeys = Object.keys(p.equipment); for(const key of equipmentKeys) { if (p.equipment[key] && p.equipment[key].uid === uid) { p.equipment[key] = null; break; } } } else { const itemToRemoveIndex = p.inventory.findIndex(i => i.uid === item.uid); if (itemToRemoveIndex > -1) p.inventory.splice(itemToRemoveIndex, 1); } result = 'destroy'; msg = `[+${cur} ${item.name}] 아이템이 파괴되었습니다...`; } calculateTotalStats(p); const hpAfter = p.stats.total.hp; p.currentHp = hpBefore > 0 && hpAfter > 0 ? p.currentHp * (hpAfter / hpBefore) : hpAfter; if(p.currentHp > hpAfter) p.currentHp = hpAfter; pushLog(p, msg); socket.emit('enhancementResult', { result, newItem: (result !== 'destroy' ? item : null), destroyed: result === 'destroy' }); }
 function pushLog(p, text) { p.log.unshift(text); if (p.log.length > 15) p.log.pop(); }
-function onClearFloor(p) { p.gold += p.level; pushLog(p, `[${p.level}층] 클리어! (+${p.level.toLocaleString()} G)`); if (Math.random() < 0.02) { const zone = p.level <= 500 ? 1 : p.level <= 3000 ? 2 : p.level <= 15000 ? 3 : 4; const tbl = dropTable[zone]; let grade, acc = 0, r = Math.random(); for (const g in tbl.rates) { acc += tbl.rates[g]; if (r < acc) { grade = g; break; } } if (grade) { const pool = tbl.itemsByGrade[grade] || []; if (pool.length) { const id = pool[Math.floor(Math.random() * pool.length)]; const droppedItem = createItemInstance(id); handleItemStacking(p, droppedItem); pushLog(p, `[${p.level}층] ${itemData[id].name} 획득!`); } } } }
+function onClearFloor(p) { p.gold += p.level; pushLog(p, `[${p.level}층] 클리어! (+${p.level.toLocaleString()} G)`); if (Math.random() < 0.02) { const zone = p.level <= 500 ? 1 : p.level <= 3000 ? 2 : p.level <= 15000 ? 3 : 4; const tbl = dropTable[zone]; let grade, acc = 0, r = Math.random(); for (const g in tbl.rates) { acc += tbl.rates[g]; if (r < acc) { grade = g; break; } } if (grade) { const pool = tbl.itemsByGrade[grade] || []; if (pool.length) { const id = pool[Math.floor(Math.random() * pool.length)]; const droppedItem = createItemInstance(id); handleItemStacking(p, droppedItem); const logMsg = `[${p.level}층] ${itemData[id].name} 획득!`; pushLog(p, logMsg); 
+        if (['Legendary', 'Epic', 'Mystic'].includes(droppedItem.grade)) {
+            updateGlobalRecord(`topLoot_${droppedItem.grade}`, {
+                username: p.username,
+                itemName: droppedItem.name,
+                itemGrade: droppedItem.grade
+            });
+        }
+    } } } }
 function calcMonsterStats(p) { return { level: p.level, hp: p.level, attack: p.level / 2, defense: p.level / 5 }; }
 function resetPlayer(p, msg) { p.level = 1; calculateTotalStats(p); p.currentHp = p.stats.total.hp; p.monster.currentHp = 1; pushLog(p, msg); }
 
 // --- 서버 시작 ---
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));
 
+// ▼▼▼ 삭제되었던 테스트 지급 설정 코드를 원래대로 복원합니다. ▼▼▼
 /* ===== 테스트 지급 설정 ===== */
 const TEST_GOLD_AMOUNT = 999999999999;
 const TEST_ITEM_IDS = ['w001','w002','w003','w004','w005','a001','a002','a003','a004','a005'];
-function grantTestItems(p){ TEST_ITEM_IDS.forEach(id => handleItemStacking(p, createItemInstance(id))); }
+function grantTestItems(p) {
+    TEST_ITEM_IDS.forEach(id => {
+        const itemInstance = createItemInstance(id);
+        handleItemStacking(p, itemInstance);
+
+        // 지급된 아이템의 등급을 확인하여, 레전더리 이상이면 득템 기록에 남김
+        if (['Legendary', 'Epic', 'Mystic'].includes(itemInstance.grade)) {
+            updateGlobalRecord(`topLoot_${itemInstance.grade}`, {
+                username: p.username,
+                itemName: itemInstance.name,
+                itemGrade: itemInstance.grade
+            });
+        }
+    });
+}

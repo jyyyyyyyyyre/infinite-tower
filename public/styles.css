@@ -1,3 +1,5 @@
+/* styles.css 전체를 아래 코드로 교체하세요. */
+
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
 :root{--bg-color-dark:#12141d;--bg-color-light:#1c1f2d;--surface-color:rgba(44,45,62,.6);--primary-color:#007aff;--secondary-color:#ff9500;--border-color:rgba(142,142,147,.4);--text-color:#f5f5f7;--text-muted:#8a8a8e;--success-color:#34c759;--fail-color:#ff3b30;--damage-color:#ffcc00;--common-color:#fff;--rare-color:#007aff;--legendary-color:#ff9500;--epic-color:#af52de;--mystic-color:#ff2d55}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -42,37 +44,13 @@ body{font-family:'Noto Sans KR',sans-serif;color:var(--text-color);display:flex;
 .tabs{display:flex;background:rgba(0,0,0,.2);flex-shrink:0}
 .tab-button{flex-grow:1;padding:20px;background:none;border:none;color:var(--text-muted);font-size:1.4em;font-weight:500;cursor:pointer;transition:all .2s;border-bottom:4px solid transparent;max-width:250px}
 .tab-button.active{color:var(--secondary-color);border-bottom-color:var(--secondary-color)}
-.tab-content {
-    display: none;
-    padding: 25px;
-    overflow-y: auto; /* 세로 스크롤은 필요할 때 자동으로 생김 */
-    overflow-x: hidden; /* 가로 스크롤은 아예 생기지 않도록 차단 */
-    flex-grow: 1;
-}
+.tab-content {display: none;padding: 25px;overflow-y: auto;overflow-x: hidden;flex-grow: 1}
 .tab-content.active{display:flex;flex-direction:column}
 .inventory-header{margin-bottom:15px;text-align:center}
 .inventory-tip{font-size:1.1em;color:var(--text-muted)}
-.inventory-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr); /* '무조건 5열'로 롤백 */
-    gap: 15px; /* 칸 사이의 간격 */
-    overflow-y: auto;  /* 세로 스크롤은 필요시 자동으로 생성 */
-    overflow-x: hidden; /* 가로 스크롤은 어떤 경우에도 생기지 않도록 차단 */
-    /* padding을 제거하여 계산 오류 가능성을 원천 차단합니다. */
-    padding: 2px; 
-}
-.inventory-item, .enhancement-slot {
-    border-radius: 8px;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    background-color: rgba(0, 0, 0, 0.4);
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-    border: 2px solid var(--border-color);
-    /* height와 overflow 속성을 제거하여 내용에 따라 크기가 유연하게 조절되도록 함 */
-}
+/* ▼▼▼ [수정] PC버전 인벤토리를 원래의 5열 고정으로 되돌렸습니다. ▼▼▼ */
+.inventory-grid {display: grid;grid-template-columns: repeat(5, 1fr);gap: 15px;overflow-y: auto;overflow-x: hidden;padding: 2px}
+.inventory-item, .enhancement-slot {border-radius: 8px;padding: 12px;display: flex;flex-direction: column;background-color: rgba(0, 0, 0, 0.4);cursor: pointer;transition: all 0.2s;position: relative;border: 2px solid var(--border-color)}
 .slot .inventory-item{width:100%;height:100%;padding:8px;border:1px solid transparent;background:transparent}
 .inventory-item.dragging{opacity:.4}
 .item-image{width:100%;padding-top:100%;position:relative;flex-shrink:0}
@@ -101,48 +79,15 @@ body{font-family:'Noto Sans KR',sans-serif;color:var(--text-color);display:flex;
 .enhancement-slot-wrapper{grid-column:1/3;display:flex;justify-content:center;align-items:center;position:relative}
 .enhancement-slot{width:180px;height:180px;border:3px dashed var(--border-color);transition:all .3s;font-size:1.2em}
 .enhancement-animation{position:absolute;width:100%;height:100%;pointer-events:none;text-align:center;font-size:5em;font-weight:700;display:flex;justify-content:center;align-items:center;opacity:0}
-.enhancement-animation.success {
-    animation: result-pop-improved 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-    color: #ffd700; /* 금색 */
-    text-shadow: 0 0 5px #fff, 0 0 10px #ffd700, 0 0 20px var(--legendary-color);
-}
-@keyframes result-pop-improved {
-    0% {
-        transform: scale(0.5) rotate(-15deg);
-        opacity: 0;
-    }
-    40% {
-        transform: scale(1.3) rotate(5deg);
-        opacity: 1;
-    }
-    60% {
-        transform: scale(1.1) rotate(-3deg);
-        opacity: 1;
-    }
-    80% {
-        transform: scale(1.2) rotate(0deg);
-        opacity: 1;
-    }
-    100% {
-        transform: scale(1.2);
-        opacity: 0;
-    }
-}
+.enhancement-animation.success {animation: result-pop-improved 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;color: #ffd700;text-shadow: 0 0 5px #fff, 0 0 10px #ffd700, 0 0 20px var(--legendary-color)}
+@keyframes result-pop-improved {0% {transform: scale(0.5) rotate(-15deg);opacity: 0} 40% {transform: scale(1.3) rotate(5deg);opacity: 1} 60% {transform: scale(1.1) rotate(-3deg);opacity: 1} 80% {transform: scale(1.2) rotate(0deg);opacity: 1} 100% {transform: scale(1.2);opacity: 0}}
 .enhancement-animation.fail,.enhancement-animation.destroy{animation:result-shake .5s ease-in-out;color:var(--fail-color)}
 .enhancement-animation.maintain{animation:result-fade 1.5s ease-out;color:var(--text-muted)}
 @keyframes result-pop{0%{transform:scale(.5);opacity:0}50%{transform:scale(1.2);opacity:1}to{transform:scale(1);opacity:0}}
 @keyframes result-shake{0%,to{transform:translateX(0)}10%,30%,50%,70%,90%{transform:translateX(-10px)}20%,40%,60%,80%{transform:translateX(10px)}}
 @keyframes result-fade{0%{opacity:1}to{opacity:0}}
-.enhancement-animation.maintain {
-    animation: result-fade 1.5s ease-out;
-    color: var(--text-muted);
-}
-
-/* .fail 클래스는 .destroy 와 함께 사용하도록 규칙을 수정합니다. */
-.enhancement-animation.fail, .enhancement-animation.destroy {
-    animation: result-shake 0.5s ease-in-out;
-    color: var(--fail-color);
-}
+.enhancement-animation.maintain {animation: result-fade 1.5s ease-out;color: var(--text-muted)}
+.enhancement-animation.fail, .enhancement-animation.destroy {animation: result-shake 0.5s ease-in-out;color: var(--fail-color)}
 .enhancement-details{grid-column:1;text-align:center;font-size:1.5em;display:flex;align-items:center;justify-content:center;gap:20px}
 .arrow{font-size:2.2em;color:var(--primary-color)}
 .enhancement-info{grid-column:2;text-align:left;font-size:1.3em}
@@ -183,21 +128,150 @@ body{font-family:'Noto Sans KR',sans-serif;color:var(--text-color);display:flex;
 .top-bar{display:flex;justify-content:space-between;align-items:center;padding:10px 20px;background:var(--bg-color-light);border-bottom:1px solid var(--border-color);flex-shrink:0}
 #user-info{font-weight:700}
 #welcome-username{color:var(--secondary-color)}
-#logout-button,#ranking-button{padding:8px 15px;background:var(--primary-color);color:#fff;border:none;border-radius:6px;cursor:pointer}
-#ranking-button{background:var(--secondary-color)}
+#logout-button{padding:8px 15px;background:var(--primary-color);color:#fff;border:none;border-radius:6px;cursor:pointer}
 .modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);display:flex;justify-content:center;align-items:center;z-index:10000}
 .modal-content{background:var(--bg-color-light);padding:30px;border-radius:12px;width:90%;max-width:800px;box-shadow:0 5px 25px rgba(0,0,0,.5);position:relative}
 .close-button{position:absolute;top:15px;right:20px;font-size:2em;cursor:pointer;color:var(--text-muted)}
 .close-button:hover{color:var(--text-color)}
 .modal-content h2{text-align:center;margin-bottom:25px}
-#ranking-list{list-style-type:none;padding:0}
-#ranking-list h3{font-size:1.4em;color:var(--primary-color);border-bottom:2px solid var(--primary-color);padding-bottom:10px;margin-bottom:15px;margin-top:30px}
-#ranking-list h3:first-of-type{margin-top:0}
-#ranking-list li{padding:12px 5px;font-size:1.1em;border-bottom:1px solid var(--bg-color-dark);line-height:1.6;display:flex;align-items:center}
-#ranking-list li:last-child{border-bottom:none}
+
+
+.top-buttons {display: flex; gap: 10px}
+.top-buttons button {padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; transition: all .2s}
+#ranking-button { background: var(--secondary-color); color: #fff; }
+#loot-record-button { background: #4caf50; color: #fff; }
+#enhancement-record-button { background: #2196f3; color: #fff; }
+#online-users-button { background: #9c27b0; color: #fff; }
+.top-buttons button:hover {transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.3)}
+
+#ranking-list, .feed-list {list-style-type: none; padding: 0; max-height: 60vh; overflow-y: auto}
+#ranking-list h3, #loot-record-display h3, #enhancement-record-display h3 {font-size:1.4em;color:var(--primary-color);border-bottom:2px solid var(--primary-color);padding-bottom:10px;margin-bottom:15px;margin-top:25px}
+#ranking-list h3:first-of-type, #loot-record-display h3:first-of-type, #enhancement-record-display h3:first-of-type {margin-top:0}
+#ranking-list li, .feed-list li, .record-item {padding: 12px 5px; font-size: 1.2em; border-bottom: 1px solid var(--bg-color-dark); line-height: 1.6; display: flex; align-items: center; transition: background-color .3s}
+.record-item { font-size: 1.3em; justify-content: center; background: rgba(0,0,0,0.1); border-radius: 8px; }
+#ranking-list li:last-child, .feed-list li:last-child, .record-item:last-of-type {border-bottom: none}
+.feed-list li:hover {background-color: rgba(255,255,255,0.05)}
+
 #ranking-list .rank-badge{flex-shrink:0;display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;border-radius:50%;background:var(--primary-color);color:#fff;font-weight:700;margin-right:15px;font-size:.9em}
 #ranking-list .rank-1{background:#ffd700;color:#333}
 #ranking-list .rank-2{background:#c0c0c0;color:#333}
 #ranking-list .rank-3{background:#cd7f32;color:#fff}
-#ranking-list .rank-name{color:var(--secondary-color);font-weight:700}
-#ranking-list .rank-value{font-weight:700;color:var(--text-color)}
+
+.rank-name {color: var(--secondary-color); font-weight: 700; margin-right: 4px;}
+.rank-value {font-weight: 700; color: var(--text-color); margin: 0 4px;}
+
+.enhance-level-highlight {font-weight: 700; color: var(--damage-color); text-shadow: 0 0 5px var(--damage-color); margin: 0 4px}
+.user-item-name {font-style: italic; margin: 0 4px}
+.user-item-none {color: var(--text-muted); font-style: italic; margin: 0 4px}
+
+.no-record { color: var(--text-muted); text-align: center; padding: 20px; font-style: italic; }
+
+
+/* =================================================================== */
+/* ===== 모바일 반응형 스타일 (오직 820px 이하 화면에서만 적용) ===== */
+/* =================================================================== */
+@media (max-width: 820px) {
+    body {
+        height: -webkit-fill-available; /* iOS Safari 주소창 UI 문제 해결 */
+    }
+    #game-app-container {
+        max-height: none;
+    }
+    .game-container {
+        grid-template-rows: auto 1fr; /* 전투 패널 높이를 콘텐츠에 맞게 자동 조절 */
+        padding: 5px;
+        gap: 10px;
+    }
+    .battle-panel {
+        grid-template-columns: 1fr; /* 플레이어, 몬스터 패널 세로로 쌓기 */
+        gap: 10px;
+        padding: 10px;
+    }
+    .character-panel {
+        padding: 15px;
+        gap: 10px;
+    }
+    .character-header h2 { font-size: 1.5em; }
+    .resource-display { font-size: 1.2em; }
+    .hp-bar { height: 35px; }
+    .hp-bar-text { font-size: 1em; }
+
+    .stat-info-combined, .stat-info-monster { gap: 8px; }
+    .stat-row, .stat-row-monster { font-size: 1em; }
+    .stat-row { grid-template-columns: auto 1fr auto; }
+    .button-group { gap: 5px; }
+    .upgrade-btn { padding: 4px 8px; font-size: 12px; }
+    .equipment-slots { gap: 10px; }
+    .slot { height: 120px; font-size: 1em; padding: 5px; }
+
+    .management-panel { border-radius: 8px; }
+    .tabs { flex-wrap: wrap; }
+    .tab-button {
+        flex-grow: 1;
+        flex-basis: 25%; /* 한 줄에 4개씩 표시 */
+        padding: 12px 5px;
+        font-size: 1em;
+    }
+    .tab-content { padding: 10px; }
+    
+    /* ▼▼▼ [수정] 지적하신 인벤토리 자동 맞춤은 모바일에서만 적용됩니다. ▼▼▼ */
+    .inventory-grid {
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        gap: 10px;
+    }
+    .inventory-item, .enhancement-slot { padding: 8px; }
+    .item-name { font-size: 0.9em; }
+    .item-effect { font-size: 0.8em; margin-top: 4px; }
+    .item-enhancement-level { font-size: 0.8em; top: 5px; right: 5px; }
+    .item-quantity { font-size: 1.1em; bottom: 5px; left: 5px; }
+    
+    .enhancement-anvil {
+        grid-template-columns: 1fr; /* 강화 UI 세로 배치 */
+        gap: 15px;
+    }
+    .enhancement-slot-wrapper, .enhancement-details, .enhancement-info, .enhance-execute-btn {
+        grid-column: 1 / -1; /* 모든 요소를 한 컬럼에 배치 */
+    }
+    .enhancement-slot { width: 150px; height: 150px; }
+    .enhancement-details { font-size: 1.2em; }
+    .enhancement-info { text-align: center; font-size: 1.1em; }
+    .enhance-execute-btn { width: 80%; padding: 15px; font-size: 1.2em; }
+
+    .modal-overlay{ padding: 15px; }
+    .modal-content {
+        padding: 20px;
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
+    }
+    .modal-content h2 { font-size: 1.5em; }
+    #ranking-list, .feed-list { flex-grow: 1; }
+    #ranking-list li, .feed-list li { font-size: 1em; flex-wrap: wrap; }
+
+    .test-controls {
+        position: relative;
+        top: 0;
+        right: 0;
+        order: -1; /* 게임 컨테이너 최상단으로 이동 */
+        margin-bottom: 5px;
+        justify-content: center;
+    }
+    .test-controls button { font-size: 0.8em; padding: 5px 10px; }
+    
+    .top-bar { flex-wrap: wrap; justify-content: center; gap: 10px;}
+    .top-buttons { order: 1; width: 100%; justify-content: center;}
+}
+
+@media (max-width: 480px) {
+    #user-info { width: 100%; text-align: center; order: -1; margin-bottom: 5px;}
+    .logout-button { order: 2; }
+    .stat-row { grid-template-columns: 1fr; text-align: center; }
+    .stat-name, .stat-value { text-align: center; }
+    .button-group { justify-content: center; }
+    #ranking-list li, .feed-list li, .record-item {
+        font-size: 0.9em;
+        padding-left:0;
+        padding-right:0;
+    }
+    .rank-badge { margin-right: 8px !important; }
+}
