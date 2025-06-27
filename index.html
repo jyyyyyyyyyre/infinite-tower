@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>무한의 탑 Final++</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="auth-container">
+        <div class="auth-box">
+            <h1 id="auth-title">로그인</h1>
+            <form id="auth-form">
+                <input type="text" id="username" placeholder="아이디" required autocomplete="username">
+                <input type="password" id="password" placeholder="비밀번호" required autocomplete="current-password">
+                <p id="auth-message"></p>
+                <button type="submit" id="submit-button">로그인</button>
+            </form>
+            <p id="toggle-auth">계정이 없으신가요? <span id="toggle-link">회원가입</span></p>
+        </div>
+    </div>
+
+    <div id="game-app-container" style="display: none;">
+        <div class="top-bar">
+            <div id="user-info">
+                <span id="welcome-username"></span>님 환영합니다!
+            </div>
+            <div id="ranking-container">
+                <button id="ranking-button">🏆 랭킹 보기</button>
+            </div>
+            <button id="logout-button">로그아웃</button>
+        </div>
+        
+        <div class="game-container">
+            <div class="test-controls">
+                <button id="btn-test-items">테스트 아이템 받기</button>
+                <button id="btn-test-gold">테스트 골드 받기</button>
+            </div>
+            <header class="battle-panel">
+                <div id="damage-container"></div>
+                <div class="character-panel player-panel">
+                    <div class="character-header">
+                        <h2>플레이어</h2>
+                        <div class="resource-display">💰 <span id="gold">0</span></div>
+                    </div>
+                    <div class="hp-bar">
+                        <div class="hp-bar-inner" id="player-hp-bar"></div>
+                        <div class="hp-bar-text" id="player-hp-text"></div>
+                    </div>
+                    <div class="stat-info-combined">
+                        <div class="stat-row" data-stat-row="hp"><span class="stat-name">❤️ 총 체력</span><span class="stat-value" id="total-hp"></span><div class="button-group"><button class="upgrade-btn" data-stat="hp" data-amount="1">+1</button><button class="upgrade-btn" data-stat="hp" data-amount="10">+10</button><button class="upgrade-btn" data-stat="hp" data-amount="100">+100</button><button class="upgrade-btn" data-stat="hp" data-amount="MAX">MAX</button></div></div>
+                        <div class="stat-row" data-stat-row="attack"><span class="stat-name">⚔️ 총 공격력</span><span class="stat-value" id="total-attack"></span><div class="button-group"><button class="upgrade-btn" data-stat="attack" data-amount="1">+1</button><button class="upgrade-btn" data-stat="attack" data-amount="10">+10</button><button class="upgrade-btn" data-stat="attack" data-amount="100">+100</button><button class="upgrade-btn" data-stat="attack" data-amount="MAX">MAX</button></div></div>
+                        <div class="stat-row" data-stat-row="defense"><span class="stat-name">🛡️ 총 방어력</span><span class="stat-value" id="total-defense"></span><div class="button-group"><button class="upgrade-btn" data-stat="defense" data-amount="1">+1</button><button class="upgrade-btn" data-stat="defense" data-amount="10">+10</button><button class="upgrade-btn" data-stat="defense" data-amount="100">+100</button><button class="upgrade-btn" data-stat="defense" data-amount="MAX">MAX</button></div></div>
+                    </div>
+                    <div class="equipment-slots">
+                        <div class="slot" id="weapon-slot" data-slot="weapon"></div>
+                        <div class="slot" id="armor-slot" data-slot="armor"></div>
+                    </div>
+                </div>
+                <div class="character-panel monster-panel">
+                    <div class="character-header">
+                        <h2><span id="monster-level"></span>층 몬스터</h2>
+                    </div>
+                    <div class="hp-bar">
+                        <div class="hp-bar-inner" id="monster-hp-bar"></div>
+                        <div class="hp-bar-text" id="monster-hp-text"></div>
+                    </div>
+                    <div class="stat-info-monster">
+                        <div class="stat-row-monster"><span>❤️ 총 체력</span><span id="monster-hp-total"></span></div>
+                        <div class="stat-row-monster"><span>⚔️ 공격력</span><span id="monster-attack"></span></div>
+                        <div class="stat-row-monster"><span>🛡️ 방어력</span><span id="monster-defense"></span></div>
+                    </div>
+                </div>
+            </header>
+            <main class="management-panel">
+                <div class="tabs">
+                    <button class="tab-button active" data-tab="weapon-inventory-tab">무기</button>
+                    <button class="tab-button" data-tab="armor-inventory-tab">방어구</button>
+                    <button class="tab-button" data-tab="enhancement-tab">강화</button>
+                    <button class="tab-button" data-tab="log-tab">로그</button>
+                </div>
+                <div class="tab-content active" id="weapon-inventory-tab">
+                    <div class="inventory-header">
+                        <p class="inventory-tip">💡 아이템을 드래그하여 장착하고, 클릭하여 강화 정보를 확인하세요.</p>
+                    </div>
+                    <div id="weapon-inventory" class="inventory-grid"></div>
+                </div>
+                <div class="tab-content" id="armor-inventory-tab">
+                    <div class="inventory-header">
+                        <p class="inventory-tip">💡 아이템을 드래그하여 장착하고, 클릭하여 강화 정보를 확인하세요.</p>
+                    </div>
+                    <div id="armor-inventory" class="inventory-grid"></div>
+                </div>
+                <div class="tab-content" id="enhancement-tab"><div class="enhancement-anvil"><div class="enhancement-slot-wrapper"><div class="enhancement-slot" id="enhancement-slot">강화할 아이템을 인벤토리에서 선택하세요</div><div class="enhancement-animation" id="enhancement-animation"></div></div><div class="enhancement-details"><div id="enhancement-before"></div><div class="arrow">➔</div><div id="enhancement-after"></div></div><div class="enhancement-info" id="enhancement-info"></div><button class="enhance-execute-btn" id="enhance-button" disabled>강 화</button></div></div><div class="tab-content" id="log-tab"><ul id="game-log"></ul></div>
+            </main>
+        </div>
+    </div>
+    
+<div id="ranking-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2>🏆 무한의 탑 명예의 전당</h2>
+        <ul id="ranking-list">
+            </ul>
+    </div>
+</div>
+
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
+</body>
+</html>
