@@ -176,7 +176,6 @@ io.on('connection', async (socket) => {
             socket.emit('onlineUsersData', playersList);
         })
         .on('grantTestItems', () => { const p = onlinePlayers[socket.userId]; if (!p) return; grantTestItems(p); pushLog(p, '[테스트] 아이템 10종 지급 완료!'); sendState(p.socket, p, calcMonsterStats(p)); })
-        // ▼▼▼ TEST_GOLD_AMOUNT 상수를 사용하도록 복원 ▼▼▼
         .on('grantTestGold', () => { const p = onlinePlayers[socket.userId]; if (!p) return; p.gold += TEST_GOLD_AMOUNT; pushLog(p, `[테스트] 골드 +${TEST_GOLD_AMOUNT.toLocaleString()} G`); sendState(p.socket, p, calcMonsterStats(p)); })
         .on('disconnect', () => { console.log(`[연결 해제] 유저: ${socket.username}`); savePlayerData(socket.userId); delete onlinePlayers[socket.userId]; });
 });
@@ -235,11 +234,9 @@ function onClearFloor(p) { p.gold += p.level; pushLog(p, `[${p.level}층] 클리
 function calcMonsterStats(p) { return { level: p.level, hp: p.level, attack: p.level / 2, defense: p.level / 5 }; }
 function resetPlayer(p, msg) { p.level = 1; calculateTotalStats(p); p.currentHp = p.stats.total.hp; p.monster.currentHp = 1; pushLog(p, msg); }
 
-// --- 서버 시작 ---
+
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));
 
-// ▼▼▼ 삭제되었던 테스트 지급 설정 코드를 원래대로 복원합니다. ▼▼▼
-/* ===== 테스트 지급 설정 ===== */
 const TEST_GOLD_AMOUNT = 999999999999;
 const TEST_ITEM_IDS = ['w001','w002','w003','w004','w005','a001','a002','a003','a004','a005'];
 function grantTestItems(p) {
@@ -247,7 +244,6 @@ function grantTestItems(p) {
         const itemInstance = createItemInstance(id);
         handleItemStacking(p, itemInstance);
 
-        // 지급된 아이템의 등급을 확인하여, 레전더리 이상이면 득템 기록에 남김
         if (['Legendary', 'Epic', 'Mystic'].includes(itemInstance.grade)) {
             updateGlobalRecord(`topLoot_${itemInstance.grade}`, {
                 username: p.username,
