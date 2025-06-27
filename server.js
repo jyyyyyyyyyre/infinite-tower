@@ -234,6 +234,17 @@ function onClearFloor(p) { p.gold += p.level; pushLog(p, `[${p.level}층] 클리
 function calcMonsterStats(p) { return { level: p.level, hp: p.level, attack: p.level / 2, defense: p.level / 5 }; }
 function resetPlayer(p, msg) { p.level = 1; calculateTotalStats(p); p.currentHp = p.stats.total.hp; p.monster.currentHp = 1; pushLog(p, msg); }
 
+const AUTO_SAVE_INTERVAL = 10000; 
+setInterval(() => {
+    const userIds = Object.keys(onlinePlayers);
+    if (userIds.length > 0) {
+        // 서버 터미널에 저장 로그를 남겨서 잘 작동하는지 확인
+        console.log(`[자동 저장] 현재 접속 중인 ${userIds.length}명의 유저 데이터를 저장합니다...`);
+        for (const userId of userIds) {
+            savePlayerData(userId);
+        }
+    }
+}, AUTO_SAVE_INTERVAL);
 
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));
 
