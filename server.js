@@ -1,12 +1,10 @@
 const express = require('express');
-require('dotenv').config(); // .env 파일을 읽어오는 마법의 코드
-
-const express = require('express');
 const http    = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+require('dotenv').config();
 
 const app    = express();
 const server = http.createServer(app);
