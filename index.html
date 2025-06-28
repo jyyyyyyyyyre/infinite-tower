@@ -33,6 +33,7 @@
                 <span id="welcome-username"></span>님 환영합니다!
             </div>
             <div class="top-buttons">
+                <button id="auction-button">⚖️ 거래소</button>
                 <button id="ranking-button">🏆 랭킹</button>
                 <button id="loot-record-button">💎 득템</button>
                 <button id="enhancement-record-button">✨ 강화</button>
@@ -49,6 +50,18 @@
         </div>
         
         <div class="game-container">
+            <div id="world-boss-container" class="world-boss-panel" style="display: none;">
+                <div class="character-header">
+                    <h2 id="world-boss-name"></h2>
+                    <button id="attack-target-toggle-btn">일반 몬스터 공격</button>
+                </div>
+                <div class="hp-bar">
+                    <div class="hp-bar-inner" id="world-boss-hp-bar"></div>
+                    <div class="hp-bar-text" id="world-boss-hp-text"></div>
+                </div>
+                <div id="world-boss-contribution">내 기여도: 0 (0.00%)</div>
+            </div>
+
             <header class="battle-panel">
                 <div id="damage-container"></div>
                 <div class="character-panel player-panel">
@@ -90,22 +103,48 @@
                     <button class="tab-button active" data-tab="weapon-inventory-tab">무기</button>
                     <button class="tab-button" data-tab="armor-inventory-tab">방어구</button>
                     <button class="tab-button" data-tab="enhancement-tab">강화</button>
+                    <button class="tab-button" data-tab="item-tab">아이템</button>
                     <button class="tab-button" data-tab="log-tab">로그</button>
                     <button class="tab-button" data-tab="chat-tab">채팅</button>
                 </div>
+
                 <div class="tab-content active" id="weapon-inventory-tab">
                     <div class="inventory-header">
-                        <p class="inventory-tip">💡 아이템을 드래그하여 장착하고, 클릭하여 강화 정보를 확인하세요.</p>
+                        <p class="inventory-tip">아이템을 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p>
                     </div>
                     <div id="weapon-inventory" class="inventory-grid"></div>
                 </div>
+
                 <div class="tab-content" id="armor-inventory-tab">
                     <div class="inventory-header">
-                        <p class="inventory-tip">💡 아이템을 드래그하여 장착하고, 클릭하여 강화 정보를 확인하세요.</p>
+                        <p class="inventory-tip">아이템을 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p>
                     </div>
                     <div id="armor-inventory" class="inventory-grid"></div>
                 </div>
-                <div class="tab-content" id="enhancement-tab"><div class="enhancement-anvil"><div class="enhancement-slot-wrapper"><div class="enhancement-slot" id="enhancement-slot">강화할 아이템을 인벤토리에서 선택하세요</div><div class="enhancement-animation" id="enhancement-animation"></div></div><div class="enhancement-details"><div id="enhancement-before"></div><div class="arrow">➔</div><div id="enhancement-after"></div></div><div class="enhancement-info" id="enhancement-info"></div><button class="enhance-execute-btn" id="enhance-button" disabled>강 화</button></div></div>
+
+                <div class="tab-content" id="enhancement-tab">
+                    <div class="enhancement-anvil">
+                        <div class="enhancement-slot-wrapper">
+                            <div class="enhancement-slot" id="enhancement-slot">강화할 아이템을 인벤토리에서 선택하세요</div>
+                            <div class="enhancement-animation" id="enhancement-animation"></div>
+                        </div>
+                        <div class="enhancement-details">
+                            <div id="enhancement-before"></div>
+                            <div class="arrow">➔</div>
+                            <div id="enhancement-after"></div>
+                        </div>
+                        <div class="enhancement-info" id="enhancement-info"></div>
+                        <div class="prevention-ticket-checkbox-wrapper">
+                            <input type="checkbox" id="use-prevention-ticket" disabled>
+                            <label for="use-prevention-ticket">파괴 방지권 사용하기</label>
+                        </div>
+                        <button class="enhance-execute-btn" id="enhance-button" disabled>강 화</button>
+                    </div>
+                </div>
+                
+                <div class="tab-content" id="item-tab">
+                </div>
+
                 <div class="tab-content" id="log-tab"><ul id="game-log"></ul></div>
                 <div class="tab-content" id="chat-tab">
                     <ul id="chat-messages"></ul>
@@ -118,6 +157,25 @@
         </div>
     </div>
     
+    <div id="auction-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content auction-modal-content">
+            <span class="close-button">&times;</span>
+            <h2>⚖️ 거래소</h2>
+            <div id="auction-container">
+                <div class="auction-grid-container">
+                    <div class="auction-header">
+                        <h3>거래소 물품 목록</h3>
+                        <button id="auction-refresh-btn">새로고침</button>
+                    </div>
+                    <div id="auction-grid" class="inventory-grid"></div>
+                </div>
+                <div id="auction-item-detail">
+                    <p>아이템을 선택하여 상세 정보를 확인하세요.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="ranking-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <span class="close-button">&times;</span>
