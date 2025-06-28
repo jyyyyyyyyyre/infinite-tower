@@ -239,7 +239,6 @@ function onClearFloor(p) {
     
     const logMessage = isBoss ?
         `[${clearedFloor}층 보스] 클리어! (+${goldEarned.toLocaleString()} G)`:
-        `[${clearedFloor}층] 클리어! (+${goldEarned.toLocaleString()} G)`;
     pushLog(p, logMessage);
 
     // [수정] 아이템 드랍률: 보스는 일반 몬스터보다 5배 높은 드랍률
