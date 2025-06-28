@@ -19,7 +19,7 @@ const TICK_RATE = 1000;
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_OBJECT_ID = '685ff341faad66a3f7d58a96';
-const BOSS_INTERVAL = 100;
+const BOSS_INTERVAL = 200;
 const SELL_PRICES = { // 등급별 아이템 판매 가격
     Common: 3000,
     Rare: 50000,
@@ -144,19 +144,10 @@ io.on('connection', async (socket) => {
 
 // --- [신규] 보스 몬스터/아이템 판매 로직 ---
 
-/**
- * 현재 층이 보스 층인지 확인합니다.
- * @param {number} level - 확인할 층 레벨
- * @returns {boolean} 보스 층이면 true, 아니면 false
- */
+
 const isBossFloor = (level) => level > 0 && level % BOSS_INTERVAL === 0;
 
-/**
- * 아이템을 판매하여 골드를 획득합니다.
- * @param {object} player - 플레이어 객체
- * @param {string} uid - 판매할 아이템의 고유 ID
- * @param {boolean} sellAll - 동일한 아이템을 모두 판매할지 여부
- */
+
 function sellItem(player, uid, sellAll) {
     if (!player) return;
 
@@ -209,8 +200,7 @@ function gameTick(player) {
     const m = calcMonsterStats(player);
     const pDmg = Math.max(0, player.stats.total.attack - m.defense);
     
-    // [수정] 보스는 방어력을 무시하고 데미지를 입힘
-    const mDmg = m.isBoss ? Math.max(0, m.attack) : Math.max(0, m.attack - player.stats.total.defense);
+const mDmg = m.isBoss ? Math.max(0, m.attack - (player.stats.total.defense * 0.5)) : Math.max(0, m.attack - player.stats.total.defense);
 
     if (pDmg > 0 || mDmg > 0) {
         player.currentHp -= mDmg;
