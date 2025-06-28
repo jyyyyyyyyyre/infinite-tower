@@ -18,7 +18,7 @@ const PORT = 3000;
 const TICK_RATE = 1000;
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_OBJECT_ID = '685f1ef1597a224ec3c148cb';
+const ADMIN_OBJECT_ID = '685ff341faad66a3f7d58a96';
 const BOSS_INTERVAL = 100;
 const SELL_PRICES = { // 등급별 아이템 판매 가격
     Common: 3000,
