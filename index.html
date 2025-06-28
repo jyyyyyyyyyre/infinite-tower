@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>무한성장 방치</title>
+    <title>무한의 탑</title>
     <link rel="stylesheet" href="styles.css">
     <script>
-      // 모바일 기기 감지 스크립트
       if (/Mobi|Android/i.test(navigator.userAgent)) {
         document.documentElement.classList.add('is-mobile');
       }
@@ -27,6 +26,8 @@
     </div>
 
     <div id="game-app-container" style="display: none;">
+        <div id="announcement-banner"></div>
+
         <div class="top-bar">
             <div id="user-info">
                 <span id="welcome-username"></span>님 환영합니다!
@@ -37,7 +38,14 @@
                 <button id="enhancement-record-button">✨ 강화</button>
                 <button id="online-users-button">👥 접속자</button>
             </div>
-            <button id="logout-button">로그아웃</button>
+            
+            <div class="top-bar-right">
+                <div id="zoom-controls">
+                    <button id="zoom-out-btn" class="zoom-button">-</button>
+                    <button id="zoom-in-btn" class="zoom-button">+</button>
+                </div>
+                <button id="logout-button">로그아웃</button>
+            </div>
         </div>
         
         <div class="game-container">
@@ -64,7 +72,7 @@
                 </div>
                 <div class="character-panel monster-panel">
                     <div class="character-header">
-                        <h2><span id="monster-level"></span>층 몬스터</h2>
+                        <h2><span id="monster-level"></span>층</h2>
                     </div>
                     <div class="hp-bar">
                         <div class="hp-bar-inner" id="monster-hp-bar"></div>
@@ -83,6 +91,7 @@
                     <button class="tab-button" data-tab="armor-inventory-tab">방어구</button>
                     <button class="tab-button" data-tab="enhancement-tab">강화</button>
                     <button class="tab-button" data-tab="log-tab">로그</button>
+                    <button class="tab-button" data-tab="chat-tab">채팅</button>
                 </div>
                 <div class="tab-content active" id="weapon-inventory-tab">
                     <div class="inventory-header">
@@ -96,7 +105,15 @@
                     </div>
                     <div id="armor-inventory" class="inventory-grid"></div>
                 </div>
-                <div class="tab-content" id="enhancement-tab"><div class="enhancement-anvil"><div class="enhancement-slot-wrapper"><div class="enhancement-slot" id="enhancement-slot">강화할 아이템을 인벤토리에서 선택하세요</div><div class="enhancement-animation" id="enhancement-animation"></div></div><div class="enhancement-details"><div id="enhancement-before"></div><div class="arrow">➔</div><div id="enhancement-after"></div></div><div class="enhancement-info" id="enhancement-info"></div><button class="enhance-execute-btn" id="enhance-button" disabled>강 화</button></div></div><div class="tab-content" id="log-tab"><ul id="game-log"></ul></div>
+                <div class="tab-content" id="enhancement-tab"><div class="enhancement-anvil"><div class="enhancement-slot-wrapper"><div class="enhancement-slot" id="enhancement-slot">강화할 아이템을 인벤토리에서 선택하세요</div><div class="enhancement-animation" id="enhancement-animation"></div></div><div class="enhancement-details"><div id="enhancement-before"></div><div class="arrow">➔</div><div id="enhancement-after"></div></div><div class="enhancement-info" id="enhancement-info"></div><button class="enhance-execute-btn" id="enhance-button" disabled>강 화</button></div></div>
+                <div class="tab-content" id="log-tab"><ul id="game-log"></ul></div>
+                <div class="tab-content" id="chat-tab">
+                    <ul id="chat-messages"></ul>
+                    <form id="chat-form">
+                        <input id="chat-input" autocomplete="off" placeholder="메시지를 입력하세요... (/공지 [내용])"/>
+                        <button type="submit">전송</button>
+                    </form>
+                </div>
             </main>
         </div>
     </div>
