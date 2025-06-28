@@ -23,7 +23,7 @@ const WORLD_BOSS_CONFIG = {
     ATTACK: 0,
     DEFENSE: 0,
     REWARDS: {
-        GOLD: 100000000,
+        GOLD: 50000000,
         PREVENTION_TICKETS: 2,
         ITEM_DROP_RATES: { Rare: 0.50, Legendary: 0.10, Epic: 0.39, Mystic: 0.001 }
     }
