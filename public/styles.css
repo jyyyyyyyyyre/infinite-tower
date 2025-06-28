@@ -109,6 +109,7 @@ body.auth-view #game-app-container {
     min-height: 0;
     padding: 20px;
     gap: 15px;
+    overflow-y: auto;
 }
 .tab-content.active{
     display: flex;
@@ -151,7 +152,7 @@ body.auth-view #game-app-container {
 #game-log{list-style-type:none; padding:20px}
 #game-log li{padding:5px 0;font-size:1.1em;color:var(--text-muted);border-bottom:1px solid #333}
 #game-log li:first-child{color:#fff;font-weight:500}
-.enhancement-anvil{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr auto;gap:20px;height:100%;align-items:center}
+.enhancement-anvil{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr auto;gap:20px;align-items:center}
 .enhancement-slot-wrapper{grid-column:1/3;display:flex;justify-content:center;align-items:center;position:relative}
 .enhancement-slot{width:180px;height:180px;border:3px dashed var(--border-color);transition:all .3s;font-size:1.2em}
 .enhancement-animation{position:absolute;width:100%;height:100%;pointer-events:none;text-align:center;font-size:5em;font-weight:700;display:flex;justify-content:center;align-items:center;opacity:0}
