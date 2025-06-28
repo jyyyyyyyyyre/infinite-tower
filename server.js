@@ -231,39 +231,48 @@ function equipItem(player, uid) { if (!player) return; const hpBefore = player.s
 function unequipItem(player, slot) { if (!player || !player.equipment[slot]) return; const hpBefore = player.stats.total.hp; handleItemStacking(player, player.equipment[slot]); player.equipment[slot] = null; calculateTotalStats(player); const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 && hpAfter > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter; if (player.currentHp > hpAfter) player.currentHp = hpAfter; }
 function attemptEnhancement(p, uid, socket) { if (!p) return; let item; let isEquipped = false; let idx = p.inventory.findIndex(i => i.uid === uid); if (idx !== -1) { item = p.inventory[idx]; } else { const equipmentKeys = Object.keys(p.equipment); for (const key of equipmentKeys) { if (p.equipment[key] && p.equipment[key].uid === uid) { item = p.equipment[key]; isEquipped = true; break; } } } if (!item) return; if (!isEquipped && item.quantity > 1) { item.quantity--; item = { ...item, quantity: 1, uid: Date.now() + Math.random().toString(36).slice(2, 11) }; p.inventory.push(item); } const cur = item.enhancement; const cost = Math.floor(1000 * Math.pow(2.1, cur)); if (p.gold < cost) { pushLog(p, '[강화] 골드가 부족합니다.'); return; } p.gold -= cost; const rates = enhancementTable[cur + 1] || highEnhancementRate; const r = Math.random(); let result = ''; let msg = ''; const hpBefore = p.stats.total.hp; if (r < rates.success) { result = 'success'; item.enhancement++; msg = `[+${cur} ${item.name}] 강화 성공! → [+${item.enhancement}]`; if (item.type === 'weapon') { if (item.enhancement > (p.maxWeaponEnhancement || 0)) { p.maxWeaponEnhancement = item.enhancement; p.maxWeaponName = item.name; } } else if (item.type === 'armor') { if (item.enhancement > (p.maxArmorEnhancement || 0)) { p.maxArmorEnhancement = item.enhancement; p.maxArmorName = item.name; } } const currentTopEnh = globalRecordsCache.topEnhancement || { enhancementLevel: 0 }; if (item.enhancement >= currentTopEnh.enhancementLevel) { updateGlobalRecord('topEnhancement', { username: p.username, itemName: item.name, itemGrade: item.grade, enhancementLevel: item.enhancement }); } } else if (r < rates.success + rates.maintain) { result = 'maintain'; msg = `[+${cur} ${item.name}] 강화 유지!`; } else if (r < rates.success + rates.maintain + rates.fail) { result = 'fail'; const newLevel = Math.max(0, item.enhancement - 1); msg = `[+${cur} ${item.name}] 강화 실패... → [+${newLevel}]`; item.enhancement = newLevel; } else { result = 'destroy'; msg = `[+${cur} ${item.name}] 아이템이 파괴되었습니다...`; if (isEquipped) { const equipmentKeys = Object.keys(p.equipment); for (const key of equipmentKeys) { if (p.equipment[key] && p.equipment[key].uid === uid) { p.equipment[key] = null; break; } } } else { const itemToRemoveIndex = p.inventory.findIndex(i => i.uid === item.uid); if (itemToRemoveIndex > -1) p.inventory.splice(itemToRemoveIndex, 1); } } calculateTotalStats(p); const hpAfter = p.stats.total.hp; p.currentHp = hpBefore > 0 && hpAfter > 0 ? p.currentHp * (hpAfter / hpBefore) : hpAfter; if (p.currentHp > hpAfter) p.currentHp = hpAfter; pushLog(p, msg); socket.emit('enhancementResult', { result, newItem: (result !== 'destroy' ? item : null), destroyed: result === 'destroy' }); }
 function pushLog(p, text) { p.log.unshift(text); if (p.log.length > 15) p.log.pop(); }
-function onClearFloor(p) { 
+
+function onClearFloor(p) {
     const isBoss = isBossFloor(p.level - 1);
-    const clearedFloor = p.level -1;
+    const clearedFloor = p.level - 1;
     const goldEarned = isBoss ? clearedFloor * 10 : clearedFloor; // 보스 클리어 시 골드 10배
     p.gold += goldEarned;
-    
-    const logMessage = isBoss ?
-        `[${clearedFloor}층 보스] 클리어! (+${goldEarned.toLocaleString()} G)`;
-    pushLog(p, logMessage);
 
-    // [수정] 아이템 드랍률: 보스는 일반 몬스터보다 5배 높은 드랍률
-    const dropChance = isBoss ? 0.10 : 0.02; 
-    if (Math.random() < dropChance) { 
-        const zone = p.level <= 500 ? 1 : p.level <= 3000 ? 2 : p.level <= 15000 ? 3 : 4; 
-        const tbl = dropTable[zone]; 
-        let grade, acc = 0, r = Math.random(); 
-        for (const g in tbl.rates) { acc += tbl.rates[g]; if (r < acc) { grade = g; break; } } 
-        if (grade) { 
-            const pool = tbl.itemsByGrade[grade] || []; 
-            if (pool.length) { 
-                const id = pool[Math.floor(Math.random() * pool.length)]; 
-                const droppedItem = createItemInstance(id); 
-                handleItemStacking(p, droppedItem); 
+    // [수정] 보스를 클리어했을 때만 로그를 남기도록 변경
+    if (isBoss) {
+        const logMessage = `[${clearedFloor}층 보스] 클리어! (+${goldEarned.toLocaleString()} G)`;
+        pushLog(p, logMessage);
+    }
+
+    // 아이템 드랍률: 보스는 일반 몬스터보다 5배 높은 드랍률
+    const dropChance = isBoss ? 0.10 : 0.02;
+    if (Math.random() < dropChance) {
+        const zone = p.level <= 500 ? 1 : p.level <= 3000 ? 2 : p.level <= 15000 ? 3 : 4;
+        const tbl = dropTable[zone];
+        let grade, acc = 0, r = Math.random();
+        for (const g in tbl.rates) {
+            acc += tbl.rates[g];
+            if (r < acc) {
+                grade = g;
+                break;
+            }
+        }
+        if (grade) {
+            const pool = tbl.itemsByGrade[grade] || [];
+            if (pool.length) {
+                const id = pool[Math.floor(Math.random() * pool.length)];
+                const droppedItem = createItemInstance(id);
+                handleItemStacking(p, droppedItem);
                 const logMsg = isBoss ?
                     `[${clearedFloor}층 보스]에게서 ${itemData[id].name} 획득!` :
                     `[${clearedFloor}층]에서 ${itemData[id].name} 획득!`;
-                pushLog(p, logMsg); 
-                if (['Legendary', 'Epic', 'Mystic'].includes(droppedItem.grade)) { 
-                    updateGlobalRecord(`topLoot_${droppedItem.grade}`, { username: p.username, itemName: droppedItem.name, itemGrade: droppedItem.grade }); 
-                } 
-            } 
-        } 
-    } 
+                pushLog(p, logMsg);
+                if (['Legendary', 'Epic', 'Mystic'].includes(droppedItem.grade)) {
+                    updateGlobalRecord(`topLoot_${droppedItem.grade}`, { username: p.username, itemName: droppedItem.name, itemGrade: droppedItem.grade });
+                }
+            }
+        }
+    }
 }
 
 function calcMonsterStats(p) {
