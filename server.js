@@ -226,7 +226,36 @@ setInterval(() => { for (const userId in onlinePlayers) { gameTick(onlinePlayers
 
 async function savePlayerData(userId) { const p = onlinePlayers[userId]; if (!p) return; try { await GameData.updateOne({ user: userId }, { $set: { gold: p.gold, level: p.level, maxLevel: p.maxLevel, maxWeaponEnhancement: p.maxWeaponEnhancement, maxWeaponName: p.maxWeaponName, maxArmorEnhancement: p.maxArmorEnhancement, maxArmorName: p.maxArmorName, stats: p.stats, inventory: p.inventory, equipment: p.equipment, log: p.log } }); console.log(`[저장 완료] 유저: ${p.username}의 데이터를 DB에 저장했습니다.`); } catch (error) { console.error(`[저장 실패] 유저: ${p.username} 데이터 저장 중 오류 발생:`, error); } }
 function sendState(socket, player, monsterStats) { if (!socket || !player) return; const { socket: _, ...playerStateForClient } = player; socket.emit('gameState', { player: playerStateForClient, monster: { ...monsterStats, currentHp: player.monster.currentHp } }); }
-function upgradeStat(player, { stat, amount }) { if (!player) return; const hpBefore = player.stats.total.hp; if (amount === 'MAX') { let base = player.stats.base[stat]; let gold = player.gold; let inc = 0; let sum = 0; while (true) { const next = base + inc; if (sum + next > gold) break; sum += next; inc += 1; } if (inc > 0) { player.stats.base[stat] += inc; player.gold -= sum; } } else { const n = Number(amount); let cost = 0; for (let i = 0; i < n; i++) cost += player.stats.base[stat] + i; if (player.gold >= cost) { player.gold -= cost; player.stats.base[stat] += n; } } calculateTotalStats(player); if (stat === 'hp') { const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter; } }
+function upgradeStat(player, { stat, amount }) {
+    if (!player) return;
+    
+    if (amount === 'MAX') {
+        let base = player.stats.base[stat];
+        let gold = player.gold;
+        let inc = 0;
+        let sum = 0;
+        while (true) {
+            const next = base + inc;
+            if (sum + next > gold) break;
+            sum += next;
+            inc += 1;
+        }
+        if (inc > 0) {
+            player.stats.base[stat] += inc;
+            player.gold -= sum;
+        }
+    } else {
+        const n = Number(amount);
+        let cost = 0;
+        for (let i = 0; i < n; i++) cost += player.stats.base[stat] + i;
+        if (player.gold >= cost) {
+            player.gold -= cost;
+            player.stats.base[stat] += n;
+        }
+    }
+    
+    calculateTotalStats(player);
+}
 function equipItem(player, uid) { if (!player) return; const hpBefore = player.stats.total.hp; const idx = player.inventory.findIndex(i => i.uid === uid); if (idx === -1) return; const item = player.inventory[idx]; const slot = item.type; if (player.equipment[slot]) { handleItemStacking(player, player.equipment[slot]); } if (item.quantity > 1) { item.quantity--; player.equipment[slot] = { ...item, quantity: 1, uid: Date.now() + Math.random().toString(36).slice(2, 11) }; } else { player.equipment[slot] = item; player.inventory.splice(idx, 1); } calculateTotalStats(player); const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 ? player.currentHp * (hpAfter / hpAfter) : hpAfter; if (player.currentHp > hpAfter) player.currentHp = hpAfter; }
 function unequipItem(player, slot) { if (!player || !player.equipment[slot]) return; const hpBefore = player.stats.total.hp; handleItemStacking(player, player.equipment[slot]); player.equipment[slot] = null; calculateTotalStats(player); const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 && hpAfter > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter; if (player.currentHp > hpAfter) player.currentHp = hpAfter; }
 function attemptEnhancement(p, uid, socket) { if (!p) return; let item; let isEquipped = false; let idx = p.inventory.findIndex(i => i.uid === uid); if (idx !== -1) { item = p.inventory[idx]; } else { const equipmentKeys = Object.keys(p.equipment); for (const key of equipmentKeys) { if (p.equipment[key] && p.equipment[key].uid === uid) { item = p.equipment[key]; isEquipped = true; break; } } } if (!item) return; if (!isEquipped && item.quantity > 1) { item.quantity--; item = { ...item, quantity: 1, uid: Date.now() + Math.random().toString(36).slice(2, 11) }; p.inventory.push(item); } const cur = item.enhancement; const cost = Math.floor(1000 * Math.pow(2.1, cur)); if (p.gold < cost) { pushLog(p, '[강화] 골드가 부족합니다.'); return; } p.gold -= cost; const rates = enhancementTable[cur + 1] || highEnhancementRate; const r = Math.random(); let result = ''; let msg = ''; const hpBefore = p.stats.total.hp; if (r < rates.success) { result = 'success'; item.enhancement++; msg = `[+${cur} ${item.name}] 강화 성공! → [+${item.enhancement}]`; if (item.type === 'weapon') { if (item.enhancement > (p.maxWeaponEnhancement || 0)) { p.maxWeaponEnhancement = item.enhancement; p.maxWeaponName = item.name; } } else if (item.type === 'armor') { if (item.enhancement > (p.maxArmorEnhancement || 0)) { p.maxArmorEnhancement = item.enhancement; p.maxArmorName = item.name; } } const currentTopEnh = globalRecordsCache.topEnhancement || { enhancementLevel: 0 }; if (item.enhancement >= currentTopEnh.enhancementLevel) { updateGlobalRecord('topEnhancement', { username: p.username, itemName: item.name, itemGrade: item.grade, enhancementLevel: item.enhancement }); } } else if (r < rates.success + rates.maintain) { result = 'maintain'; msg = `[+${cur} ${item.name}] 강화 유지!`; } else if (r < rates.success + rates.maintain + rates.fail) { result = 'fail'; const newLevel = Math.max(0, item.enhancement - 1); msg = `[+${cur} ${item.name}] 강화 실패... → [+${newLevel}]`; item.enhancement = newLevel; } else { result = 'destroy'; msg = `[+${cur} ${item.name}] 아이템이 파괴되었습니다...`; if (isEquipped) { const equipmentKeys = Object.keys(p.equipment); for (const key of equipmentKeys) { if (p.equipment[key] && p.equipment[key].uid === uid) { p.equipment[key] = null; break; } } } else { const itemToRemoveIndex = p.inventory.findIndex(i => i.uid === item.uid); if (itemToRemoveIndex > -1) p.inventory.splice(itemToRemoveIndex, 1); } } calculateTotalStats(p); const hpAfter = p.stats.total.hp; p.currentHp = hpBefore > 0 && hpAfter > 0 ? p.currentHp * (hpAfter / hpBefore) : hpAfter; if (p.currentHp > hpAfter) p.currentHp = hpAfter; pushLog(p, msg); socket.emit('enhancementResult', { result, newItem: (result !== 'destroy' ? item : null), destroyed: result === 'destroy' }); }
