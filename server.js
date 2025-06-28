@@ -283,7 +283,7 @@ function calcMonsterStats(p) {
         return {
             level: level,
             hp: level * 10, 
-            attack: prevLevelMonsterAttack * 2.2, 
+            attack: prevLevelMonsterAttack * 2, 
             defense: level / 3, 
             isBoss: true
         };
