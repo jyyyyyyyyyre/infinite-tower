@@ -113,7 +113,7 @@ async function loadWorldBossState() {
         };
         console.log('활성화된 월드보스 정보를 DB에서 로드했습니다.');
     } else {
-        worldBossTimer = setTimeout(spawnWorldBoss, 10000);
+worldBossTimer = setTimeout(spawnWorldBoss, WORLD_BOSS_CONFIG.SPAWN_INTERVAL);
     }
 }
 
