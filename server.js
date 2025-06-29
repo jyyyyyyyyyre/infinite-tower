@@ -205,13 +205,20 @@ function createPetInstance(id) {
 }
 
 function getNormalizedIp(socket) {
+
+    const forwardedFor = socket.handshake.headers['x-forwarded-for'];
+    if (forwardedFor) {
+
+        return forwardedFor.split(',')[0].trim();
+    }
+
     let ip = socket.handshake.address;
     if (!ip) return 'unknown';
 
     if (ip === '::1') {
         return '127.0.0.1';
     }
-
+    // IPv4-mapped IPv6 주소
     if (ip.startsWith('::ffff:')) {
         return ip.substring(7);
     }
@@ -709,7 +716,66 @@ function runExploration(player) {
         }
     }
 }
-function useItem(player, uid, useAll = false) { if (!player) return; const itemIndex = player.inventory.findIndex(i => i.uid === uid); if (itemIndex === -1) return; const item = player.inventory[itemIndex]; const quantityToUse = useAll ? item.quantity : 1; let messages = []; switch(item.id) { case 'gold_pouch': let totalGoldGained = 0; for (let i = 0; i < quantityToUse; i++) { const rand = Math.random(); let cumulativeChance = 0; for (const reward of goldPouchRewardTable) { cumulativeChance += reward.chance; if (rand < cumulativeChance) { const goldGained = Math.floor(Math.random() * (reward.range[1] - reward.range[0] + 1)) + reward.range[0]; totalGoldGained += goldGained; break; } } } player.gold += totalGoldGained; messages.push(`[수수께끼 골드 주머니] ${quantityToUse}개를 사용하여 ${totalGoldGained.toLocaleString()} G를 획득했습니다!`); break; case 'hammer_hephaestus': messages.push('이 아이템은 강화 시 체크하여 사용합니다.'); return; case 'tome_socket1': case 'tome_socket2': case 'tome_socket3': const socketIndex = parseInt(item.id.slice(-1)) - 1; if (player.unlockedArtifacts[socketIndex]) { messages.push('이미 해금된 유물 소켓입니다.'); return; } else { player.unlockedArtifacts[socketIndex] = artifactData[item.id]; messages.push(`[${artifactData[item.id].name}]의 지혜를 흡수하여 유물 소켓을 영구히 해금했습니다!`); } break; default: messages.push('사용할 수 없는 아이템입니다.'); return; } item.quantity -= quantityToUse; if (item.quantity <= 0) { player.inventory.splice(itemIndex, 1); } if (player.socket) { player.socket.emit('useItemResult', { messages }); } }
+// useItem 함수를 찾아 아래 내용으로 교체하세요.
+
+function useItem(player, uid, useAll = false) {
+    if (!player) return;
+    const itemIndex = player.inventory.findIndex(i => i.uid === uid);
+    if (itemIndex === -1) return;
+    const item = player.inventory[itemIndex];
+    const quantityToUse = useAll ? item.quantity : 1;
+    let messages = [];
+
+    switch (item.id) {
+        case 'gold_pouch':
+            let totalGoldGained = 0;
+            for (let i = 0; i < quantityToUse; i++) {
+                // [수정] 랜덤 숫자 생성을 반복문 안으로 이동하여 매번 새로운 운이 적용되도록 변경
+                const rand = Math.random(); 
+                let cumulativeChance = 0;
+                for (const reward of goldPouchRewardTable) {
+                    cumulativeChance += reward.chance;
+                    if (rand < cumulativeChance) {
+                        const goldGained = Math.floor(Math.random() * (reward.range[1] - reward.range[0] + 1)) + reward.range[0];
+                        totalGoldGained += goldGained;
+                        break;
+                    }
+                }
+            }
+            player.gold += totalGoldGained;
+            messages.push(`[수수께끼 골드 주머니] ${quantityToUse}개를 사용하여 ${totalGoldGained.toLocaleString()} G를 획득했습니다!`);
+            break;
+        case 'hammer_hephaestus':
+            messages.push('이 아이템은 강화 시 체크하여 사용합니다.');
+            return;
+        case 'prevention_ticket':
+             messages.push('이 아이템은 강화 시 체크하여 사용합니다.');
+            return;
+        case 'tome_socket1':
+        case 'tome_socket2':
+        case 'tome_socket3':
+            const socketIndex = parseInt(item.id.slice(-1)) - 1;
+            if (player.unlockedArtifacts[socketIndex]) {
+                messages.push('이미 해금된 유물 소켓입니다.');
+                return;
+            } else {
+                player.unlockedArtifacts[socketIndex] = artifactData[item.id];
+                messages.push(`[${artifactData[item.id].name}]의 지혜를 흡수하여 유물 소켓을 영구히 해금했습니다!`);
+            }
+            break;
+        default:
+            messages.push('사용할 수 없는 아이템입니다.');
+            return;
+    }
+    
+    item.quantity -= quantityToUse;
+    if (item.quantity <= 0) {
+        player.inventory.splice(itemIndex, 1);
+    }
+    if (player.socket) {
+        player.socket.emit('useItemResult', { messages });
+    }
+}
 function placeEggInIncubator(player, uid) { if (!player || player.incubator.egg) { pushLog(player, '[부화기] 이미 다른 알을 품고 있습니다.'); return; } const itemIndex = player.inventory.findIndex(i => i.uid === uid && (i.category === 'Egg' || i.type === 'egg')); if (itemIndex === -1) return; const egg = player.inventory[itemIndex]; if (egg.quantity > 1) { egg.quantity--; } else { player.inventory.splice(itemIndex, 1); } player.incubator.egg = { ...egg, quantity: 1 }; pushLog(player, `[부화기] ${egg.name}을(를) 부화기에 넣었습니다.`); }
 function startHatching(player) { if (!player || !player.incubator.egg || player.incubator.hatchCompleteTime) return; const eggId = player.incubator.egg.id; const hatchDuration = itemData[eggId]?.hatchDuration; if (!hatchDuration) return; player.incubator.hatchDuration = hatchDuration; player.incubator.hatchCompleteTime = new Date(Date.now() + hatchDuration); pushLog(player, `[부화기] ${player.incubator.egg.name} 부화를 시작합니다!`); }
 function onHatchComplete(player) { if (!player || !player.incubator.egg) return; pushLog(player, `[부화기] ${player.incubator.egg.name}에서 생명의 기운이 느껴집니다!`); const eggGrade = player.incubator.egg.grade; const possiblePets = Object.keys(petData).filter(id => petData[id].grade === eggGrade); if (possiblePets.length > 0) { const randomPetId = possiblePets[Math.floor(Math.random() * possiblePets.length)]; const newPet = createPetInstance(randomPetId); player.petInventory.push(newPet); pushLog(player, `[펫] <span class="${newPet.grade}">${newPet.name}</span>이(가) 태어났습니다!`); } player.incubator = { egg: null, hatchCompleteTime: null, hatchDuration: 0 }; }
