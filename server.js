@@ -129,7 +129,7 @@ const enhancementTable = { 1: { success: 1.00, maintain: 0.00, fail: 0.00, destr
 const highEnhancementRate = { success: 0.10, maintain: 0.90, fail: 0.00, destroy: 0.00 };
 
 const explorationLootTable = [
-  { id: 'gold_pouch', chance: 0.005 },
+  { id: 'gold_pouch', chance: 0.002 },
     { id: 'pet_egg_normal', chance: 0.0008 },
     { id: 'prevention_ticket', chance: 0.0001 },
     { id: 'pet_egg_ancient', chance: 0.00005 },
@@ -143,9 +143,9 @@ const explorationLootTable = [
 const goldPouchRewardTable = [
     { range: [1, 1000], chance: 0.50 },
     { range: [10000, 100000], chance: 0.40 },
-    { range: [10000, 10000000], chance: 0.099 },
-    { range: [300000, 20000000], chance: 0.0009 },
-    { range: [1000000, 1000000000], chance: 0.0001 }
+    { range: [10000, 1000000], chance: 0.099 },
+    { range: [3000000, 10000000], chance: 0.0009 },
+    { range: [100000000, 100000000], chance: 0.0001 }
 ];
 
 let onlinePlayers = {};
@@ -153,6 +153,7 @@ let globalRecordsCache = {};
 let worldBossState = null;
 let worldBossTimer = null;
 let isBossSpawning = false;
+let connectedIPs = new Set();
 
 async function loadWorldBossState() {
     const savedState = await WorldBossState.findOne({ uniqueId: 'singleton' });
@@ -201,6 +202,20 @@ function createPetInstance(id) {
         effects: d.effects,
         quantity: 1
     }; 
+}
+
+function getNormalizedIp(socket) {
+    let ip = socket.handshake.address;
+    if (!ip) return 'unknown';
+
+    if (ip === '::1') {
+        return '127.0.0.1';
+    }
+
+    if (ip.startsWith('::ffff:')) {
+        return ip.substring(7);
+    }
+    return ip;
 }
 
 function handleItemStacking(player, item) { 
@@ -254,19 +269,32 @@ async function updateGlobalRecord(recordType, data) { try { const updatedRecord 
 io.use(async (socket, next) => { const token = socket.handshake.auth.token; if (!token) { return next(new Error('인증 오류: 토큰이 제공되지 않았습니다.')); } try { const decoded = jwt.verify(token, JWT_SECRET); socket.userId = decoded.userId; socket.username = decoded.username; socket.role = decoded.role || 'user'; next(); } catch (error) { return next(new Error('인증 오류: 유효하지 않은 토큰입니다.')); } });
 
 io.on('connection', async (socket) => {
+    const clientIp = getNormalizedIp(socket);
+    if (connectedIPs.has(clientIp)) {
+        console.log(`[연결 거부] 중복 IP 접속 시도: ${socket.username} (${clientIp})`);
+        socket.emit('forceDisconnect', { message: '해당 IP 주소에서는 이미 다른 계정이 접속 중입니다.\n기존 연결을 종료한 후 다시 시도해 주세요.' });
+        socket.disconnect(true);
+        return;
+    }
+
     if (onlinePlayers[socket.userId]) {
         const oldSocket = onlinePlayers[socket.userId].socket;
+        const oldIp = getNormalizedIp(oldSocket);
+        connectedIPs.delete(oldIp);
         oldSocket.emit('forceDisconnect', { message: '다른 기기 또는 탭에서 접속하여 연결을 종료합니다.' });
         oldSocket.disconnect(true);
     }
+    
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
-    if (!gameData) { console.error(`[오류] ${socket.username}의 게임 데이터를 찾을 수 없습니다.`); return socket.disconnect(); }
-
-    if (typeof gameData.isExploring === 'undefined') gameData.isExploring = false;
-    if (typeof gameData.levelBeforeExploration === 'undefined') {
-        gameData.levelBeforeExploration = gameData.level; 
+    if (!gameData) { 
+        console.error(`[오류] ${socket.username}의 게임 데이터를 찾을 수 없습니다.`);
+        return socket.disconnect(); 
     }
+
+ 
+    if (typeof gameData.isExploring === 'undefined') gameData.isExploring = false;
+    if (typeof gameData.levelBeforeExploration === 'undefined') gameData.levelBeforeExploration = gameData.level;
     if (!gameData.unlockedArtifacts) gameData.unlockedArtifacts = [null, null, null];
     if (!gameData.petInventory) gameData.petInventory = [];
     if (typeof gameData.equippedPet === 'undefined') gameData.equippedPet = null;
@@ -275,6 +303,7 @@ io.on('connection', async (socket) => {
     if (typeof gameData.petReviveCooldown === 'undefined') gameData.petReviveCooldown = null;
 
     gameData.attackTarget = 'monster';
+    connectedIPs.add(clientIp);
     onlinePlayers[socket.userId] = { ...gameData, monster: { currentHp: 1 }, socket: socket };
     
     calculateTotalStats(onlinePlayers[socket.userId]);
@@ -345,6 +374,8 @@ io.on('connection', async (socket) => {
 
             const player = onlinePlayers[socket.userId];
             if(player) {
+                const clientIp = getNormalizedIp(player.socket);
+                connectedIPs.delete(clientIp);
                 player.isExploring = false;
                 savePlayerData(socket.userId);
             }
@@ -614,15 +645,15 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
         if (useTicket && item.enhancement >= 10) {
             const ticketIndex = p.inventory.findIndex(i => i.id === 'prevention_ticket');
             if (ticketIndex !== -1) {
-                // 이 시점에서 티켓을 소모합니다.
+     
                 p.inventory[ticketIndex].quantity--;
                 if (p.inventory[ticketIndex].quantity <= 0) {
                     p.inventory.splice(ticketIndex, 1);
                 }
-                result = 'maintain'; // 결과는 '유지'로 처리하여 아이템이 사라지지 않게 함
+                result = 'maintain'; 
                 msg = `<span class="Epic">파괴 방지권</span>을 사용하여 <span class="${item.grade}">${item.name}</span>의 파괴를 막았습니다!`;
             } else {
-                // 티켓을 사용하기로 했으나, 그 사이 티켓이 사라진 경우 (예: 다른 곳에서 사용)
+
                 result = 'destroy';
                 msg = `<span class="${item.grade}">${item.name}</span>이(가) 강화에 실패하여 파괴되었습니다...`;
                 if (isEquipped) { p.equipment[item.type] = null; } 
