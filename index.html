@@ -78,14 +78,24 @@
                         <div class="stat-row" data-stat-row="attack"><span class="stat-name">⚔️ 총 공격력</span><span class="stat-value" id="total-attack"></span><div class="button-group"><button class="upgrade-btn" data-stat="attack" data-amount="1">+1</button><button class="upgrade-btn" data-stat="attack" data-amount="10">+10</button><button class="upgrade-btn" data-stat="attack" data-amount="100">+100</button><button class="upgrade-btn" data-stat="attack" data-amount="MAX">MAX</button></div></div>
                         <div class="stat-row" data-stat-row="defense"><span class="stat-name">🛡️ 총 방어력</span><span class="stat-value" id="total-defense"></span><div class="button-group"><button class="upgrade-btn" data-stat="defense" data-amount="1">+1</button><button class="upgrade-btn" data-stat="defense" data-amount="10">+10</button><button class="upgrade-btn" data-stat="defense" data-amount="100">+100</button><button class="upgrade-btn" data-stat="defense" data-amount="MAX">MAX</button></div></div>
                     </div>
-                    <div class="equipment-slots">
-                        <div class="slot" id="weapon-slot" data-slot="weapon"></div>
-                        <div class="slot" id="armor-slot" data-slot="armor"></div>
+
+                    <div class="equipment-section">
+                        <div class="equipment-slots">
+                            <div class="slot" id="weapon-slot" data-slot="weapon"></div>
+                            <div class="slot" id="armor-slot" data-slot="armor"></div>
+                            <div class="slot" id="pet-slot" data-slot="pet"></div>
+                        </div>
+                        <div class="artifact-sockets" id="artifact-sockets">
+                            </div>
                     </div>
                 </div>
+                
                 <div class="character-panel monster-panel">
                     <div class="character-header">
-                        <h2><span id="monster-level"></span>층</h2>
+                        <div class="monster-header-controls">
+                            <h2><span id="monster-level"></span></h2>
+                            <button id="exploration-button" class="explore">탐험하기</button>
+                        </div>
                     </div>
                     <div class="hp-bar">
                         <div class="hp-bar-inner" id="monster-hp-bar"></div>
@@ -98,28 +108,51 @@
                     </div>
                 </div>
             </header>
+
             <main class="management-panel">
                 <div class="tabs">
                     <button class="tab-button active" data-tab="weapon-inventory-tab">무기</button>
                     <button class="tab-button" data-tab="armor-inventory-tab">방어구</button>
+                    <button class="tab-button" data-tab="item-inventory-tab">아이템</button>
+                    <button class="tab-button" data-tab="pet-inventory-tab">펫</button>
+                    <button class="tab-button" data-tab="incubator-tab">부화기</button>
                     <button class="tab-button" data-tab="enhancement-tab">강화</button>
-                    <button class="tab-button" data-tab="item-tab">아이템</button>
                     <button class="tab-button" data-tab="log-tab">로그</button>
                     <button class="tab-button" data-tab="chat-tab">채팅</button>
                 </div>
 
                 <div class="tab-content active" id="weapon-inventory-tab">
-                    <div class="inventory-header">
-                        <p class="inventory-tip">아이템을 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p>
-                    </div>
-                    <div id="weapon-inventory" class="inventory-grid"></div>
-                </div>
+                    <div class="inventory-header"><p class="inventory-tip">아이템을 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p></div>
+    <div class="inventory-container"> <div id="weapon-inventory" class="inventory-grid"></div>
+        <div id="weapon-interaction-panel" class="interaction-panel"></div> </div>
+</div>
 
                 <div class="tab-content" id="armor-inventory-tab">
-                    <div class="inventory-header">
-                        <p class="inventory-tip">아이템을 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p>
-                    </div>
+                     <div class="inventory-header"><p class="inventory-tip">아이템을 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p></div>
                     <div id="armor-inventory" class="inventory-grid"></div>
+                </div>
+
+                <div class="tab-content" id="item-inventory-tab">
+                    <div class="inventory-header"><p class="inventory-tip">아이템을 클릭하여 사용하거나 부화기에 넣을 수 있습니다.</p></div>
+                    <div id="item-inventory" class="inventory-grid"></div>
+                </div>
+
+                <div class="tab-content" id="pet-inventory-tab">
+                    <div class="inventory-header"><p class="inventory-tip">펫을 드래그하여 장착하고, 클릭하여 거래소에 등록할 수 있습니다.</p></div>
+                    <div id="pet-inventory" class="inventory-grid"></div>
+                </div>
+
+                <div class="tab-content" id="incubator-tab">
+                    <div id="incubator-content">
+                        <div class="incubator-slot" id="incubator-slot"></div>
+                        <div class="hatching-info" id="hatching-info" style="display: none;">
+                            <div class="progress-bar">
+                                <div class="progress-bar-inner" id="hatch-progress-bar"></div>
+                            </div>
+                            <div id="hatch-timer"></div>
+                        </div>
+                        <button id="hatch-button" disabled>부화 시작</button>
+                    </div>
                 </div>
 
                 <div class="tab-content" id="enhancement-tab">
@@ -134,17 +167,20 @@
                             <div id="enhancement-after"></div>
                         </div>
                         <div class="enhancement-info" id="enhancement-info"></div>
-                        <div class="prevention-ticket-checkbox-wrapper">
-                            <input type="checkbox" id="use-prevention-ticket" disabled>
-                            <label for="use-prevention-ticket">파괴 방지권 사용하기</label>
+                        <div class="enhancement-checkboxes-wrapper">
+                            <div class="checkbox-wrapper">
+                                <input type="checkbox" id="use-prevention-ticket" disabled>
+                                <label for="use-prevention-ticket">파괴 방지권 사용</label>
+                            </div>
+                             <div class="checkbox-wrapper">
+                                <input type="checkbox" id="use-hammer-ticket" disabled>
+                                <label for="use-hammer-ticket">헤파이토스의 망치 사용 (+15%p)</label>
+                            </div>
                         </div>
                         <button class="enhance-execute-btn" id="enhance-button" disabled>강 화</button>
                     </div>
                 </div>
                 
-                <div class="tab-content" id="item-tab">
-                </div>
-
                 <div class="tab-content" id="log-tab"><ul id="game-log"></ul></div>
                 <div class="tab-content" id="chat-tab">
                     <ul id="chat-messages"></ul>
