@@ -144,8 +144,8 @@ const goldPouchRewardTable = [
     { range: [1, 1000], chance: 0.50 },
     { range: [10000, 100000], chance: 0.40 },
     { range: [10000, 10000000], chance: 0.099 },
-    { range: [3000000, 100000000], chance: 0.0009 },
-    { range: [1000000000, 1000000000], chance: 0.0001 }
+    { range: [300000, 20000000], chance: 0.0009 },
+    { range: [1000000, 1000000000], chance: 0.0001 }
 ];
 
 let onlinePlayers = {};
