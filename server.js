@@ -12,7 +12,7 @@ const PORT = 3000;
 const TICK_RATE = 1000; // 1초
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_OBJECT_ID = '685f1ef1597a224ec3c148cb';
+const ADMIN_OBJECT_ID = '68617d506c3498183c9b367f';
 const BOSS_INTERVAL = 200;
 
 const WORLD_BOSS_CONFIG = {
@@ -85,6 +85,27 @@ app.use(express.json());
 app.use(express.static('public'));
 app.use('/image', express.static('image'));
 app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
+
+const adminItemAlias = {
+    '무기1': 'w001', '무기2': 'w002', '무기3': 'w003', '무기4': 'w004', '무기5': 'w005',
+    '방어구1': 'a001', '방어구2': 'a002', '방어구3': 'a003', '방어구4': 'a004', '방어구5': 'a005',
+    '파방권': 'prevention_ticket',
+    '망치': 'hammer_hephaestus',
+    '알1': 'pet_egg_normal',
+    '알2': 'pet_egg_ancient',
+    '알3': 'pet_egg_mythic',
+    '소켓1': 'tome_socket1',
+    '소켓2': 'tome_socket2',
+    '소켓3': 'tome_socket3',
+    '골드주머니': 'gold_pouch',
+ '불1': 'ifrit', 
+    '물1': 'undine',
+    '바람1': 'sylphid',
+    '불2': 'phoenix',
+    '물2': 'leviathan',
+    '바람2': 'griffin', 
+    '신화1': 'bahamut'
+};
 
 const itemData = {
     w001: { name: '낡은 단검', type: 'weapon', grade: 'Common', baseEffect: 0.05, image: 'sword1.png', tradable: true },
@@ -218,15 +239,19 @@ function getNormalizedIp(socket) {
     if (ip === '::1') {
         return '127.0.0.1';
     }
-    // IPv4-mapped IPv6 주소
+
     if (ip.startsWith('::ffff:')) {
         return ip.substring(7);
     }
     return ip;
 }
 
-function handleItemStacking(player, item) { 
-    if (!item.tradable || item.enhancement > 0 || item.type === 'pet') {
+function handleItemStacking(player, item) {
+    if (!item) {
+        console.error("handleItemStacking 함수에 비정상적인 null 아이템이 전달되었습니다.");
+        return;
+    }
+    if (!item.tradable || item.enhancement > 0 || item.type === 'pet' || item.category === 'Egg') {
         player.inventory.push(item);
         return;
     }
@@ -345,17 +370,107 @@ io.on('connection', async (socket) => {
         })
         .on('requestRanking', async () => { try { const topLevel = await GameData.find({ maxLevel: { $gt: 1 } }).sort({ maxLevel: -1 }).limit(10).lean(); const topGold = await GameData.find({ gold: { $gt: 0 } }).sort({ gold: -1 }).limit(10).lean(); const topWeapon = await GameData.find({ maxWeaponEnhancement: { $gt: 0 } }).sort({ maxWeaponEnhancement: -1 }).limit(10).lean(); const topArmor = await GameData.find({ maxArmorEnhancement: { $gt: 0 } }).sort({ maxArmorEnhancement: -1 }).limit(10).lean(); socket.emit('rankingData', { topLevel, topGold, topWeapon, topArmor }); } catch (error) { console.error("랭킹 데이터 조회 오류:", error); } })
         .on('requestOnlineUsers', () => { const playersList = Object.values(onlinePlayers).map(p => ({ username: p.username, level: p.level, weapon: p.equipment.weapon ? { name: p.equipment.weapon.name, grade: p.equipment.weapon.grade } : null, armor: p.equipment.armor ? { name: p.equipment.armor.name, grade: p.equipment.armor.grade } : null, })).sort((a, b) => b.level - a.level); socket.emit('onlineUsersData', playersList); })
-        .on('chatMessage', async (msg) => {
-            if (typeof msg !== 'string' || msg.trim().length === 0) return;
-            const trimmedMsg = msg.slice(0, 200);
-            let messageData = { username: socket.username, role: socket.role, message: trimmedMsg, };
-            if (socket.role === 'admin' && trimmedMsg.startsWith('/공지 ')) {
-                const notice = trimmedMsg.substring(4).trim();
-                if (notice) { messageData.type = 'announcement'; messageData.message = notice; io.emit('globalAnnouncement', notice); } else { return; }
+   .on('chatMessage', async (msg) => {
+    if (typeof msg !== 'string' || msg.trim().length === 0) return;
+    const trimmedMsg = msg.slice(0, 200);
+
+    if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
+        const args = trimmedMsg.substring(1).split(' ');
+        const target = args.shift().toLowerCase();
+        const subject = args.shift();
+        const amountStr = args.shift() || '1';
+        const amount = parseInt(amountStr, 10);
+
+        const adminUsername = socket.username;
+
+        const announce = (message) => {
+            console.log(`[관리자 공지] ${message}`);
+            io.emit('globalAnnouncement', message);
+            io.emit('chatMessage', { isSystem: true, message: `📢 ${message}` });
+        };
+        
+        if (!target || !subject || isNaN(amount) || amount <= 0) {
+            return pushLog(onlinePlayers[socket.userId], `[관리자] 명령어 사용법이 잘못되었습니다.`);
+        }
+
+        let targets = [];
+        let targetName = '';
+
+        if (target === '온라인') {
+            targetName = '온라인 전체 유저';
+            targets = Object.values(onlinePlayers);
+        } else if (target === '오프라인') {
+            targetName = '오프라인 전체 유저';
+            targets = await GameData.find({});
+        } else {
+            targetName = target;
+            const targetPlayer = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === target);
+            if (targetPlayer) {
+                targets.push(targetPlayer);
+            } else {
+                const targetGameData = await GameData.findOne({ username: target });
+                if (targetGameData) {
+                    targets.push(targetGameData);
+                }
             }
-            const newChatMessage = new ChatMessage(messageData); await newChatMessage.save(); io.emit('chatMessage', newChatMessage);
-        })
-        .on('getAuctionListings', async (callback) => { try { const items = await AuctionItem.find({}).sort({ listedAt: -1 }).lean(); callback(items); } catch (e) { console.error('거래소 목록 조회 오류:', e); callback([]); } })
+        }
+        
+        if (targets.length === 0) {
+            return pushLog(onlinePlayers[socket.userId], `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
+        }
+
+        if (subject.toLowerCase() === '골드') {
+            for (const t of targets) {
+                if (t.socket) { t.gold += amount; } 
+                else { await GameData.updateOne({ _id: t._id }, { $inc: { gold: amount } }); }
+            }
+            announce(`[관리자] ${adminUsername}님이 ${targetName}에게 골드 ${amount.toLocaleString()}G를 지급했습니다.`);
+        } else {
+            const alias = subject;
+            const id = adminItemAlias[alias];
+            if (!id) {
+                return pushLog(onlinePlayers[socket.userId], `[관리자] '${alias}'는 잘못된 아이템/펫 단축어입니다.`);
+            }
+
+            const isPet = !!petData[id];
+            const isItem = !!itemData[id];
+
+            if (!isPet && !isItem) {
+                return pushLog(onlinePlayers[socket.userId], `[관리자] '${alias}'에 해당하는 아이템/펫 정보가 없습니다.`);
+            }
+
+            const template = isPet ? petData[id] : itemData[id];
+
+            for (const t of targets) {
+                if (isPet) {
+                    const newPet = createPetInstance(id);
+                    if (t.socket) {
+                        t.petInventory.push(newPet);
+                    } else {
+                        await GameData.updateOne({ _id: t._id }, { $push: { petInventory: newPet } });
+                    }
+                } else { 
+                    const newItem = createItemInstance(id, amount);
+                    if (newItem) {
+                        if (t.socket) {
+                            handleItemStacking(t, newItem);
+                        } else {
+                            handleItemStacking(t, newItem);
+                            await t.save();
+                        }
+                    }
+                }
+            }
+            announce(`[관리자] ${adminUsername}님이 ${targetName}에게 <span class="${template.grade}">${template.name}</span> ${isPet ? '펫' : `${amount}개`}를 지급했습니다.`);
+        }
+        return;
+    }
+    
+    const newChatMessage = new ChatMessage({ username: socket.username, role: socket.role, message: trimmedMsg });
+    await newChatMessage.save();
+    io.emit('chatMessage', newChatMessage);
+})
+  .on('getAuctionListings', async (callback) => { try { const items = await AuctionItem.find({}).sort({ listedAt: -1 }).lean(); callback(items); } catch (e) { console.error('거래소 목록 조회 오류:', e); callback([]); } })
         .on('listOnAuction', async ({ uid, price, quantity }) => listOnAuction(onlinePlayers[socket.userId], { uid, price, quantity }))
         .on('buyFromAuction', async ({ listingId, quantity }) => buyFromAuction(onlinePlayers[socket.userId], { listingId, quantity }))
         .on('cancelAuctionListing', async (listingId) => cancelAuctionListing(onlinePlayers[socket.userId], listingId))
@@ -472,7 +587,6 @@ setInterval(() => {
         io.emit('worldBossUpdate', serializableState);
     }
 }, 2000);
-
 function onClearFloor(p) {
     const isBoss = isBossFloor(p.level - 1);
     const clearedFloor = p.level - 1;
@@ -525,10 +639,12 @@ function onClearFloor(p) {
             if (pool.length) {
                 const id = pool[Math.floor(Math.random() * pool.length)];
                 const droppedItem = createItemInstance(id);
-                handleItemStacking(p, droppedItem);
-                pushLog(p, `[${clearedFloor}층]에서 ${itemData[id].name} 획득!`);
-                if (['Legendary', 'Epic', 'Mystic'].includes(droppedItem.grade)) {
-                    updateGlobalRecord(`topLoot_${droppedItem.grade}`, { username: p.username, itemName: droppedItem.name, itemGrade: droppedItem.grade });
+                if (droppedItem) {
+                    handleItemStacking(p, droppedItem);
+                    pushLog(p, `[${clearedFloor}층]에서 ${itemData[id].name} 획득!`);
+                    if (['Legendary', 'Epic', 'Mystic'].includes(droppedItem.grade)) {
+                        updateGlobalRecord(`topLoot_${droppedItem.grade}`, { username: p.username, itemName: droppedItem.name, itemGrade: droppedItem.grade });
+                    }
                 }
             }
         }
@@ -716,7 +832,6 @@ function runExploration(player) {
         }
     }
 }
-// useItem 함수를 찾아 아래 내용으로 교체하세요.
 
 function useItem(player, uid, useAll = false) {
     if (!player) return;
@@ -730,7 +845,7 @@ function useItem(player, uid, useAll = false) {
         case 'gold_pouch':
             let totalGoldGained = 0;
             for (let i = 0; i < quantityToUse; i++) {
-                // [수정] 랜덤 숫자 생성을 반복문 안으로 이동하여 매번 새로운 운이 적용되도록 변경
+              
                 const rand = Math.random(); 
                 let cumulativeChance = 0;
                 for (const reward of goldPouchRewardTable) {
