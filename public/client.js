@@ -413,8 +413,7 @@ const egg = incubator.egg;
             }
 
             infoContentHTML += `<div style="width: 100%; text-align: center;">강화 비용: ${formatInt(cost)} G</div>`;
-            
-            // [수정] 체크박스 활성화 조건을 인벤토리 아이템 유무로 변경
+         
             const hasTicket = currentPlayerState.inventory.some(i => i.id === 'prevention_ticket');
             useTicketCheck.disabled = !(item.enhancement >= 10 && hasTicket);
 
@@ -510,9 +509,8 @@ const egg = incubator.egg;
                 activeTabContent.classList.add('active'); 
             }
 
-            // [추가] 만약 클릭된 탭이 '채팅' 탭이라면 스크롤을 맨 아래로 내립니다.
             if (tabId === 'chat-tab') {
-                // setTimeout을 사용하여 탭이 화면에 완전히 그려진 후 스크롤을 실행합니다. (안정성 향상)
+
                 setTimeout(() => {
                     elements.chat.messages.scrollTop = elements.chat.messages.scrollHeight;
                 }, 0);
@@ -759,4 +757,9 @@ const egg = incubator.egg;
     socket.on('chatMessage', (data) => addChatMessage(data));
     socket.on('globalAnnouncement', (notice) => { const banner = elements.announcementBanner; if (banner) { banner.innerHTML = `📢 ${notice}`; banner.classList.add('active'); setTimeout(() => { banner.classList.remove('active'); }, 10000); } });
     socket.on('forceDisconnect', (data) => { alert(data.message); socket.disconnect(); localStorage.removeItem('jwt_token'); location.reload(); });
+ setInterval(() => {
+        if (socket.connected) {
+            socket.emit('client-heartbeat');
+        }
+    }, 45000);
 }

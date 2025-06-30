@@ -251,7 +251,7 @@ function handleItemStacking(player, item) {
         console.error("handleItemStacking 함수에 비정상적인 null 아이템이 전달되었습니다.");
         return;
     }
-    if (!item.tradable || item.enhancement > 0 || item.type === 'pet' || item.category === 'Egg') {
+    if (!item.tradable || item.enhancement > 0 || item.type === 'pet') {
         player.inventory.push(item);
         return;
     }
@@ -490,6 +490,13 @@ io.on('connection', async (socket) => {
                 pushLog(player, `[부화기] ${egg.name}을(를) 인벤토리로 옮겼습니다.`);
             }
         })
+
+.on('client-heartbeat', () => {
+
+        })
+
+
+
         .on('disconnect', () => {
             console.log(`[연결 해제] 유저: ${socket.username}`);
             io.emit('chatMessage', { isSystem: true, message: `[알림] ${socket.username}님이 퇴장하셨습니다.` });
