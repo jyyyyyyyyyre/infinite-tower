@@ -562,8 +562,8 @@ body.auth-view {
 }
 
 .slot .item-effect {
-    display: none; /* 숨겨져 있던 효과 텍스트를 다시 보이게 함 */
-    font-size: 0.5em;
+    display: block;
+    font-size: 0.9em;
     font-weight: 100;
     color: var(--text-color);
 }
