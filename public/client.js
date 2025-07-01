@@ -723,6 +723,19 @@ const renderItemInSlot = (slotElement, item, defaultText, type) => {
     }
 };
 
+ const buffsContainer = document.getElementById('player-buffs-container');
+    buffsContainer.innerHTML = ''; 
+    if (player.buffs && player.buffs.length > 0) {
+        player.buffs.forEach(buff => {
+            const remainingTime = Math.max(0, Math.floor((new Date(buff.endTime) - new Date()) / 1000));
+            buffsContainer.innerHTML += `
+                <div class="buff-icon" title="${buff.name}">
+                    ✨ 각성 (${remainingTime}초)
+                </div>
+            `;
+        });
+    }
+
         renderItemInSlot(elements.equipment.weapon, player.equipment.weapon, '⚔️<br>무기', 'weapon');
         renderItemInSlot(elements.equipment.armor, player.equipment.armor, '🛡️<br>방어구', 'armor');
         renderItemInSlot(elements.equipment.pet, player.equippedPet, '🐾<br>펫', 'pet');
@@ -1192,9 +1205,18 @@ case 'equip':
                     selectedInventoryItemUid = null;
                 } else if (price !== null) { alert("올바른 가격을 입력해주세요."); }
                 break;
-            case 'use':
+         case 'use':
+    { // 중괄호를 추가하여 변수 스코프를 제한합니다.
+        const itemToUse = findItemInState(selectedInventoryItemUid);
+        if (itemToUse && itemToUse.id === 'return_scroll') {
+            if (confirm(`[복귀 스크롤]을 사용하시겠습니까?\n사용 시 최고층으로 이동하며 10초간 각성 상태가 됩니다.`)) {
                 socket.emit('useItem', { uid: selectedInventoryItemUid, useAll: false });
-                break;
+            }
+        } else {
+            socket.emit('useItem', { uid: selectedInventoryItemUid, useAll: false });
+        }
+    }
+    break;
             case 'use-all':
                 socket.emit('useItem', { uid: selectedInventoryItemUid, useAll: true });
                 break;
@@ -1355,12 +1377,17 @@ case 'equip':
     elements.modals.auction.refreshBtn.addEventListener('click', fetchAuctionListings);
     socket.on('auctionUpdate', () => { fetchAuctionListings(); elements.modals.auction.detail.innerHTML = '<p>아이템을 선택하여 상세 정보를 확인하세요.</p>'; });
     elements.worldBoss.toggleBtn.addEventListener('click', () => { attackTarget = attackTarget === 'monster' ? 'worldBoss' : 'monster'; socket.emit('setAttackTarget', attackTarget); });
-    socket.on('attackTargetChanged', (target) => {
-        attackTarget = target;
-        elements.worldBoss.toggleBtn.textContent = target === 'monster' ? '월드 보스 공격' : '일반 몬스터 공격';
-        elements.worldBoss.toggleBtn.classList.toggle('target-monster', target === 'worldBoss');
-        elements.worldBoss.toggleBtn.classList.toggle('target-boss', target === 'monster');
-    });
+ socket.on('attackTargetChanged', (target) => {
+    attackTarget = target;
+    const button = elements.worldBoss.toggleBtn;
+    if (target === 'worldBoss') {
+        button.textContent = '일반 몬스터 공격';
+        button.className = 'climb'; // '등반하기'와 동일한 빨간색 스타일 적용
+    } else {
+        button.textContent = '월드 보스 공격';
+        button.className = 'explore'; // '탐험하기'와 동일한 초록색 스타일 적용
+    }
+});
     socket.on('worldBossSpawned', (bossState) => { elements.worldBoss.container.style.display = 'flex'; socket.emit('setAttackTarget', 'monster'); updateWorldBossUI(bossState); });
     socket.on('worldBossUpdate', (bossState) => {
         if (!bossState || !bossState.isActive) { elements.worldBoss.container.style.display = 'none'; return; };

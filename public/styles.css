@@ -2961,3 +2961,31 @@ body > * {
 .left-sector h2, .right-sector h2 {
     margin-top: 0;
 }
+
+#player-buffs-container {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+    min-height: 28px; /* 버프가 없을 때도 공간을 차지하도록 설정 */
+}
+.buff-icon {
+    padding: 5px 10px;
+    background-color: var(--gold-color);
+    color: #000;
+    font-weight: bold;
+    border-radius: 6px;
+    box-shadow: 0 0 8px var(--gold-color);
+    animation: pulse-orange 1.5s infinite;
+    font-size: 1.1em;
+}
+
+.explore { /* ID(#)를 삭제하여 클래스로만 스타일을 적용 */
+    background-color: var(--success-color);
+    color: #fff;
+}
+
+.climb { /* ID(#)를 삭제하여 클래스로만 스타일을 적용 */
+    background-color: var(--secondary-color);
+    color: #fff;
+}

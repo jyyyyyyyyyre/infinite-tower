@@ -171,12 +171,14 @@ const adminItemAlias = {
     '소켓2': 'tome_socket2',
     '소켓3': 'tome_socket3',
     '골드주머니': 'gold_pouch',
+ '복귀스크롤': 'return_scroll',
  '불1': 'ifrit', 
     '물1': 'undine',
     '바람1': 'sylphid',
     '불2': 'phoenix',
     '물2': 'leviathan',
     '바람2': 'griffin', 
+'참여상자': 'boss_participation_box',
     '신화1': 'bahamut'
 };
 
@@ -191,7 +193,9 @@ const itemData = {
     a004: { name: '영겁의 흉갑', type: 'armor', grade: 'Epic', baseEffect: 0.50, image: 'armor4.png', tradable: true },
     w005: { name: '태초의 파편', type: 'weapon', grade: 'Mystic', baseEffect: 2.50, image: 'sword5.png', tradable: true },
     a005: { name: '세계수의 심장', type: 'armor', grade: 'Mystic', baseEffect: 2.50, image: 'armor5.png', tradable: true },
-    gold_pouch: { name: '수수께끼 골드 주머니', type: 'Special', category: 'Consumable', grade: 'Common', description: '사용 시 랜덤한 골드를 획득합니다.', image: 'gold_pouch.png', tradable: true },
+boss_participation_box: { name: '월드보스 참여 상자', type: 'Special', category: 'Consumable', grade: 'Rare', description: '월드보스 토벌에 참여한 등반자에게 주어지는 상자. 사용 시 골드나 아이템을 얻을 수 있다.', image: 'box.png', tradable: false },
+  return_scroll: { name: '복귀 스크롤', type: 'Special', category: 'Consumable', grade: 'Rare', description: '사용 시 가장 높은 층으로 이동하며, 10초간 각성 상태에 돌입하여 능력치가 대폭 상승합니다.', image: 'return_scroll.png', tradable: true },
+  gold_pouch: { name: '수수께끼 골드 주머니', type: 'Special', category: 'Consumable', grade: 'Common', description: '사용 시 랜덤한 골드를 획득합니다.', image: 'gold_pouch.png', tradable: true },
     pet_egg_normal: { name: '일반종 알', type: 'Special', category: 'Egg', grade: 'Rare', description: '부화시키면 일반 등급의 펫을 얻습니다.', image: 'egg_normal.png', tradable: true, hatchDuration: 30 * 60 * 1000 },
     pet_egg_ancient: { name: '고대종 알', type: 'Special', category: 'Egg', grade: 'Epic', description: '부화시키면 고대 등급의 펫을 얻습니다.', image: 'pet_egg_ancient.png', tradable: true, hatchDuration: 60 * 60 * 1000 },
     pet_egg_mythic: { name: '신화종 알', type: 'Special', category: 'Egg', grade: 'Mystic', description: '부화시키면 신화 등급의 펫을 얻습니다.', image: 'pet_egg_mythic.png', tradable: true, hatchDuration: 24 * 60 * 60 * 1000 },
@@ -243,6 +247,7 @@ const explorationLootTable = [
     { id: 'tome_socket1', chance: 0.000008 },
     { id: 'tome_socket2', chance: 0.0000065 },
     { id: 'tome_socket3', chance: 0.000005 },
+    { id: 'return_scroll', chance: 0.000009 },
     { id: 'pet_egg_mythic', chance: 0.0000005 } 
 ];
 
@@ -355,32 +360,50 @@ function calculateTotalStats(player) {
     const base = player.stats.base;
     let weaponBonus = 0;
     let armorBonus = 0;
-    let finalAttackMultiplier = 1;
-    let finalDefenseMultiplier = 1;
+
+    // 버프 및 유물 효과를 위한 승수 초기화
+    let buffAttackMultiplier = 1;
+    let buffDefenseMultiplier = 1;
+    let buffHpMultiplier = 1;
+    let artifactAttackMultiplier = 1;
+    let artifactDefenseMultiplier = 1;
 
     player.stats.critChance = 0;
     player.stats.critResistance = 0;
     let petDefPenetration = 0;
 
+    // 펫 효과 적용
     if (player.equippedPet && player.equippedPet.effects) {
         const effects = player.equippedPet.effects;
         player.stats.critChance = effects.critChance || 0;
         player.stats.critResistance = effects.critResistance || 0;
         petDefPenetration = effects.defPenetration || 0;
     }
+    
+    // 버프 효과 적용
+    if (player.buffs && player.buffs.length > 0) {
+        player.buffs.forEach(buff => {
+            if (buff.effects.attackMultiplier) buffAttackMultiplier *= buff.effects.attackMultiplier;
+            if (buff.effects.defenseMultiplier) buffDefenseMultiplier *= buff.effects.defenseMultiplier;
+            if (buff.effects.hpMultiplier) buffHpMultiplier *= buff.effects.hpMultiplier;
+        });
+    }
 
+    // 장비 효과 적용
     if (player.equipment.weapon) weaponBonus = computeEnhanceBonus(player.equipment.weapon);
     if (player.equipment.armor) armorBonus = computeEnhanceBonus(player.equipment.armor);
 
+    // 유물 효과 적용
     if (player.unlockedArtifacts[1] && isBossFloor(player.level)) {
-        finalAttackMultiplier += 0.50;
-        finalDefenseMultiplier += 0.50;
+        artifactAttackMultiplier += 0.50;
+        artifactDefenseMultiplier += 0.50;
     }
 
+    // 최종 능력치 계산
     player.stats.total = {
-        hp: base.hp * (1 + armorBonus),
-        attack: (base.attack * (1 + weaponBonus)) * finalAttackMultiplier,
-        defense: (base.defense * (1 + armorBonus)) * finalDefenseMultiplier,
+        hp: (base.hp * (1 + armorBonus)) * buffHpMultiplier,
+        attack: (base.attack * (1 + weaponBonus)) * artifactAttackMultiplier * buffAttackMultiplier,
+        defense: (base.defense * (1 + armorBonus)) * artifactDefenseMultiplier * buffDefenseMultiplier,
         defPenetration: petDefPenetration
     };
 }
@@ -439,7 +462,7 @@ io.on('connection', async (socket) => {
 
     gameData.attackTarget = 'monster';
     connectedIPs.add(clientIp);
-    onlinePlayers[socket.userId] = { ...gameData, monster: { currentHp: 1 }, socket: socket };
+onlinePlayers[socket.userId] = { ...gameData, monster: { currentHp: 1 }, socket: socket, buffs: [] };
     
     calculateTotalStats(onlinePlayers[socket.userId]);
     if (!onlinePlayers[socket.userId].stats.total) onlinePlayers[socket.userId].stats.total = {};
@@ -464,13 +487,26 @@ updatePlayerFame(onlinePlayers[socket.userId]);
         .on('unequipItem', slot => unequipItem(onlinePlayers[socket.userId], slot))
         .on('attemptEnhancement', ({ uid, useTicket, useHammer }) => attemptEnhancement(onlinePlayers[socket.userId], { uid, useTicket, useHammer }, socket))
         .on('sellItem', ({ uid, sellAll }) => sellItem(onlinePlayers[socket.userId], uid, sellAll))
-        .on('setAttackTarget', (target) => {
-            const player = onlinePlayers[socket.userId];
-            if (player && (target === 'monster' || target === 'worldBoss')) {
-                player.attackTarget = target;
-                socket.emit('attackTargetChanged', target);
-            }
-        })
+      .on('setAttackTarget', (target) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player) return;
+
+    if (target === 'worldBoss') {
+        if (player.attackTarget !== 'worldBoss') {
+            player.stateBeforeBossAttack = player.isExploring ? 'exploring' : 'climbing';
+            player.isExploring = false;
+        }
+        player.attackTarget = 'worldBoss';
+    } else { 
+        if (player.stateBeforeBossAttack === 'exploring') {
+            player.isExploring = true;
+        } else {
+            player.isExploring = false;
+        }
+        player.attackTarget = 'monster';
+    }
+    socket.emit('attackTargetChanged', target);
+})
         .on('requestRanking', async () => { try { const topLevel = await GameData.find({ maxLevel: { $gt: 1 } }).sort({ maxLevel: -1 }).limit(10).lean(); const topGold = await GameData.find({ gold: { $gt: 0 } }).sort({ gold: -1 }).limit(10).lean(); const topWeapon = await GameData.find({ maxWeaponEnhancement: { $gt: 0 } }).sort({ maxWeaponEnhancement: -1 }).limit(10).lean(); const topArmor = await GameData.find({ maxArmorEnhancement: { $gt: 0 } }).sort({ maxArmorEnhancement: -1 }).limit(10).lean(); socket.emit('rankingData', { topLevel, topGold, topWeapon, topArmor }); } catch (error) { console.error("랭킹 데이터 조회 오류:", error); } })
        .on('requestOnlineUsers', () => {
     const playersList = Object.values(onlinePlayers).map(p => ({
@@ -484,142 +520,139 @@ updatePlayerFame(onlinePlayers[socket.userId]);
 })
 
 .on('chatMessage', async (msg) => {
-try {
-    if (typeof msg !== 'string' || msg.trim().length === 0) return;
-    const trimmedMsg = msg.slice(0, 200);
+    try {
+        if (typeof msg !== 'string' || msg.trim().length === 0) return;
+        const trimmedMsg = msg.slice(0, 200);
 
-   if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
-    const args = trimmedMsg.substring(1).split(' ');
-    const command = args.shift().toLowerCase(); 
+        // 관리자 명령어 처리
+        if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
+            const args = trimmedMsg.substring(1).split(' ').filter(arg => arg.length > 0);
+            const command = args.shift().toLowerCase();
+            const adminUsername = socket.username;
 
- const announce = (message, socket) => {
-    console.log(`[관리자 공지] ${message}`);
-    io.emit('globalAnnouncement', message);
-    io.emit('chatMessage', {
-        type: 'announcement',
-        username: socket.username,
-        role: 'admin',
-        message: message
-    });
-};
+            // 1. /공지 [메시지]
+            if (command === '공지') {
+                const noticeMessage = args.join(' ');
+                if (!noticeMessage) {
+                    return pushLog(onlinePlayers[socket.userId], `[관리자] 공지할 내용을 입력해주세요. 예: /공지 오늘 저녁 이벤트`);
+                }
+                console.log(`[관리자 공지] ${noticeMessage}`);
+                io.emit('globalAnnouncement', noticeMessage); // 상단 배너 공지
+                io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: noticeMessage }); // 채팅창 공지
+                return;
+            }
 
-if (command === '공지') {
-    const noticeMessage = args.join(' ');
-    if (!noticeMessage) {
-        return pushLog(onlinePlayers[socket.userId], `[관리자] 공지할 내용을 입력해주세요. 예: /공지 오늘 저녁 이벤트`);
-    }
-    announce(noticeMessage, socket);
-    return;
-}
-
-  if (command === '보스소환') {
+            // 2. /보스소환
+            if (command === '보스소환') {
                 spawnWorldBoss();
                 pushLog(onlinePlayers[socket.userId], '[관리자] 월드 보스를 강제로 소환했습니다.');
                 return;
             }
 
-    const target = command;
-    const subject = args.shift();
-    const amountStr = args.shift() || '1';
-    const amount = parseInt(amountStr, 10);
-    const adminUsername = socket.username;
+            // 3. /대상 지급항목 [수량]
+            const target = command;
+            const subject = args.shift();
+            const amountStr = args.shift() || '1';
+            const amount = parseInt(amountStr, 10);
 
-    if (!target || !subject || isNaN(amount) || amount <= 0) {
-        return pushLog(onlinePlayers[socket.userId], `[관리자] 명령어 사용법이 잘못되었습니다.`);
-    }
-
-    let targets = [];
-    let targetName = '';
-
-    if (target === '온라인') {
-        targetName = '온라인 전체 유저';
-        targets = Object.values(onlinePlayers);
-    } else if (target === '오프라인') {
-        targetName = '오프라인 전체 유저';
-        targets = await GameData.find({});
-    } else {
-        targetName = target;
-        const targetPlayer = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === target);
-        if (targetPlayer) {
-            targets.push(targetPlayer);
-        } else {
-            const targetGameData = await GameData.findOne({ username: target });
-            if (targetGameData) {
-                targets.push(targetGameData);
+            if (!target || !subject) {
+                return pushLog(onlinePlayers[socket.userId], `[관리자] 명령어 형식이 잘못되었습니다. (대상과 지급항목 필수)`);
             }
-        }
-    }
-    
-    if (targets.length === 0) {
-        return pushLog(onlinePlayers[socket.userId], `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
-    }
-
-        if (subject.toLowerCase() === '골드') {
-            for (const t of targets) {
-                if (t.socket) { t.gold += amount; } 
-                else { await GameData.updateOne({ _id: t._id }, { $inc: { gold: amount } }); }
-            }
-            announce(`[관리자] ${adminUsername}님이 ${targetName}에게 골드 ${amount.toLocaleString()}G를 지급했습니다.`);
-        } else {
-            const alias = subject;
-            const id = adminItemAlias[alias];
-            if (!id) {
-                return pushLog(onlinePlayers[socket.userId], `[관리자] '${alias}'는 잘못된 아이템/펫 단축어입니다.`);
+            if (isNaN(amount) || amount <= 0) {
+                return pushLog(onlinePlayers[socket.userId], `[관리자] 지급 수량은 1 이상의 숫자여야 합니다.`);
             }
 
-            const isPet = !!petData[id];
-            const isItem = !!itemData[id];
+            let targets = [];
+            let targetName = '';
 
-            if (!isPet && !isItem) {
-                return pushLog(onlinePlayers[socket.userId], `[관리자] '${alias}'에 해당하는 아이템/펫 정보가 없습니다.`);
+            if (target === '온라인') {
+                targetName = '온라인 전체 유저';
+                targets = Object.values(onlinePlayers);
+            } else if (target === '오프라인') {
+                targetName = '오프라인 전체 유저';
+                targets = await GameData.find({});
+            } else {
+                targetName = target;
+                const onlineTarget = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === target);
+                if (onlineTarget) {
+                    targets.push(onlineTarget);
+                } else {
+                    const offlineTarget = await GameData.findOne({ username: target });
+                    if (offlineTarget) targets.push(offlineTarget);
+                }
             }
 
-            const template = isPet ? petData[id] : itemData[id];
+            if (targets.length === 0) {
+                return pushLog(onlinePlayers[socket.userId], `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
+            }
 
-            for (const t of targets) {
-                if (isPet) {
-                    const newPet = createPetInstance(id);
+            // 지급 처리 (골드)
+            if (subject.toLowerCase() === '골드') {
+                for (const t of targets) {
                     if (t.socket) {
-                        t.petInventory.push(newPet);
+                        t.gold += amount;
                     } else {
-                        await GameData.updateOne({ _id: t._id }, { $push: { petInventory: newPet } });
+                        await GameData.updateOne({ _id: t._id }, { $inc: { gold: amount } });
                     }
-                } else { 
-                    const newItem = createItemInstance(id, amount);
-                    if (newItem) {
-                        if (t.socket) {
-                            handleItemStacking(t, newItem);
-                        } else {
-                            handleItemStacking(t, newItem);
-                            await t.save();
+                }
+                const goldMessage = `[관리자] ${targetName}에게 골드 ${amount.toLocaleString()}G를 지급했습니다.`;
+                io.emit('globalAnnouncement', goldMessage); // 상단 배너 공지 추가
+                io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: goldMessage });
+            
+            // 지급 처리 (아이템/펫)
+            } else {
+                const id = adminItemAlias[subject];
+                if (!id) return pushLog(onlinePlayers[socket.userId], `[관리자] '${subject}'는 잘못된 아이템/펫 단축어입니다.`);
+                
+                const isPet = !!petData[id];
+                const isItem = !!itemData[id];
+                if (!isPet && !isItem) return pushLog(onlinePlayers[socket.userId], `[관리자] '${subject}'에 해당하는 정보가 없습니다.`);
+                
+                const template = isPet ? petData[id] : itemData[id];
+
+                for (const t of targets) {
+                    if (isPet) {
+                        const newPet = createPetInstance(id);
+                        if (t.socket) t.petInventory.push(newPet);
+                        else await GameData.updateOne({ _id: t._id }, { $push: { petInventory: newPet } });
+                    } else {
+                        const newItem = createItemInstance(id, amount);
+                        if (newItem) {
+                            if (t.socket) {
+                                handleItemStacking(t, newItem);
+                            } else {
+                                const userToUpdate = await GameData.findById(t._id);
+                                handleItemStacking(userToUpdate, newItem);
+                                await userToUpdate.save();
+                            }
                         }
                     }
                 }
+                const itemMessage = `[관리자] ${targetName}에게 <span class="${template.grade}">${template.name}</span> ${isPet ? '펫' : `${amount}개`}를 지급했습니다.`;
+                const bannerMessage = `[관리자] ${targetName}에게 ${template.name} ${isPet ? '펫' : `${amount}개`}를 지급했습니다.`; // 배너용 (HTML 태그 제외)
+                io.emit('globalAnnouncement', bannerMessage); // 상단 배너 공지 추가
+                io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: itemMessage });
             }
-            announce(`[관리자] ${adminUsername}님이 ${targetName}에게 <span class="${template.grade}">${template.name}</span> ${isPet ? '펫' : `${amount}개`}를 지급했습니다.`);
+            return;
         }
-        return;
-    }
 
+        // 일반 채팅 메시지 처리
+        const player = onlinePlayers[socket.userId];
+        const newChatMessage = new ChatMessage({
+            username: socket.username,
+            role: socket.role,
+            fameScore: player ? player.fameScore : 0,
+            message: trimmedMsg
+        });
+        await newChatMessage.save();
+        io.emit('chatMessage', newChatMessage.toObject());
 
-    const player = onlinePlayers[socket.userId];
-
-    const newChatMessage = new ChatMessage({ 
-        username: socket.username, 
-        role: socket.role, 
-fameScore: player ? player.fameScore : 0,
-        message: trimmedMsg 
-    });
-    await newChatMessage.save();
-io.emit('chatMessage', newChatMessage.toObject()); 
-
- } catch (error) { 
+    } catch (error) {
         console.error('채팅 메시지 처리 중 오류 발생:', error);
         if (socket) {
             socket.emit('serverAlert', '메시지 전송에 실패했습니다. 잠시 후 다시 시도해주세요.');
         }
     }
-
 })
   .on('getAuctionListings', async (callback) => { try { const items = await AuctionItem.find({}).sort({ listedAt: -1 }).lean(); callback(items); } catch (e) { console.error('거래소 목록 조회 오류:', e); callback([]); } })
         .on('listOnAuction', async ({ uid, price, quantity }) => listOnAuction(onlinePlayers[socket.userId], { uid, price, quantity }))
@@ -909,7 +942,6 @@ io.emit('chatMessage', newChatMessage.toObject());
             if(player) {
                 const clientIp = getNormalizedIp(player.socket);
                 connectedIPs.delete(clientIp);
-                player.isExploring = false;
                 savePlayerData(socket.userId);
             }
             delete onlinePlayers[socket.userId];
@@ -918,6 +950,26 @@ io.emit('chatMessage', newChatMessage.toObject());
 
 function gameTick(player) {
     if (!player || !player.socket) return;
+
+    if (player.buffs && player.buffs.length > 0) {
+        const now = Date.now();
+        const initialBuffCount = player.buffs.length;
+        player.buffs = player.buffs.filter(buff => buff.endTime > now);
+        
+        if (player.buffs.length < initialBuffCount) {
+            // 버프가 만료되었을 경우
+            const hpBefore = player.stats.total.hp;
+            calculateTotalStats(player); // 능력치 재계산
+            const hpAfter = player.stats.total.hp;
+            
+            // 현재 체력을 새로운 최대 체력에 맞춰 조정
+            const currentHpRatio = player.currentHp / hpBefore;
+            player.currentHp = Math.min(hpAfter, hpAfter * currentHpRatio);
+
+            pushLog(player, '[각성] 상태가 해제되었습니다.');
+        }
+    }
+
   if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) {
         onPetFusionComplete(player);
     }
@@ -925,14 +977,7 @@ function gameTick(player) {
         onHatchComplete(player);
     }
 
-    if (player.isExploring) {
-        player.socket.emit('combatResult', { playerTook: 0, monsterTook: 1 });
-        runExploration(player);
-        sendState(player.socket, player, { level: player.level, hp: 1, attack: 0, defense: 0, isBoss: false });
-        return;
-    }
-    
-    if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
+ if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
         const pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
         worldBossState.currentHp = Math.max(0, (worldBossState.currentHp || 0) - pDmg);
         
@@ -951,6 +996,14 @@ function gameTick(player) {
         sendState(player.socket, player, calcMonsterStats(player));
         return;
     }
+
+    if (player.isExploring) {
+        player.socket.emit('combatResult', { playerTook: 0, monsterTook: 1 });
+        runExploration(player);
+        sendState(player.socket, player, { level: player.level, hp: 1, attack: 0, defense: 0, isBoss: false });
+        return;
+    }
+    
     
     calculateTotalStats(player);
  const m = calcMonsterStats(player);
@@ -1360,6 +1413,67 @@ function useItem(player, uid, useAll = false) {
     let messages = [];
 
     switch (item.id) {
+
+case 'boss_participation_box':
+    // 1. 100% 확률의 기본 보상
+    const goldGained = 3000000;
+    player.gold += goldGained;
+    messages.push(`[참여 상자] 상자에서 ${goldGained.toLocaleString()} G를 획득했습니다!`);
+
+    // 2. 1% 확률의 추가 보상 (각각 독립적으로 추첨)
+    const bonusItems = [
+        { id: 'hammer_hephaestus', chance: 0.01 },
+        { id: 'prevention_ticket', chance: 0.01 },
+        { id: 'return_scroll', chance: 0.01 },
+        { id: 'pet_egg_ancient', chance: 0.01 }
+    ];
+
+    bonusItems.forEach(itemInfo => {
+        if (Math.random() < itemInfo.chance) {
+            const wonItem = createItemInstance(itemInfo.id);
+            if (wonItem) {
+                handleItemStacking(player, wonItem);
+                messages.push(`[참여 상자] ✨ 상자에서 추가 아이템이 나왔습니다!!! 인벤토리를 확인하세요`);
+            }
+        }
+    });
+
+    break;
+ case 'return_scroll':
+    if (player.isExploring) {
+        messages.push('[복귀 스크롤] 탐험 중에는 사용할 수 없습니다.');
+        if (player.socket) player.socket.emit('useItemResult', { messages });
+        return;
+    }
+    if (player.level >= player.maxLevel) {
+        messages.push('[복귀 스크롤] 이미 최고 등반 층에 있거나 더 높은 곳에 있어 사용할 수 없습니다.');
+        if (player.socket) player.socket.emit('useItemResult', { messages });
+        return;
+    }
+    player.level = player.maxLevel;
+    
+    // 각성 버프 적용 로직
+    player.buffs = player.buffs || [];
+    // 중복 적용을 막기 위해 기존 각성 버프는 제거
+    player.buffs = player.buffs.filter(b => b.id !== 'return_scroll_awakening'); 
+    player.buffs.push({
+        id: 'return_scroll_awakening',
+        name: '각성',
+        endTime: Date.now() + 10000, // 10초
+        effects: {
+            attackMultiplier: 2,
+            defenseMultiplier: 2,
+            hpMultiplier: 10
+        }
+    });
+    
+    calculateTotalStats(player); // 버프 적용 후 능력치 재계산
+    player.currentHp = player.stats.total.hp; // 증폭된 체력으로 전체 회복
+    player.monster.currentHp = calcMonsterStats(player).hp; // 몬스터 리셋
+    
+    messages.push(`[복귀 스크롤] 스크롤의 힘으로 ${player.level}층으로 이동하며 10초간 각성합니다!`);
+    break;
+
         case 'gold_pouch':
             let totalGoldGained = 0;
             for (let i = 0; i < quantityToUse; i++) {
@@ -1623,62 +1737,6 @@ function runExploration(player) {
             }
             return;
         }
-    }
-}
-
-function useItem(player, uid, useAll = false) {
-    if (!player) return;
-    const itemIndex = player.inventory.findIndex(i => i.uid === uid);
-    if (itemIndex === -1) return;
-    const item = player.inventory[itemIndex];
-    const quantityToUse = useAll ? item.quantity : 1;
-    let messages = [];
-    switch (item.id) {
-        case 'gold_pouch':
-            let totalGoldGained = 0;
-            for (let i = 0; i < quantityToUse; i++) {
-                const rand = Math.random();
-                let cumulativeChance = 0;
-                for (const reward of goldPouchRewardTable) {
-                    cumulativeChance += reward.chance;
-                    if (rand < cumulativeChance) {
-                        const goldGained = Math.floor(Math.random() * (reward.range[1] - reward.range[0] + 1)) + reward.range[0];
-                        totalGoldGained += goldGained;
-                        break;
-                    }
-                }
-            }
-            player.gold += totalGoldGained;
-            messages.push(`[수수께끼 골드 주머니] ${quantityToUse}개를 사용하여 ${totalGoldGained.toLocaleString()} G를 획득했습니다!`);
-            break;
-        case 'hammer_hephaestus':
-            messages.push('이 아이템은 강화 시 체크하여 사용합니다.');
-            return;
-        case 'prevention_ticket':
-             messages.push('이 아이템은 강화 시 체크하여 사용합니다.');
-            return;
-        case 'tome_socket1':
-        case 'tome_socket2':
-        case 'tome_socket3':
-            const socketIndex = parseInt(item.id.slice(-1)) - 1;
-            if (player.unlockedArtifacts[socketIndex]) {
-                messages.push('이미 해금된 유물 소켓입니다.');
-                return;
-            } else {
-                player.unlockedArtifacts[socketIndex] = artifactData[item.id];
-                messages.push(`[${artifactData[item.id].name}]의 지혜를 흡수하여 유물 소켓을 영구히 해금했습니다!`);
-            }
-            break;
-        default:
-            messages.push('사용할 수 없는 아이템입니다.');
-            return;
-    }
-    item.quantity -= quantityToUse;
-    if (item.quantity <= 0) {
-        player.inventory.splice(itemIndex, 1);
-    }
-    if (player.socket) {
-        player.socket.emit('useItemResult', { messages });
     }
 }
 
