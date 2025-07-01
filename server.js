@@ -1461,8 +1461,8 @@ case 'boss_participation_box':
         name: '각성',
         endTime: Date.now() + 10000, // 10초
         effects: {
-            attackMultiplier: 2,
-            defenseMultiplier: 2,
+            attackMultiplier: 10,
+            defenseMultiplier: 10,
             hpMultiplier: 10
         }
     });
