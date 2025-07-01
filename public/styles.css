@@ -562,7 +562,7 @@ body.auth-view {
 }
 
 .slot .item-effect {
-    display: none◀◀ 숨겨져 있던 효과 텍스트를 다시 보이게 함 */
+    display: none; /* 숨겨져 있던 효과 텍스트를 다시 보이게 함 */
     font-size: 0.5em;
     font-weight: 100;
     color: var(--text-color);
@@ -2850,4 +2850,114 @@ flex-direction: column;
     right: 10px;
     display: flex;
     gap: 10px;
+}
+
+/* ========== Responsive layout tweaks (added 2025-07-01) ========== */
+.main-content-wrapper{
+    display:flex;
+    flex-direction:column;
+    gap:15px;
+}
+
+@media (min-width: 900px){
+    .main-content-wrapper{
+        flex-direction:row;
+    }
+    .left-sector{flex:4;}
+    .right-sector{flex:6;}
+}
+
+@media (max-width: 600px){
+    .tabs .tab-button{
+        font-size:1.1em;
+        padding:14px 8px;
+    }
+    .inventory-grid{
+        grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
+    }
+}
+
+
+/* ========== Vertical responsiveness tweaks (2025-07-01) ========== */
+html, body {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+body > * {
+    flex-shrink: 0; /* header or misc sections remain natural height */
+}
+
+.main-content-wrapper {
+    flex: 1 1 auto;        /* occupy remaining height */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;         /* allow inner flex children to shrink */
+    overflow: hidden;      /* contain internal scrolling */
+}
+
+@media (min-width: 900px) {
+    .main-content-wrapper {
+        flex-direction: row;
+    }
+}
+
+.left-sector,
+.right-sector {
+    flex: 1 1 0;
+    min-height: 0;         /* critical for nested flex scroll */
+    overflow-y: auto;      /* independent scroll if content taller */
+}
+
+
+/* ========== Grid layout overhaul (2025-07-01) ========== */
+/* Switch to CSS Grid: stack vertically on small, side-by-side on large */
+.main-content-wrapper {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    gap: 20px;
+}
+
+.left-sector {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 15px;
+    border-radius: 12px;
+    background: rgba(44,45,62,0.6);
+}
+
+.right-sector {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 15px;
+    border-radius: 12px;
+    background: rgba(28,31,45,0.6);
+}
+
+@media (min-width: 900px) {
+    .main-content-wrapper {
+        grid-template-columns: 0.45fr 0.55fr;
+        grid-template-rows: 1fr;
+    }
+    .left-sector {
+        grid-row: 1;
+    }
+    .right-sector {
+        grid-column: 2;
+        grid-row: 1;
+    }
+}
+
+/* Ensure each sector manages its own scroll if content overflows */
+.left-sector, .right-sector {
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* A little visual polish */
+.left-sector h2, .right-sector h2 {
+    margin-top: 0;
 }
