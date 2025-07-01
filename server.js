@@ -1709,20 +1709,6 @@ function startHatching(player) {
     pushLog(player, `[부화기] ${player.incubator.egg.name} 부화를 시작합니다!`);
 }
 
-function onHatchComplete(player) {
-    if (!player || !player.incubator.egg) return;
-    pushLog(player, `[부화기] ${player.incubator.egg.name}에서 생명의 기운이 느껴집니다!`);
-    const eggGrade = player.incubator.egg.grade;
-    const possiblePets = Object.keys(petData).filter(id => petData[id].grade === eggGrade);
-    if (possiblePets.length > 0) {
-        const randomPetId = possiblePets[Math.floor(Math.random() * possiblePets.length)];
-        const newPet = createPetInstance(randomPetId);
-        player.petInventory.push(newPet);
-        pushLog(player, `[펫] <span class="${newPet.grade}">${newPet.name}</span>이(가) 태어났습니다!`);
-    }
-    player.incubator = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
-}
-
 function equipPet(player, uid) {
     if (!player) return;
     const petIndex = player.petInventory.findIndex(p => p.uid === uid);
