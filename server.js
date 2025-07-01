@@ -1,3 +1,32 @@
+const sanitizeHtml = require('sanitize-html');
+const sanitizeOptions = {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+        'img', 'h1', 'h2', 'h3', 'span', 'div',
+        'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'col', 'colgroup'
+    ]),
+    allowedAttributes: {
+        ...sanitizeHtml.defaults.allowedAttributes,
+        '*': ['style', 'class', 'id'], 
+        'img': ['src', 'alt', 'width', 'height'],
+        'table': ['width', 'border', 'align', 'valign'],
+        'td': ['colspan', 'rowspan', 'align', 'valign'],
+        'th': ['colspan', 'rowspan', 'align', 'valign'],
+    },
+    allowedStyles: {
+        '*': {
+            'color': [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/],
+            'background-color': [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/],
+            'font-size': [/^\d+(?:px|em|%)$/],
+            'text-align': [/^left$/, /^right$/, /^center$/, /^justify$/],
+            'width': [/^\d+(?:px|em|%)$/],
+            'height': [/^\d+(?:px|em|%)$/],
+            'border': [/^\d+px\s(solid|dotted|dashed)\s(#[0-9a-f]{3,6}|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\))$/],
+            'padding': [/^\d+px$/],
+            'margin': [/^\d+px$/]
+        }
+    },
+    stripRemainingTags: true
+};
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -9,10 +38,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { pingInterval: 50000, pingTimeout: 150000 });
 const PORT = 3000;
-const TICK_RATE = 1000; // 1초
+const TICK_RATE = 1000; 
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_OBJECT_ID = '68617d506c3498183c9b367f';
+const ADMIN_OBJECT_ID = '686345677bd3c4d1675438cb';
 const BOSS_INTERVAL = 200;
 
 const WORLD_BOSS_CONFIG = {
@@ -31,7 +60,6 @@ const GameDataSchema = new mongoose.Schema({
     maxWeaponName: { type: String, default: '' },
     maxArmorEnhancement: { type: Number, default: 0 },
     maxArmorName: { type: String, default: '' },
-    stats: { base: { hp: { type: Number, default: 100 }, attack: { type: Number, default: 1 }, defense: { type: Number, default: 1 } } },
     inventory: { type: [Object], default: [] },
     equipment: { weapon: { type: Object, default: null }, armor: { type: Object, default: null } },
     log: { type: [String], default: ["'무한의 탑'에 오신 것을 환영합니다!"] },
@@ -49,14 +77,57 @@ const GameDataSchema = new mongoose.Schema({
         hatchDuration: {type: Number, default: 0}
     },
     hammerBuff: { type: Boolean, default: false },
-    petReviveCooldown: { type: Date, default: null }
+    petReviveCooldown: { type: Date, default: null },
+
+  stats: {
+        base: {
+            hp: { type: Number, default: 100 },
+            attack: { type: Number, default: 1 },
+            defense: { type: Number, default: 1 }
+        },
+        critChance: { type: Number, default: 0 }, 
+        critResistance: { type: Number, default: 0 }, 
+    },
+    fameScore: { type: Number, default: 0 }, 
+    petFusion: {
+        slot1: { type: Object, default: null },
+        slot2: { type: Object, default: null },
+        fuseEndTime: { type: Date, default: null }
+    }
+
 });
 const GlobalRecordSchema = new mongoose.Schema({ recordType: { type: String, required: true, unique: true }, username: { type: String }, itemName: { type: String }, itemGrade: { type: String }, enhancementLevel: { type: Number }, updatedAt: { type: Date, default: Date.now } });
-const ChatMessageSchema = new mongoose.Schema({ type: { type: String, default: 'user' }, username: { type: String, required: true }, role: { type: String, default: 'user' }, message: { type: String, required: true }, timestamp: { type: Date, default: Date.now } });
+const ChatMessageSchema = new mongoose.Schema({
+    type: { type: String, default: 'user' },
+    username: { type: String, required: true },
+    role: { type: String, default: 'user' },
+    fameScore: { type: Number, default: 0 },
+    message: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now }
+});
 const AuctionItemSchema = new mongoose.Schema({ sellerId: { type: mongoose.Schema.Types.ObjectId, required: true }, sellerUsername: { type: String, required: true }, item: { type: Object, required: true }, price: { type: Number, required: true }, listedAt: { type: Date, default: Date.now } });
 const WorldBossStateSchema = new mongoose.Schema({
     uniqueId: { type: String, default: 'singleton' }, bossId: { type: String }, name: String, maxHp: Number, currentHp: Number, attack: Number, defense: Number, isActive: Boolean, spawnedAt: Date, participants: { type: Map, of: { username: String, damageDealt: Number } }
 });
+
+const CommentSchema = new mongoose.Schema({
+    postId: { type: mongoose.Schema.Types.ObjectId, ref: 'Post', required: true },
+    authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    authorUsername: { type: String, required: true },
+    content: { type: String, required: true, maxLength: 500 },
+    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+}, { timestamps: true });
+
+const PostSchema = new mongoose.Schema({
+    authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    authorUsername: { type: String, required: true },
+    category: { type: String, required: true, enum: ['공지', '자유', '공략'] },
+    title: { type: String, required: true, maxLength: 100 },
+    content: { type: String, required: true, maxLength: 5000 },
+    views: { type: Number, default: 0 },
+    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    comments: [CommentSchema]
+}, { timestamps: true });
 
 UserSchema.pre('save', async function(next) { if (!this.isModified('password')) return next(); this.password = await bcrypt.hash(this.password, 10); next(); });
 UserSchema.methods.comparePassword = function(plainPassword) { return bcrypt.compare(plainPassword, this.password); };
@@ -67,6 +138,8 @@ const GlobalRecord = mongoose.model('GlobalRecord', GlobalRecordSchema);
 const ChatMessage = mongoose.model('ChatMessage', ChatMessageSchema);
 const AuctionItem = mongoose.model('AuctionItem', AuctionItemSchema);
 const WorldBossState = mongoose.model('WorldBossState', WorldBossStateSchema);
+const Post = mongoose.model('Post', PostSchema);
+const Comment = mongoose.model('Comment', CommentSchema);
 
 mongoose.connect(MONGO_URI).then(() => { 
     console.log('MongoDB 성공적으로 연결되었습니다.'); 
@@ -131,12 +204,16 @@ const itemData = {
 
 const petData = {
     ifrit: { name: '이프리', type: 'pet', grade: 'Rare', attribute: '불', image: 'ifrit.png', description: '방어력 관통 +10%', effects: { defPenetration: 0.10 } },
-    undine: { name: '운디네', type: 'pet', grade: 'Rare', attribute: '물', image: 'undine.png', description: '사망 시 30% 체력으로 부활 (쿨: 30분)', effects: { revive: { percent: 0.30, cooldown: 30 * 60 * 1000 } } },
-    sylphid: { name: '실피드', type: 'pet', grade: 'Rare', attribute: '바람', image: 'sylphid.png', description: '몬스터 처치 시 5% 확률로 +1층 추가 등반', effects: { extraClimbChance: 0.05 } },
+    undine: { name: '운디네', type: 'pet', grade: 'Rare', attribute: '물', image: 'undine.png', description: '치명타 저항 +2%', effects: { critResistance: 0.02 } },
+    sylphid: { name: '실피드', type: 'pet', grade: 'Rare', attribute: '바람', image: 'sylphid.png', description: '추가 등반 확률 +5%', effects: { extraClimbChance: 0.05 } },
     phoenix: { name: '피닉스', type: 'pet', grade: 'Epic', attribute: '불', image: 'phoenix.png', description: '방어력 관통 +30%', effects: { defPenetration: 0.30 } },
-    leviathan: { name: '리바이어던', type: 'pet', grade: 'Epic', attribute: '물', image: 'leviathan.png', description: '사망 시 100% 체력으로 부활 (쿨: 10분)', effects: { revive: { percent: 1.0, cooldown: 10 * 60 * 1000 } } },
-    griffin: { name: '그리핀', type: 'pet', grade: 'Epic', attribute: '바람', image: 'griffin.png', description: '몬스터 처치 시 15% 확률로 +1층 추가 등반', effects: { extraClimbChance: 0.15 } },
-    bahamut: { name: '바하무트', type: 'pet', grade: 'Mystic', attribute: '모든 속성', image: 'bahamut.png', description: '[초월적인 힘] 방관+50%, 100%부활(쿨:5분), 25%추가등반', effects: { defPenetration: 0.50, revive: { percent: 1.0, cooldown: 5 * 60 * 1000 }, extraClimbChance: 0.25 } }
+    leviathan: { name: '리바이어던', type: 'pet', grade: 'Epic', attribute: '물', image: 'leviathan.png', description: '치명타 저항 +3.9%, 치명타 확률 +4%', effects: { critResistance: 0.039, critChance: 0.04 } },
+    griffin: { name: '그리핀', type: 'pet', grade: 'Epic', attribute: '바람', image: 'griffin.png', description: '추가 등반 확률 +15%', effects: { extraClimbChance: 0.15 } },
+    bahamut: { name: '바하무트', type: 'pet', grade: 'Mystic', attribute: '모든 속성', image: 'bahamut.png', description: '방관+50%, 치명타확률+10%, 치명타저항+6%, 추가등반+25%', effects: { defPenetration: 0.50, critChance: 0.10, critResistance: 0.06, extraClimbChance: 0.25 } },
+
+    ignis_aqua: { name: '이그니스 아쿠아', type: 'pet', grade: 'Epic', attribute: '불/물', image: 'ignis_aqua.png', description: '방관+30%, 치명저항+3.9%, 치명확률+4%', effects: { defPenetration: 0.30, critResistance: 0.039, critChance: 0.04 }, fused: true },
+    tempest: { name: '템페스트', type: 'pet', grade: 'Epic', attribute: '물/바람', image: 'tempest.png', description: '치명저항+3.9%, 치명확률+4%, 추가등반+15%', effects: { critResistance: 0.039, critChance: 0.04, extraClimbChance: 0.15 }, fused: true },
+    thunderbird: { name: '썬더버드', type: 'pet', grade: 'Epic', attribute: '불/바람', image: 'thunderbird.png', description: '방관+30%, 추가등반+15%', effects: { defPenetration: 0.30, extraClimbChance: 0.15 }, fused: true }
 };
 
 const artifactData = {
@@ -148,6 +225,14 @@ const artifactData = {
 const dropTable = { 1: { itemsByGrade: { Common: ['w001', 'a001'] }, rates: { Common: 0.98, Rare: 0.02 } }, 2: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'] }, rates: { Common: 0.90, Rare: 0.09, Legendary: 0.01 } }, 3: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'] }, rates: { Common: 0.78, Rare: 0.16, Legendary: 0.055, Epic: 0.005 } }, 4: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'] }, rates: { Common: 0.65, Rare: 0.25, Legendary: 0.09, Epic: 0.0098, Mystic: 0.0002 } }, };
 const enhancementTable = { 1: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 2: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 3: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 4: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 5: { success: 0.90, maintain: 0.10, fail: 0.00, destroy: 0.00 }, 6: { success: 0.80, maintain: 0.20, fail: 0.00, destroy: 0.00 }, 7: { success: 0.70, maintain: 0.25, fail: 0.05, destroy: 0.00 }, 8: { success: 0.50, maintain: 0.30, fail: 0.20, destroy: 0.00 }, 9: { success: 0.40, maintain: 0.40, fail: 0.20, destroy: 0.00 }, 10: { success: 0.30, maintain: 0.45, fail: 0.25, destroy: 0.00 }, 11: { success: 0.20, maintain: 0.00, fail: 0.00, destroy: 0.80 }, 12: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }, 13: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }, 14: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }, 15: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 } };
 const highEnhancementRate = { success: 0.10, maintain: 0.90, fail: 0.00, destroy: 0.00 };
+
+const monsterCritRateTable = [
+    { maxLevel: 10000, normal: 0.1, boss: 0.01 },
+    { maxLevel: 100000, normal: 0.02, boss: 0.03 },
+    { maxLevel: 300000, normal: 0.04, boss: 0.05 },
+    { maxLevel: 500000, normal: 0.06, boss: 0.07 },
+    { maxLevel: Infinity, normal: 0.07, boss: 0.08 }
+];
 
 const explorationLootTable = [
   { id: 'gold_pouch', chance: 0.002 },
@@ -221,6 +306,7 @@ function createPetInstance(id) {
         image: d.image, 
         description: d.description,
         effects: d.effects,
+        fused: d.fused,
         quantity: 1
     }; 
 }
@@ -272,18 +358,30 @@ function calculateTotalStats(player) {
     let finalAttackMultiplier = 1;
     let finalDefenseMultiplier = 1;
 
+    player.stats.critChance = 0;
+    player.stats.critResistance = 0;
+    let petDefPenetration = 0;
+
+    if (player.equippedPet && player.equippedPet.effects) {
+        const effects = player.equippedPet.effects;
+        player.stats.critChance = effects.critChance || 0;
+        player.stats.critResistance = effects.critResistance || 0;
+        petDefPenetration = effects.defPenetration || 0;
+    }
+
     if (player.equipment.weapon) weaponBonus = computeEnhanceBonus(player.equipment.weapon);
     if (player.equipment.armor) armorBonus = computeEnhanceBonus(player.equipment.armor);
-    
+
     if (player.unlockedArtifacts[1] && isBossFloor(player.level)) {
         finalAttackMultiplier += 0.50;
         finalDefenseMultiplier += 0.50;
     }
-    
+
     player.stats.total = {
         hp: base.hp * (1 + armorBonus),
         attack: (base.attack * (1 + weaponBonus)) * finalAttackMultiplier,
-        defense: (base.defense * (1 + armorBonus)) * finalDefenseMultiplier
+        defense: (base.defense * (1 + armorBonus)) * finalDefenseMultiplier,
+        defPenetration: petDefPenetration
     };
 }
 
@@ -334,6 +432,11 @@ io.on('connection', async (socket) => {
     if (typeof gameData.hammerBuff === 'undefined') gameData.hammerBuff = false;
     if (typeof gameData.petReviveCooldown === 'undefined') gameData.petReviveCooldown = null;
 
+    if (!gameData.fameScore) gameData.fameScore = 0;
+    if (!gameData.petFusion) gameData.petFusion = { slot1: null, slot2: null, fuseEndTime: null };
+    if (!gameData.stats.critChance) gameData.stats.critChance = 0;
+    if (!gameData.stats.critResistance) gameData.stats.critResistance = 0;
+
     gameData.attackTarget = 'monster';
     connectedIPs.add(clientIp);
     onlinePlayers[socket.userId] = { ...gameData, monster: { currentHp: 1 }, socket: socket };
@@ -344,7 +447,6 @@ io.on('connection', async (socket) => {
     
     const chatHistory = await ChatMessage.find().sort({ timestamp: -1 }).limit(50).lean();
     socket.emit('chatHistory', chatHistory.reverse());
-    io.emit('chatMessage', { isSystem: true, message: `[알림] ${socket.username}님이 입장하셨습니다.` });
     socket.emit('initialGlobalRecords', globalRecordsCache);
     
     socket.emit('enhancementData', { enhancementTable, highEnhancementRate });
@@ -354,6 +456,7 @@ io.on('connection', async (socket) => {
         socket.emit('worldBossUpdate', serializableState);
     }
     sendState(socket, onlinePlayers[socket.userId], calcMonsterStats(onlinePlayers[socket.userId]));
+updatePlayerFame(onlinePlayers[socket.userId]);
 
     socket
         .on('upgradeStat', data => upgradeStat(onlinePlayers[socket.userId], data))
@@ -369,55 +472,87 @@ io.on('connection', async (socket) => {
             }
         })
         .on('requestRanking', async () => { try { const topLevel = await GameData.find({ maxLevel: { $gt: 1 } }).sort({ maxLevel: -1 }).limit(10).lean(); const topGold = await GameData.find({ gold: { $gt: 0 } }).sort({ gold: -1 }).limit(10).lean(); const topWeapon = await GameData.find({ maxWeaponEnhancement: { $gt: 0 } }).sort({ maxWeaponEnhancement: -1 }).limit(10).lean(); const topArmor = await GameData.find({ maxArmorEnhancement: { $gt: 0 } }).sort({ maxArmorEnhancement: -1 }).limit(10).lean(); socket.emit('rankingData', { topLevel, topGold, topWeapon, topArmor }); } catch (error) { console.error("랭킹 데이터 조회 오류:", error); } })
-        .on('requestOnlineUsers', () => { const playersList = Object.values(onlinePlayers).map(p => ({ username: p.username, level: p.level, weapon: p.equipment.weapon ? { name: p.equipment.weapon.name, grade: p.equipment.weapon.grade } : null, armor: p.equipment.armor ? { name: p.equipment.armor.name, grade: p.equipment.armor.grade } : null, })).sort((a, b) => b.level - a.level); socket.emit('onlineUsersData', playersList); })
-   .on('chatMessage', async (msg) => {
+       .on('requestOnlineUsers', () => {
+    const playersList = Object.values(onlinePlayers).map(p => ({
+        username: p.username,
+        level: p.level,
+        weapon: p.equipment.weapon ? { name: p.equipment.weapon.name, grade: p.equipment.weapon.grade } : null,
+        armor: p.equipment.armor ? { name: p.equipment.armor.name, grade: p.equipment.armor.grade } : null,
+        fameScore: p.fameScore
+    })).sort((a, b) => b.level - a.level);
+    socket.emit('onlineUsersData', playersList);
+})
+
+.on('chatMessage', async (msg) => {
+try {
     if (typeof msg !== 'string' || msg.trim().length === 0) return;
     const trimmedMsg = msg.slice(0, 200);
 
-    if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
-        const args = trimmedMsg.substring(1).split(' ');
-        const target = args.shift().toLowerCase();
-        const subject = args.shift();
-        const amountStr = args.shift() || '1';
-        const amount = parseInt(amountStr, 10);
+   if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
+    const args = trimmedMsg.substring(1).split(' ');
+    const command = args.shift().toLowerCase(); 
 
-        const adminUsername = socket.username;
+ const announce = (message, socket) => {
+    console.log(`[관리자 공지] ${message}`);
+    io.emit('globalAnnouncement', message);
+    io.emit('chatMessage', {
+        type: 'announcement',
+        username: socket.username,
+        role: 'admin',
+        message: message
+    });
+};
 
-        const announce = (message) => {
-            console.log(`[관리자 공지] ${message}`);
-            io.emit('globalAnnouncement', message);
-            io.emit('chatMessage', { isSystem: true, message: `📢 ${message}` });
-        };
-        
-        if (!target || !subject || isNaN(amount) || amount <= 0) {
-            return pushLog(onlinePlayers[socket.userId], `[관리자] 명령어 사용법이 잘못되었습니다.`);
-        }
+if (command === '공지') {
+    const noticeMessage = args.join(' ');
+    if (!noticeMessage) {
+        return pushLog(onlinePlayers[socket.userId], `[관리자] 공지할 내용을 입력해주세요. 예: /공지 오늘 저녁 이벤트`);
+    }
+    announce(noticeMessage, socket);
+    return;
+}
 
-        let targets = [];
-        let targetName = '';
+  if (command === '보스소환') {
+                spawnWorldBoss();
+                pushLog(onlinePlayers[socket.userId], '[관리자] 월드 보스를 강제로 소환했습니다.');
+                return;
+            }
 
-        if (target === '온라인') {
-            targetName = '온라인 전체 유저';
-            targets = Object.values(onlinePlayers);
-        } else if (target === '오프라인') {
-            targetName = '오프라인 전체 유저';
-            targets = await GameData.find({});
+    const target = command;
+    const subject = args.shift();
+    const amountStr = args.shift() || '1';
+    const amount = parseInt(amountStr, 10);
+    const adminUsername = socket.username;
+
+    if (!target || !subject || isNaN(amount) || amount <= 0) {
+        return pushLog(onlinePlayers[socket.userId], `[관리자] 명령어 사용법이 잘못되었습니다.`);
+    }
+
+    let targets = [];
+    let targetName = '';
+
+    if (target === '온라인') {
+        targetName = '온라인 전체 유저';
+        targets = Object.values(onlinePlayers);
+    } else if (target === '오프라인') {
+        targetName = '오프라인 전체 유저';
+        targets = await GameData.find({});
+    } else {
+        targetName = target;
+        const targetPlayer = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === target);
+        if (targetPlayer) {
+            targets.push(targetPlayer);
         } else {
-            targetName = target;
-            const targetPlayer = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === target);
-            if (targetPlayer) {
-                targets.push(targetPlayer);
-            } else {
-                const targetGameData = await GameData.findOne({ username: target });
-                if (targetGameData) {
-                    targets.push(targetGameData);
-                }
+            const targetGameData = await GameData.findOne({ username: target });
+            if (targetGameData) {
+                targets.push(targetGameData);
             }
         }
-        
-        if (targets.length === 0) {
-            return pushLog(onlinePlayers[socket.userId], `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
-        }
+    }
+    
+    if (targets.length === 0) {
+        return pushLog(onlinePlayers[socket.userId], `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
+    }
 
         if (subject.toLowerCase() === '골드') {
             for (const t of targets) {
@@ -465,15 +600,88 @@ io.on('connection', async (socket) => {
         }
         return;
     }
-    
-    const newChatMessage = new ChatMessage({ username: socket.username, role: socket.role, message: trimmedMsg });
+
+
+    const player = onlinePlayers[socket.userId];
+
+    const newChatMessage = new ChatMessage({ 
+        username: socket.username, 
+        role: socket.role, 
+fameScore: player ? player.fameScore : 0,
+        message: trimmedMsg 
+    });
     await newChatMessage.save();
-    io.emit('chatMessage', newChatMessage);
+io.emit('chatMessage', newChatMessage.toObject()); 
+
+ } catch (error) { 
+        console.error('채팅 메시지 처리 중 오류 발생:', error);
+        if (socket) {
+            socket.emit('serverAlert', '메시지 전송에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        }
+    }
+
 })
   .on('getAuctionListings', async (callback) => { try { const items = await AuctionItem.find({}).sort({ listedAt: -1 }).lean(); callback(items); } catch (e) { console.error('거래소 목록 조회 오류:', e); callback([]); } })
         .on('listOnAuction', async ({ uid, price, quantity }) => listOnAuction(onlinePlayers[socket.userId], { uid, price, quantity }))
         .on('buyFromAuction', async ({ listingId, quantity }) => buyFromAuction(onlinePlayers[socket.userId], { listingId, quantity }))
         .on('cancelAuctionListing', async (listingId) => cancelAuctionListing(onlinePlayers[socket.userId], listingId))
+ .on('slotPetForFusion', ({ uid }) => {
+            const player = onlinePlayers[socket.userId];
+            if (!player || !uid) return;
+            if (player.petFusion.fuseEndTime) return pushLog(player, '[융합] 현재 융합이 진행 중입니다.');
+
+            const petIndex = player.petInventory.findIndex(p => p.uid === uid);
+            if (petIndex === -1) return;
+
+            const pet = player.petInventory[petIndex];
+            if (pet.grade !== 'Epic' || pet.fused) {
+                return pushLog(player, '[융합] 에픽 등급의 일반 펫만 재료로 사용할 수 있습니다.');
+            }
+
+            const { slot1, slot2 } = player.petFusion;
+            if ((slot1 && slot1.uid === uid) || (slot2 && slot2.uid === uid)) {
+                return pushLog(player, '[융합] 이미 등록된 펫입니다.');
+            }
+
+            const targetSlot = !slot1 ? 'slot1' : !slot2 ? 'slot2' : null;
+            if (!targetSlot) return pushLog(player, '[융합] 재료 슬롯이 모두 가득 찼습니다.');
+
+            const otherPet = targetSlot === 'slot1' ? slot2 : slot1;
+            if (otherPet && otherPet.attribute === pet.attribute) {
+                return pushLog(player, '[융합] 재료로 사용할 두 펫은 서로 속성이 달라야 합니다.');
+            }
+
+            player.petFusion[targetSlot] = player.petInventory.splice(petIndex, 1)[0];
+            sendState(socket, player, calcMonsterStats(player));
+        })
+        .on('unslotPetFromFusion', ({ slotIndex }) => {
+            const player = onlinePlayers[socket.userId];
+            if (!player || !slotIndex) return;
+            if (player.petFusion.fuseEndTime) return;
+
+            const targetSlotKey = `slot${slotIndex}`;
+            const petToUnslot = player.petFusion[targetSlotKey];
+            if (petToUnslot) {
+                player.petInventory.push(petToUnslot);
+                player.petFusion[targetSlotKey] = null;
+                sendState(socket, player, calcMonsterStats(player));
+            }
+        })
+        .on('startPetFusion', () => {
+            const player = onlinePlayers[socket.userId];
+            if (!player) return;
+
+            const { slot1, slot2 } = player.petFusion;
+            if (!slot1 || !slot2) return pushLog(player, '[융합] 융합할 펫 2마리를 모두 등록해야 합니다.');
+            if (player.gold < 100000000) return pushLog(player, '[융합] 비용이 부족합니다. (1억 골드 필요)');
+            if (player.petFusion.fuseEndTime) return;
+
+            player.gold -= 100000000;
+            player.petFusion.fuseEndTime = new Date(Date.now() + 12 * 60 * 60 * 1000);
+            
+            pushLog(player, '[융합] 두 정령의 기운이 합쳐지기 시작합니다. (12시간 소요)');
+            sendState(socket, player, calcMonsterStats(player));
+        })
         .on('toggleExploration', () => toggleExploration(onlinePlayers[socket.userId]))
         .on('useItem', ({ uid, useAll }) => useItem(onlinePlayers[socket.userId], uid, useAll))
         .on('placeEggInIncubator', ({ uid }) => placeEggInIncubator(onlinePlayers[socket.userId], uid))
@@ -496,11 +704,207 @@ io.on('connection', async (socket) => {
         })
 
 
+.on('board:getPosts', async ({ category, page }, callback) => {
+    try {
+        const perPage = 15;
+        const currentPage = Math.max(1, page);
+
+        let query = {};
+        if (category === '공지') {
+            query = { category: '공지' };
+        } else {
+            query = { $or: [{ category: category }, { category: '공지' }] };
+        }
+
+        const posts = await Post.aggregate([
+            { $match: query },
+            {
+                $addFields: {
+                    sortOrder: {
+                        $cond: [{ $eq: ['$category', '공지'] }, 1, 2]
+                    }
+                }
+            },
+            { $sort: { sortOrder: 1, createdAt: -1 } },
+            { $skip: (currentPage - 1) * perPage },
+            { $limit: perPage }
+        ]);
+
+        const totalPosts = await Post.countDocuments(query);
+        const totalPages = Math.ceil(totalPosts / perPage);
+
+        for (const post of posts) {
+            const authorData = await GameData.findOne({ user: post.authorId }).select('fameScore').lean();
+            post.authorFameTier = authorData ? getFameTier(authorData.fameScore) : '';
+            post.likesCount = post.likes.length;
+            post.commentCount = post.comments ? post.comments.length : 0;
+        }
+        
+        callback({ posts, totalPages });
+
+    } catch (e) {
+        console.error('Error getting posts:', e);
+        callback({ posts: [], totalPages: 0 });
+    }
+})
+        .on('board:getPost', async ({ postId }, callback) => {
+            try {
+                 const post = await Post.findById(postId).lean();
+                if (!post) return callback(null);
+
+                const authorData = await GameData.findOne({ user: post.authorId }).select('fameScore').lean();
+                post.authorFameTier = authorData ? getFameTier(authorData.fameScore) : '';
+
+                for (const comment of post.comments) {
+                     const commentAuthorData = await GameData.findOne({ user: comment.authorId }).select('fameScore').lean();
+                     comment.authorFameTier = commentAuthorData ? getFameTier(commentAuthorData.fameScore) : '';
+                }
+
+                callback(post);
+            } catch (e) {
+                console.error('Error getting post detail:', e);
+                callback(null);
+            }
+        })
+
+.on('board:createPost', async (data, callback) => {
+    try {
+        if (data.category === '공지' && socket.role !== 'admin') {
+            return callback(false);
+        }
+
+        const sanitizedContent = sanitizeHtml(data.content, sanitizeOptions);
+
+        const post = new Post({
+            authorId: socket.userId,
+            authorUsername: socket.username,
+            category: data.category,
+            title: data.title,
+            content: sanitizedContent
+        });
+        await post.save();
+        callback(true);
+    } catch (e) {
+        console.error('Error creating post:', e);
+        callback(false);
+    }
+})
+
+
+.on('board:updatePost', async (data, callback) => {
+    try {
+        const post = await Post.findById(data.postId);
+        if (!post || post.authorId.toString() !== socket.userId) return callback(false);
+        
+ const sanitizedContent = sanitizeHtml(data.content, sanitizeOptions);
+        
+        post.category = data.category;
+        post.title = data.title;
+        post.content = sanitizedContent;
+        await post.save();
+        callback(true);
+    } catch (e) {
+        callback(false);
+    }
+})
+
+
+        .on('board:deletePost', async ({ postId }, callback) => {
+            try {
+                const post = await Post.findById(postId);
+                if (!post || post.authorId.toString() !== socket.userId) return callback(false);
+                await Post.findByIdAndDelete(postId);
+                callback(true);
+            } catch (e) {
+                callback(false);
+            }
+        })
+        .on('board:likePost', async ({ postId }, callback) => {
+            try {
+                const post = await Post.findById(postId);
+                const likedIndex = post.likes.indexOf(socket.userId);
+
+                if (likedIndex > -1) {
+                    post.likes.splice(likedIndex, 1);
+                } else {
+                    post.likes.push(socket.userId); 
+                }
+                await post.save();
+                callback({ likesCount: post.likes.length });
+            } catch (e) {
+                callback({ likesCount: null });
+            }
+        })
+
+
+
+
+.on('board:createComment', async ({ postId, content }, callback) => {
+    try {
+        const post = await Post.findById(postId);
+        const player = onlinePlayers[socket.userId];
+        const fameTier = player ? getFameTier(player.fameScore) : '';
+
+        post.comments.push({
+            postId: postId,
+            authorId: socket.userId,
+            authorUsername: socket.username,
+            content: content,
+            fameTier: fameTier
+        });
+        await post.save();
+        callback(true);
+    } catch (e) {
+        console.error('Error creating comment:', e); 
+        callback(false);
+    }
+})
+        .on('board:deleteComment', async ({ postId, commentId }, callback) => {
+            try {
+                const post = await Post.findById(postId);
+                const comment = post.comments.id(commentId);
+                if (!comment || comment.authorId.toString() !== socket.userId) return callback(false);
+
+                comment.remove();
+                await post.save();
+                callback(true);
+            } catch (e) {
+                callback(false);
+            }
+        })
+        .on('board:likeComment', async ({ postId, commentId }, callback) => {
+            try {
+                const post = await Post.findById(postId);
+                const comment = post.comments.id(commentId);
+                const likedIndex = comment.likes.indexOf(socket.userId);
+
+                if (likedIndex > -1) {
+                    comment.likes.splice(likedIndex, 1);
+                } else {
+                    comment.likes.push(socket.userId);
+                }
+                await post.save();
+                callback({ likesCount: comment.likes.length });
+            } catch(e) {
+                callback({ likesCount: null });
+            }
+        })
+
+.on('requestUserInfo', (username) => {
+    const targetPlayer = Object.values(onlinePlayers).find(p => p.username === username);
+
+    if (targetPlayer) {
+        calculateTotalStats(targetPlayer);
+        const { socket: _, ...playerData } = targetPlayer;
+        socket.emit('userInfoResponse', playerData);
+    } else {
+        socket.emit('userInfoResponse', null);
+    }
+})
+
 
         .on('disconnect', () => {
             console.log(`[연결 해제] 유저: ${socket.username}`);
-            io.emit('chatMessage', { isSystem: true, message: `[알림] ${socket.username}님이 퇴장하셨습니다.` });
-
             const player = onlinePlayers[socket.userId];
             if(player) {
                 const clientIp = getNormalizedIp(player.socket);
@@ -514,7 +918,9 @@ io.on('connection', async (socket) => {
 
 function gameTick(player) {
     if (!player || !player.socket) return;
-
+  if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) {
+        onPetFusionComplete(player);
+    }
     if (player.incubator.hatchCompleteTime && new Date() >= new Date(player.incubator.hatchCompleteTime)) {
         onHatchComplete(player);
     }
@@ -547,14 +953,29 @@ function gameTick(player) {
     }
     
     calculateTotalStats(player);
-    const m = calcMonsterStats(player);
+ const m = calcMonsterStats(player);
 
-    const petDefPenetration = player.equippedPet?.effects?.defPenetration || 0;
-    const monsterEffectiveDefense = m.defense * (1 - petDefPenetration);
+    let pDmg = 0;
+    let mDmg = 0;
 
-    const pDmg = Math.max(0, player.stats.total.attack - monsterEffectiveDefense);
-    const mDmg = m.isBoss ? Math.max(0, m.attack - (player.stats.total.defense * 0.5)) : Math.max(0, m.attack - player.stats.total.defense);
+    const playerCritRoll = Math.random();
+    if (playerCritRoll < player.stats.critChance) {
+        pDmg = player.stats.total.attack;
+    } else {
+        const monsterEffectiveDefense = m.defense * (1 - (player.stats.total.defPenetration || 0));
+        pDmg = Math.max(0, player.stats.total.attack - monsterEffectiveDefense);
+    }
+    const monsterCritConfig = monsterCritRateTable.find(r => m.level <= r.maxLevel);
+    const monsterCritChance = m.isBoss ? monsterCritConfig.boss : monsterCritConfig.normal;
+    const finalMonsterCritChance = Math.max(0, monsterCritChance - player.stats.critResistance);
+    const monsterCritRoll = Math.random();
 
+    if (monsterCritRoll < finalMonsterCritChance) {
+        mDmg = m.attack;
+    } else {
+        const playerEffectiveDefense = m.isBoss ? (player.stats.total.defense * 0.5) : player.stats.total.defense;
+        mDmg = Math.max(0, m.attack - playerEffectiveDefense);
+    }
     if (pDmg > 0 || mDmg > 0) {
         player.currentHp -= mDmg;
         player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg });
@@ -573,12 +994,14 @@ function gameTick(player) {
     } else if (player.monster.currentHp - pDmg <= 0) {
         player.level++;
         player.maxLevel = Math.max(player.maxLevel, player.level);
+
+if (player.level > player.maxLevel) updatePlayerFame(p);
         onClearFloor(player);
         calculateTotalStats(player);
         player.currentHp = player.stats.total.hp;
         player.monster.currentHp = calcMonsterStats(player).hp;
     } else {
-         player.monster.currentHp -= pDmg;
+        player.monster.currentHp -= pDmg;
     }
 
     sendState(player.socket, player, m);
@@ -648,6 +1071,7 @@ function onClearFloor(p) {
                 const droppedItem = createItemInstance(id);
                 if (droppedItem) {
                     handleItemStacking(p, droppedItem);
+updatePlayerFame(p);
                     pushLog(p, `[${clearedFloor}층]에서 ${itemData[id].name} 획득!`);
                     if (['Legendary', 'Epic', 'Mystic'].includes(droppedItem.grade)) {
                         updateGlobalRecord(`topLoot_${droppedItem.grade}`, { username: p.username, itemName: droppedItem.name, itemGrade: droppedItem.grade });
@@ -761,6 +1185,7 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
         const currentTopEnh = globalRecordsCache.topEnhancement || { enhancementLevel: 0 };
         if (item.enhancement > currentTopEnh.enhancementLevel) {
             updateGlobalRecord('topEnhancement', { username: p.username, itemName: item.name, itemGrade: item.grade, enhancementLevel: item.enhancement });
+updatePlayerFame(p);
         }
     } else if (r < rates.success + rates.maintain) {
         result = 'maintain';
@@ -811,6 +1236,8 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
 
     socket.emit('enhancementResult', { result, newItem: (result !== 'destroy' ? item : null), destroyed: result === 'destroy' });
 }
+const formatInt = n => Math.floor(n).toLocaleString();
+const formatFloat = n => n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 function pushLog(p, text) { p.log.unshift(text); if (p.log.length > 15) p.log.pop(); }
 const isBossFloor = (level) => level > 0 && level % BOSS_INTERVAL === 0;
@@ -821,6 +1248,90 @@ function equipItem(player, uid) { if (!player) return; const idx = player.invent
 function unequipItem(player, slot) { if (!player || !player.equipment[slot]) return; const hpBefore = player.stats.total.hp; handleItemStacking(player, player.equipment[slot]); player.equipment[slot] = null; calculateTotalStats(player); const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 && hpAfter > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter; if (player.currentHp > hpAfter) player.currentHp = hpAfter; }
 function sellItem(player, uid, sellAll) { if (!player) return; const itemIndex = player.inventory.findIndex(i => i.uid === uid); if (itemIndex === -1) { pushLog(player, '[판매] 인벤토리에서 아이템을 찾을 수 없습니다.'); return; } const item = player.inventory[itemIndex]; if (item.type !== 'weapon' && item.type !== 'armor') { pushLog(player, '[판매] 해당 아이템은 상점에 판매할 수 없습니다.'); return; } const basePrice = SELL_PRICES[item.grade] || 0; if (item.enhancement > 0 || !sellAll) { let finalPrice = basePrice; if (item.enhancement > 0) { const enhancementCost = getEnhancementCost(item.enhancement); const priceWithEnhancement = basePrice + enhancementCost; if (item.enhancement <= 8) { finalPrice = priceWithEnhancement; } else if (item.enhancement <= 10) { finalPrice = priceWithEnhancement + 10000; } else { finalPrice = Math.floor(priceWithEnhancement * 1.5); } } if (item.quantity > 1) { item.quantity--; } else { player.inventory.splice(itemIndex, 1); } player.gold += finalPrice; const itemName = item.enhancement > 0 ? `+${item.enhancement} ${item.name}` : item.name; pushLog(player, `[판매] ${itemName} 1개를 ${finalPrice.toLocaleString()} G에 판매했습니다.`); } else { const quantityToSell = item.quantity; const totalPrice = basePrice * quantityToSell; player.inventory.splice(itemIndex, 1); player.gold += totalPrice; pushLog(player, `[판매] ${item.name} ${quantityToSell}개를 ${totalPrice.toLocaleString()} G에 판매했습니다.`); } }
 function getEnhancementCost(level) { let totalCost = 0; for (let i = 0; i < level; i++) { totalCost += Math.floor(1000 * Math.pow(2.1, i)); } return totalCost; }
+function calculateFameScore(player) {
+    let score = 0;
+    const fameConfig = {
+        itemGrade: { 'Rare': 20, 'Legendary': 40, 'Epic': 120, 'Mystic': 450 },
+        petGrade: { 'Rare': 20, 'Epic': 150, 'Mystic': 750 },
+        fusedPetBonus: 2,
+        perSocket: 500,
+        per1000Levels: 1
+    };
+
+    const allEquipment = [...player.inventory.filter(i => i.type === 'weapon' || i.type === 'armor'), player.equipment.weapon, player.equipment.armor];
+    for (const item of allEquipment) {
+        if (!item || !fameConfig.itemGrade[item.grade]) continue;
+        score += fameConfig.itemGrade[item.grade];
+        if (item.enhancement > 0) {
+            const enhancementScore = item.enhancement <= 10 
+                ? item.enhancement * 5 
+                : (10 * 5) + ((item.enhancement - 10) * 50);
+            score += enhancementScore;
+        }
+    }
+
+    const allPets = [...player.petInventory, player.equippedPet];
+    for (const pet of allPets) {
+        if (!pet || !fameConfig.petGrade[pet.grade]) continue;
+        let petScore = fameConfig.petGrade[pet.grade];
+        if (pet.fused) {
+            petScore = (fameConfig.petGrade['Epic'] * 2) * fameConfig.fusedPetBonus;
+        }
+        score += petScore;
+    }
+
+    score += player.unlockedArtifacts.filter(s => s !== null).length * fameConfig.perSocket;
+    score += Math.floor(player.maxLevel / 1000) * fameConfig.per1000Levels;
+
+    return Math.floor(score);
+}
+
+function updatePlayerFame(player) {
+    if (!player) return;
+    const newFame = calculateFameScore(player);
+    if (newFame !== player.fameScore) {
+        player.fameScore = newFame;
+        sendState(player.socket, player, calcMonsterStats(player));
+    }
+}
+
+function onPetFusionComplete(player) {
+    if (!player || !player.petFusion || !player.petFusion.slot1 || !player.petFusion.slot2) {
+        return;
+    }
+
+    const pet1 = player.petFusion.slot1;
+    const pet2 = player.petFusion.slot2;
+    const attributes = [pet1.attribute, pet2.attribute].sort();
+    
+    let resultPetId = null;
+    if (attributes.includes('물') && attributes.includes('불')) resultPetId = 'ignis_aqua';
+    else if (attributes.includes('물') && attributes.includes('바람')) resultPetId = 'tempest';
+    else if (attributes.includes('불') && attributes.includes('바람')) resultPetId = 'thunderbird';
+
+    if (resultPetId) {
+        const newPet = createPetInstance(resultPetId);
+        player.petInventory.push(newPet);
+        pushLog(player, `[융합] 융합이 완료되어 강력한 <span class="${newPet.grade}">${newPet.name}</span>이(가) 탄생했습니다!`);
+    } else {
+        player.petInventory.push(pet1, pet2);
+        player.gold += 100000000; 
+        pushLog(player, '[융합] 알 수 없는 오류로 융합에 실패하여 재료와 비용이 반환되었습니다.');
+        console.error(`[Fusion Error] User: ${player.username}, Pets: ${pet1.name}, ${pet2.name}`);
+    }
+
+    player.petFusion = { slot1: null, slot2: null, fuseEndTime: null };
+    updatePlayerFame(player);
+}
+
+function getFameTier(score) {
+    if (score >= 40000) return 'fame-diamond';
+    if (score >= 15000) return 'fame-gold';
+    if (score >= 5000) return 'fame-silver';
+    if (score >= 1000) return 'fame-bronze';
+    return '';
+}
+
 async function savePlayerData(userId) { const p = onlinePlayers[userId]; if (!p) return; try { const { socket: _, attackTarget: __, ...playerDataToSave } = p; await GameData.updateOne({ user: userId }, { $set: playerDataToSave }); } catch (error) { console.error(`[저장 실패] 유저: ${p.username} 데이터 저장 중 오류 발생:`, error); } }
 function sendState(socket, player, monsterStats) { if (!socket || !player) return; const { socket: _, ...playerStateForClient } = player; socket.emit('gameState', { player: playerStateForClient, monster: { ...monsterStats, currentHp: player.monster.currentHp } }); }
 
@@ -883,6 +1394,7 @@ function useItem(player, uid, useAll = false) {
             } else {
                 player.unlockedArtifacts[socketIndex] = artifactData[item.id];
                 messages.push(`[${artifactData[item.id].name}]의 지혜를 흡수하여 유물 소켓을 영구히 해금했습니다!`);
+updatePlayerFame(player);
             }
             break;
         default:
@@ -900,7 +1412,26 @@ function useItem(player, uid, useAll = false) {
 }
 function placeEggInIncubator(player, uid) { if (!player || player.incubator.egg) { pushLog(player, '[부화기] 이미 다른 알을 품고 있습니다.'); return; } const itemIndex = player.inventory.findIndex(i => i.uid === uid && (i.category === 'Egg' || i.type === 'egg')); if (itemIndex === -1) return; const egg = player.inventory[itemIndex]; if (egg.quantity > 1) { egg.quantity--; } else { player.inventory.splice(itemIndex, 1); } player.incubator.egg = { ...egg, quantity: 1 }; pushLog(player, `[부화기] ${egg.name}을(를) 부화기에 넣었습니다.`); }
 function startHatching(player) { if (!player || !player.incubator.egg || player.incubator.hatchCompleteTime) return; const eggId = player.incubator.egg.id; const hatchDuration = itemData[eggId]?.hatchDuration; if (!hatchDuration) return; player.incubator.hatchDuration = hatchDuration; player.incubator.hatchCompleteTime = new Date(Date.now() + hatchDuration); pushLog(player, `[부화기] ${player.incubator.egg.name} 부화를 시작합니다!`); }
-function onHatchComplete(player) { if (!player || !player.incubator.egg) return; pushLog(player, `[부화기] ${player.incubator.egg.name}에서 생명의 기운이 느껴집니다!`); const eggGrade = player.incubator.egg.grade; const possiblePets = Object.keys(petData).filter(id => petData[id].grade === eggGrade); if (possiblePets.length > 0) { const randomPetId = possiblePets[Math.floor(Math.random() * possiblePets.length)]; const newPet = createPetInstance(randomPetId); player.petInventory.push(newPet); pushLog(player, `[펫] <span class="${newPet.grade}">${newPet.name}</span>이(가) 태어났습니다!`); } player.incubator = { egg: null, hatchCompleteTime: null, hatchDuration: 0 }; }
+function onHatchComplete(player) {
+    if (!player || !player.incubator.egg) return;
+    
+    const eggName = player.incubator.egg.name;
+    const eggGrade = player.incubator.egg.grade;
+    pushLog(player, `[부화기] ${eggName}에서 생명의 기운이 느껴집니다!`);
+    const possiblePets = Object.keys(petData).filter(id => petData[id].grade === eggGrade && !petData[id].fused);
+    
+    if (possiblePets.length > 0) {
+        const randomPetId = possiblePets[Math.floor(Math.random() * possiblePets.length)];
+        const newPet = createPetInstance(randomPetId);
+        if(newPet) {
+            player.petInventory.push(newPet);
+            pushLog(player, `[펫] <span class="${newPet.grade}">${newPet.name}</span>이(가) 태어났습니다!`);
+        }
+    }
+    
+    player.incubator = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
+    updatePlayerFame(player);
+}
 function equipPet(player, uid) { if (!player) return; const petIndex = player.petInventory.findIndex(p => p.uid === uid); if (petIndex === -1) return; if (player.equippedPet) { player.petInventory.push(player.equippedPet); } player.equippedPet = player.petInventory.splice(petIndex, 1)[0]; calculateTotalStats(player); }
 function unequipPet(player) { if (!player || !player.equippedPet) return; player.petInventory.push(player.equippedPet); player.equippedPet = null; calculateTotalStats(player); }
 async function spawnWorldBoss() { if (worldBossState && worldBossState.isActive) return; const newBossId = new mongoose.Types.ObjectId().toString(); const newBossData = { uniqueId: 'singleton', bossId: newBossId, name: "영원한 흉몽", maxHp: WORLD_BOSS_CONFIG.HP, currentHp: WORLD_BOSS_CONFIG.HP, attack: WORLD_BOSS_CONFIG.ATTACK, defense: WORLD_BOSS_CONFIG.DEFENSE, isActive: true, participants: new Map(), spawnedAt: new Date() }; const savedState = await WorldBossState.findOneAndUpdate({ uniqueId: 'singleton' }, newBossData, { upsert: true, new: true }); worldBossState = savedState.toObject(); worldBossState.participants = new Map(); console.log(`[월드보스] ${worldBossState.name}가 출현했습니다! (ID: ${worldBossState.bossId})`); const serializableState = { ...worldBossState, participants: {} }; io.emit('worldBossSpawned', serializableState); io.emit('chatMessage', { isSystem: true, message: `[월드보스] 거대한 악의 기운과 함께 파멸의 군주가 모습을 드러냈습니다!` }); io.emit('globalAnnouncement', `[월드보스] ${worldBossState.name}가 출현했습니다!`); }

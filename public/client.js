@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitButton = document.getElementById('submit-button');
     const toggleAuth = document.getElementById('toggle-auth');
     const authMessage = document.getElementById('auth-message');
-    const welcomeUsername = document.getElementById('welcome-username');
     const logoutButton = document.getElementById('logout-button');
 
     let isLogin = true;
@@ -56,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        welcomeUsername.textContent = decodedToken.username;
+        
         window.myUsername = decodedToken.username;
         window.myUserId = decodedToken.userId;
         
@@ -83,11 +82,83 @@ function decodeJwtPayload(token) {
         return null;
     }
 }
+function getFameDetails(score) {
+    if (score >= 40000) return { icon: '💎', className: 'fame-diamond' };
+    if (score >= 15000) return { icon: '🥇', className: 'fame-gold' };
+    if (score >= 5000) return { icon: '🥈', className: 'fame-silver' };
+    if (score >= 1000) return { icon: '🥉', className: 'fame-bronze' };
+    return { icon: '🐥', className: '' };
+}
+function createFameUserHtml(username, score) {
+    const fame = getFameDetails(score);
+    return `${fame.icon} <span class="${fame.className}">${username}(${(score || 0).toLocaleString()})</span>`;
+}
+
+  const createItemHTML = (item) => {
+        if (!item) return '';
+        let effectText = '';
+        if (item.type === 'weapon') {
+            let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
+            effectText = `⚔️공격력 +${(bonus * 100).toFixed(1)}%`;
+        } else if (item.type === 'armor') {
+            let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
+            effectText = `❤️🛡️체/방 +${(bonus * 100).toFixed(1)}%`;
+        } else if (item.type === 'pet') { effectText = item.description || '특별한 힘을 가진 펫';
+        } else { effectText = item.description || '다양한 효과를 가진 아이템'; }
+       
+        const nameClass = item.grade || 'Common'; 
+        const enhanceText = item.enhancement ? `<div class="item-enhancement-level">[+${item.enhancement}]</div>` : '';
+        const quantityText = item.quantity > 1 ? `<div class="item-quantity">x${item.quantity}</div>` : '';
+        const imageHTML = item.image ? `<div class="item-image"><img src="/image/${item.image}" alt="${item.name}" draggable="false"></div>` : '<div class="item-image"></div>';
+        return `${imageHTML}<div class="item-info"><div class="item-name ${nameClass}">${item.name}</div><div class="item-effect">${effectText}</div></div>${quantityText}${enhanceText}`;
+    };
+
+function createPlayerPanelHTML(player) {
+    if (!player) return '<p>유저 정보를 찾을 수 없습니다.</p>';
+    const weaponHTML = player.equipment?.weapon ? createItemHTML(player.equipment.weapon) : '⚔️<br>무기';
+    const armorHTML = player.equipment?.armor ? createItemHTML(player.equipment.armor) : '🛡️<br>방어구';
+    const petHTML = player.equippedPet ? createItemHTML(player.equippedPet) : '🐾<br>펫';
+    
+    const artifactSocketsHTML = (player.unlockedArtifacts || []).map(artifact => 
+        artifact 
+        ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` 
+        : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`
+    ).join('');
+    return `
+        <div class="character-panel player-panel" style="background: none; box-shadow: none;">
+            <div class="character-header">
+                <h2>${createFameUserHtml(player.username, player.fameScore || 0)}</h2>
+                <div class="resource-display">💰 <span>${(player.gold || 0).toLocaleString()}</span></div>
+            </div>
+            <div class="stat-info-combined">
+                <div class="stat-row-monster"><span>❤️ 총 체력</span><span class="stat-value">${Math.floor(player.stats?.total?.hp || 0).toLocaleString()}</span></div>
+                <div class="stat-row-monster"><span>⚔️ 총 공격력</span><span class="stat-value">${Math.floor(player.stats?.total?.attack || 0).toLocaleString()}</span></div>
+                <div class="stat-row-monster"><span>🛡️ 총 방어력</span><span class="stat-value">${Math.floor(player.stats?.total?.defense || 0).toLocaleString()}</span></div>
+                <div class="stat-row-monster"><span>💥 치명타 확률</span><span class="stat-value">${((player.stats?.critChance || 0) * 100).toFixed(2)}%</span></div>
+                <div class="stat-row-monster"><span>🔰 치명타 저항</span><span class="stat-value">${((player.stats?.critResistance || 0) * 100).toFixed(2)}%</span></div>
+            </div>
+            <div class="equipment-section">
+                <div class="equipment-slots">
+                    <div class="slot">${weaponHTML}</div>
+                    <div class="slot">${armorHTML}</div>
+                    <div class="slot">${petHTML}</div>
+                </div>
+                <div class="artifact-sockets" style="margin-top: 15px;">${artifactSocketsHTML}</div>
+            </div>
+        </div>
+    `;
+}
 
 function initializeGame(socket) {
+let quillEditor = null;
+ let currentBoardCategory = '자유';
+    let currentBoardPage = 1;
+    let currentPostId = null; 
+
     const elements = {
         gold: document.getElementById('gold'),
-        player: { panel: document.querySelector('.player-panel'), hpBar: document.getElementById('player-hp-bar'), hpText: document.getElementById('player-hp-text'), totalHp: document.getElementById('total-hp'), totalAttack: document.getElementById('total-attack'), totalDefense: document.getElementById('total-defense') },
+        player: { panel: document.querySelector('.player-panel'), hpBar: document.getElementById('player-hp-bar'), hpText: document.getElementById('player-hp-text'), totalHp: document.getElementById('total-hp'), totalAttack: document.getElementById('total-attack'), totalDefense: document.getElementById('total-defense'),critChance: document.getElementById('crit-chance'),
+        critResistance: document.getElementById('crit-resistance') },
         monster: { panel: document.querySelector('.monster-panel'), level: document.getElementById('monster-level'), hpBar: document.getElementById('monster-hp-bar'), hpText: document.getElementById('monster-hp-text'), totalHp: document.getElementById('monster-hp-total'), attack: document.getElementById('monster-attack'), defense: document.getElementById('monster-defense'), },
         equipment: { 
             weapon: document.getElementById('weapon-slot'), 
@@ -120,6 +191,51 @@ function initializeGame(socket) {
             useHammerCheck: document.getElementById('use-hammer-ticket'),
             checkboxes: document.querySelector('.enhancement-checkboxes-wrapper'),
         },
+fusion: {
+    panel: document.getElementById('fusion-container'),
+    processUI: document.getElementById('fusion-process-ui'),
+    timerUI: document.getElementById('fusion-timer-ui'),
+    slot1: document.getElementById('fusion-slot-1'),
+    slot2: document.getElementById('fusion-slot-2'),
+    info1: document.getElementById('fusion-pet-info-1'),
+    info2: document.getElementById('fusion-pet-info-2'),
+    timer: document.getElementById('fusion-timer'),
+    button: document.getElementById('fusion-start-button')
+},
+
+board: {
+    container: document.getElementById('board-main-container'),
+    closeButton: document.getElementById('board-close-button'),
+    listView: document.getElementById('board-list-view'),
+    tabs: document.querySelector('.board-tabs'),
+    postList: document.getElementById('board-post-list'),
+    pagination: document.getElementById('board-pagination'),
+    writePostBtn: document.getElementById('board-write-post-btn'),
+    detailView: document.getElementById('board-detail-view'),
+    postContentArea: document.getElementById('post-content-area'),
+    commentArea: document.getElementById('post-comment-area'),
+    commentList: document.getElementById('comment-list'),
+    commentForm: document.getElementById('comment-form'),
+    commentInput: document.getElementById('comment-input'),
+    backToListBtn: document.getElementById('board-back-to-list-btn'),
+    writeView: document.getElementById('board-write-view'),
+    postForm: document.getElementById('post-form'),
+    postEditId: document.getElementById('post-edit-id'),
+    postCategory: document.getElementById('post-category'),
+    postTitle: document.getElementById('post-title'),
+    postContentInput: document.getElementById('post-content-input'),
+    postSubmitBtn: document.getElementById('post-submit-btn'),
+    cancelBtn: document.getElementById('board-cancel-btn')
+},
+userInfo: {
+
+    container: document.getElementById('user-info'),
+
+    username: document.getElementById('welcome-username'),
+
+    icon: document.getElementById('fame-icon')
+
+},
         incubator: {
             content: document.getElementById('incubator-content'),
             slot: document.getElementById('incubator-slot'),
@@ -131,6 +247,7 @@ function initializeGame(socket) {
         explorationButton: document.getElementById('exploration-button'),
         worldBoss: { container: document.getElementById('world-boss-container'), name: document.getElementById('world-boss-name'), hpBar: document.getElementById('world-boss-hp-bar'), hpText: document.getElementById('world-boss-hp-text'), contribution: document.getElementById('world-boss-contribution'), toggleBtn: document.getElementById('attack-target-toggle-btn'), },
         modals: {
+	board: { button: document.getElementById('board-button'), overlay: document.getElementById('board-modal') },
             auction: { button: document.getElementById('auction-button'), overlay: document.getElementById('auction-modal'), grid: document.getElementById('auction-grid'), detail: document.getElementById('auction-item-detail'), refreshBtn: document.getElementById('auction-refresh-btn'), },
             ranking: { button: document.getElementById('ranking-button'), overlay: document.getElementById('ranking-modal'), list: document.getElementById('ranking-list'), },
             loot: { button: document.getElementById('loot-record-button'), overlay: document.getElementById('loot-record-modal'), display: document.getElementById('loot-record-display'), },
@@ -153,30 +270,382 @@ function initializeGame(socket) {
         init() { elements.zoom.inBtn.addEventListener('click', () => this.applyZoom(this.currentScale + 0.1)); elements.zoom.outBtn.addEventListener('click', () => this.applyZoom(this.currentScale - 0.1)); this.applyZoom(1.0); }
     };
     zoomLogic.init();
-    document.querySelectorAll('.modal-overlay').forEach(modal => { modal.querySelector('.close-button').addEventListener('click', () => { modal.style.display = 'none'; }); modal.addEventListener('click', (e) => { if (e.target === modal || e.target.classList.contains('modal-overlay')) { modal.style.display = 'none'; } }); });
+
+document.querySelectorAll('.modal-overlay').forEach(modal => { 
+    const closeBtn = modal.querySelector('.close-button');
+    if(closeBtn) {
+        closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+    }
+    modal.addEventListener('click', (e) => { 
+        if (e.target === modal && modal.id !== 'board-modal') { 
+            modal.style.display = 'none'; 
+        } 
+    }); 
+});
+
     elements.modals.ranking.button.addEventListener('click', () => { socket.emit('requestRanking'); elements.modals.ranking.overlay.style.display = 'flex'; });
     elements.modals.loot.button.addEventListener('click', () => { elements.modals.loot.overlay.style.display = 'flex'; });
     elements.modals.enhancement.button.addEventListener('click', () => { elements.modals.enhancement.overlay.style.display = 'flex'; });
     elements.modals.online.button.addEventListener('click', () => { socket.emit('requestOnlineUsers'); elements.modals.online.overlay.style.display = 'flex'; });
     elements.modals.auction.button.addEventListener('click', () => { fetchAuctionListings(); elements.modals.auction.overlay.style.display = 'flex'; });
-    socket.on('rankingData', ({ topLevel, topGold, topWeapon, topArmor }) => {
-        const list = elements.modals.ranking.list; if (!list) return; let rankingHTML = ''; const createRankItem = (rank, content) => `<li><span class="rank-badge rank-${rank}">${rank}</span> ${content}</li>`;
-        if (topLevel?.length) { rankingHTML += `<h3>🔝 최고 등반 랭킹</h3>`; topLevel.forEach((p, i) => { rankingHTML += createRankItem(i + 1, `<span class="rank-name">${p.username}</span> 님은 최대 <span class="rank-value">${p.maxLevel}층</span>까지 등반하였습니다.`); }); }
-        if (topWeapon?.length) { rankingHTML += `<h3>⚔️ 최고 무기 강화 랭킹</h3>`; topWeapon.forEach((p, i) => { rankingHTML += createRankItem(i + 1, `<span class="rank-name">${p.username}</span> 님은 <span class="rank-value">${p.maxWeaponName}</span> 을(를) <span class="rank-value">${p.maxWeaponEnhancement}강</span>까지 강화하셨습니다.`); }); }
-        if (topArmor?.length) { rankingHTML += `<h3>🛡️ 최고 방어구 강화 랭킹</h3>`; topArmor.forEach((p, i) => { rankingHTML += createRankItem(i + 1, `<span class="rank-name">${p.username}</span> 님은 <span class="rank-value">${p.maxArmorName}</span> 을(를) <span class="rank-value">${p.maxArmorEnhancement}강</span>까지 강화하셨습니다.`); }); }
-        if (topGold?.length) { rankingHTML += `<h3>💰 최고 골드 보유 랭킹</h3>`; topGold.forEach((p, i) => { rankingHTML += createRankItem(i + 1, `<span class="rank-name">${p.username}</span> 님은 현재 <span class="rank-value">${p.gold.toLocaleString()} G</span> 를 보유하고 있습니다.`); }); }
-        list.innerHTML = rankingHTML || '<li>랭킹 정보가 없습니다.</li>';
+    
+    const setupFusionSlot = (slotElement) => {
+        slotElement.addEventListener('dblclick', () => {
+            const slotIndex = slotElement.dataset.slotIndex;
+            const fusionData = currentPlayerState.petFusion;
+            if ((slotIndex === '1' && fusionData.slot1) || (slotIndex === '2' && fusionData.slot2)) {
+                socket.emit('unslotPetFromFusion', { slotIndex });
+            }
+        });
+        slotElement.addEventListener('dragover', e => { e.preventDefault(); slotElement.classList.add('drag-over'); });
+        slotElement.addEventListener('dragleave', () => slotElement.classList.remove('drag-over'));
+        slotElement.addEventListener('drop', e => {
+            e.preventDefault();
+            slotElement.classList.remove('drag-over');
+            const uid = e.dataTransfer.getData('text/plain');
+            const itemType = e.dataTransfer.getData('item-type');
+            if (itemType === 'pet') {
+                socket.emit('slotPetForFusion', { uid });
+            }
+        });
+    };
+    setupFusionSlot(elements.fusion.slot1);
+    setupFusionSlot(elements.fusion.slot2);
+    
+    elements.inventory.pet.addEventListener('click', (e) => {
+        const card = e.target.closest('.inventory-item');
+        if (!card) return;
+        const uid = card.dataset.uid;
+        const item = findItemInState(uid);
+        if (item && item.grade === 'Epic' && !item.fused) {
+            document.querySelector('.tab-button[data-tab="fusion-tab"]').click();
+            socket.emit('slotPetForFusion', { uid });
+        }
     });
-    function renderGlobalRecords(records) {
-        const enhDisplay = elements.modals.enhancement.display; const enhRecord = records.topEnhancement; if (enhRecord) { enhDisplay.innerHTML = `<div class="record-item"><span class="rank-name">${enhRecord.username}</span> 님의 <span class="${enhRecord.itemGrade}">${enhRecord.itemName}</span> <span class="enhance-level-highlight">+${enhRecord.enhancementLevel}강</span></div>`; } else { enhDisplay.innerHTML = '<div class="no-record">아직 서버 최고 강화 기록이 없습니다.</div>'; }
-        const lootDisplay = elements.modals.loot.display; let lootHTML = ''; const gradeOrder = ['Mystic', 'Epic', 'Legendary']; let hasLootRecord = false; gradeOrder.forEach(grade => { const record = records[`topLoot_${grade}`]; if (record) { hasLootRecord = true; lootHTML += `<h3>🌟 ${grade} 등급 최고 기록</h3><div class="record-item"><span class="rank-name">${record.username}</span> 님이 <span class="${record.itemGrade}">${record.itemName}</span> 획득</div>`; } }); if (hasLootRecord) { lootDisplay.innerHTML = lootHTML; } else { lootDisplay.innerHTML = '<div class="no-record">아직 서버 최고 득템 기록이 없습니다.</div>'; }
+
+    elements.fusion.button.addEventListener('click', () => {
+        if (!currentPlayerState) return;
+        const { slot1, slot2 } = currentPlayerState.petFusion;
+        if (slot1 && slot2 && confirm(`[${slot1.name}]와(과) [${slot2.name}]의 융합을 시작하시겠습니까?\n\n비용: 1억 골드\n(융합 시작 시 취소할 수 없습니다)`)) {
+            socket.emit('startPetFusion');
+        }
+    });
+
+const htmlModeCheckbox = document.getElementById('html-mode-checkbox');
+const quillContainer = document.querySelector('#editor-container');
+const htmlTextarea = document.getElementById('html-editor-textarea');
+
+htmlModeCheckbox.addEventListener('change', () => {
+    const quillToolbar = document.querySelector('.ql-toolbar');
+    const quillEditorArea = document.querySelector('#editor-container');
+
+    if (htmlModeCheckbox.checked) {
+        htmlTextarea.value = quillEditor.root.innerHTML;
+
+        if(quillToolbar) quillToolbar.style.display = 'none';
+        if(quillEditorArea) quillEditorArea.style.display = 'none';
+
+        htmlTextarea.style.display = 'block';
+
+    } else {
+        const htmlContent = htmlTextarea.value;
+
+        quillEditor.setText('');
+
+        quillEditor.clipboard.dangerouslyPasteHTML(htmlContent);
+
+        if(quillToolbar) quillToolbar.style.display = 'block';
+        if(quillEditorArea) quillEditorArea.style.display = 'block';
+
+        htmlTextarea.style.display = 'none';
     }
+});
+
+
+
+elements.board.postForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const isInHtmlMode = document.getElementById('html-mode-checkbox').checked;
+    const content = isInHtmlMode
+        ? document.getElementById('html-editor-textarea').value
+        : quillEditor.root.innerHTML;
+
+    const data = {
+        category: elements.board.postCategory.value,
+        title: elements.board.postTitle.value,
+        content: content,
+        postId: elements.board.postEditId.value || null
+    };
+
+    const eventName = data.postId ? 'board:updatePost' : 'board:createPost';
+    socket.emit(eventName, data, (success) => {
+        if (success) {
+            currentBoardPage = 1;
+            fetchAndRenderPosts(data.category, 1);
+        } else {
+            alert('글 처리 중 오류가 발생했습니다.');
+        }
+    });
+});
+
+    elements.modals.board.button.addEventListener('click', () => {
+        elements.modals.board.overlay.style.display = 'flex';
+        fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
+    });
+
+    elements.board.tabs.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON') {
+            currentBoardCategory = e.target.dataset.category;
+            currentBoardPage = 1;
+            elements.board.tabs.querySelector('.active').classList.remove('active');
+            e.target.classList.add('active');
+            fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
+        }
+    });
+
+    elements.board.postList.addEventListener('click', (e) => {
+        const row = e.target.closest('tr');
+        if (row && row.dataset.postId) {
+            fetchAndRenderPostDetail(row.dataset.postId);
+        }
+    });
+
+    elements.board.pagination.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON' && !e.target.disabled) {
+            currentBoardPage = parseInt(e.target.dataset.page, 10);
+            fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
+        }
+    });
+    
+    elements.board.backToListBtn.addEventListener('click', () => {
+        fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
+    });
+    
+const backArrowBtn = document.getElementById('board-back-arrow-btn');
+backArrowBtn.addEventListener('click', () => showBoardView('list'));
+
+ elements.board.writePostBtn.addEventListener('click', () => {
+    const postCategorySelect = elements.board.postCategory;
+
+    postCategorySelect.innerHTML = '<option value="자유">자유</option><option value="공략">공략</option>';
+
+    const token = localStorage.getItem('jwt_token');
+    if (token) {
+        const decoded = decodeJwtPayload(token);
+        if (decoded && decoded.role === 'admin') {
+ 
+            postCategorySelect.insertAdjacentHTML('afterbegin', '<option value="공지">공지</option>');
+        }
+    }
+
+    if (!quillEditor) {
+        quillEditor = new Quill('#editor-container', {
+            theme: 'snow',
+            modules: {
+                toolbar: [
+                    [{ 'header': [1, 2, 3, false] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    [{ 'color': [] }, { 'background': [] }],
+                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                    ['link'] // 이미지 버튼은 अस्थिर하여 잠시 제외
+                ]
+            }
+        });
+    }
+
+
+    elements.board.postForm.reset();
+    elements.board.postEditId.value = '';
+    quillEditor.root.innerHTML = '';
+    elements.board.postSubmitBtn.textContent = '등록하기';
+    showBoardView('write');
+});
+    
+    elements.board.cancelBtn.addEventListener('click', () => showBoardView('list'));
+
+    elements.board.postForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const data = {
+            category: elements.board.postCategory.value,
+            title: elements.board.postTitle.value,
+        content: quillEditor.root.innerHTML,
+        postId: elements.board.postEditId.value || null
+        };
+        const eventName = data.postId ? 'board:updatePost' : 'board:createPost';
+        socket.emit(eventName, data, (success) => {
+            if (success) {
+                currentBoardPage = 1;
+                fetchAndRenderPosts(data.category, 1);
+            } else {
+                alert('글 처리 중 오류가 발생했습니다.');
+            }
+        });
+    });
+
+    elements.board.postContentArea.addEventListener('click', (e) => {
+        const action = e.target.id;
+
+ if (action === 'post-edit-btn') {
+        socket.emit('board:getPost', { postId: currentPostId }, (post) => {
+            if (!post) return;
+            showBoardView('write');
+            elements.board.postEditId.value = post._id;
+            elements.board.postCategory.value = post.category;
+            elements.board.postTitle.value = post.title;
+            elements.board.postSubmitBtn.textContent = '수정하기';
+            if (!quillEditor) {
+                quillEditor = new Quill('#editor-container', {
+                    theme: 'snow',
+                    modules: {
+                        toolbar: [
+                            [{ 'header': [1, 2, 3, false] }],
+                            ['bold', 'italic', 'underline', 'strike'],
+                            [{ 'color': [] }, { 'background': [] }],
+                            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                            ['link', 'image']
+                        ]
+                    }
+                });
+            }
+            quillEditor.root.innerHTML = post.content;
+        });
+    } 
+         else if (action === 'post-delete-btn') {
+            if (confirm('정말로 이 게시글을 삭제하시겠습니까?')) {
+                socket.emit('board:deletePost', { postId: currentPostId }, (success) => {
+                    if (success) fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
+                    else alert('삭제에 실패했습니다.');
+                });
+            }
+        } else if (action === 'post-like-btn') {
+            socket.emit('board:likePost', { postId: currentPostId }, ({ likesCount }) => {
+                if (likesCount !== null) e.target.textContent = `👍 추천 ${likesCount}`;
+            });
+        }
+    });
+    
+    elements.board.commentForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const content = elements.board.commentInput.value.trim();
+        if (content && currentPostId) {
+            socket.emit('board:createComment', { postId: currentPostId, content }, (success) => {
+                if (success) {
+                    elements.board.commentInput.value = '';
+                    fetchAndRenderPostDetail(currentPostId);
+                } else {
+                    alert('댓글 작성에 실패했습니다.');
+                }
+            });
+        }
+    });
+    
+    elements.board.commentList.addEventListener('click', (e) => {
+        const action = e.target.dataset.action;
+        if (!action) return;
+        
+        const commentItem = e.target.closest('.comment-item');
+        const commentId = commentItem.dataset.commentId;
+
+        if (action === 'delete-comment') {
+            if (confirm('정말로 이 댓글을 삭제하시겠습니까?')) {
+                socket.emit('board:deleteComment', { postId: currentPostId, commentId }, (success) => {
+                    if (success) fetchAndRenderPostDetail(currentPostId);
+                    else alert('댓글 삭제에 실패했습니다.');
+                });
+            }
+        } else if (action === 'like-comment') {
+            socket.emit('board:likeComment', { postId: currentPostId, commentId }, ({ likesCount }) => {
+                 if (likesCount !== null) e.target.textContent = `👍 ${likesCount}`;
+            });
+        }
+    });
+socket.on('rankingData', ({ topLevel, topGold, topWeapon, topArmor }) => {
+    const list = elements.modals.ranking.list;
+    if (!list) return;
+
+    let rankingHTML = '';
+    const createRankItem = (rank, content) => `<li><span class="rank-badge rank-${rank}">${rank}</span> ${content}</li>`;
+
+    if (topLevel?.length) {
+        rankingHTML += `<h3>🔝 최고 등반 랭킹</h3>`;
+        topLevel.forEach((p, i) => {
+            const userHtml = createFameUserHtml(p.username, p.fameScore);
+            rankingHTML += createRankItem(i + 1, `${userHtml} 님은 최대 <span class="rank-value">${p.maxLevel}층</span>까지 등반하였습니다.`);
+        });
+    }
+    if (topWeapon?.length) {
+        rankingHTML += `<h3>⚔️ 최고 무기 강화 랭킹</h3>`;
+        topWeapon.forEach((p, i) => {
+            const userHtml = createFameUserHtml(p.username, p.fameScore);
+            rankingHTML += createRankItem(i + 1, `${userHtml} 님은 <span class="rank-value">${p.maxWeaponName}</span> 을(를) <span class="rank-value">${p.maxWeaponEnhancement}강</span>까지 강화하셨습니다.`);
+        });
+    }
+    if (topArmor?.length) {
+        rankingHTML += `<h3>🛡️ 최고 방어구 강화 랭킹</h3>`;
+        topArmor.forEach((p, i) => {
+            const userHtml = createFameUserHtml(p.username, p.fameScore);
+            rankingHTML += createRankItem(i + 1, `${userHtml} 님은 <span class="rank-value">${p.maxArmorName}</span> 을(를) <span class="rank-value">${p.maxArmorEnhancement}강</span>까지 강화하셨습니다.`);
+        });
+    }
+    if (topGold?.length) {
+        rankingHTML += `<h3>💰 최고 골드 보유 랭킹</h3>`;
+        topGold.forEach((p, i) => {
+            const userHtml = createFameUserHtml(p.username, p.fameScore);
+            rankingHTML += createRankItem(i + 1, `${userHtml} 님은 현재 <span class="rank-value">${p.gold.toLocaleString()} G</span> 를 보유하고 있습니다.`);
+        });
+    }
+    list.innerHTML = rankingHTML || '<li>랭킹 정보가 없습니다.</li>';
+});
+
+
+
+function renderGlobalRecords(records) {
+    const enhDisplay = elements.modals.enhancement.display;
+    const enhRecord = records.topEnhancement;
+    if (enhRecord) {
+        const userHtml = createFameUserHtml(enhRecord.username, 0); 
+        enhDisplay.innerHTML = `<div class="record-item">${userHtml} 님의 <span class="${enhRecord.itemGrade}">${enhRecord.itemName}</span> <span class="enhance-level-highlight">+${enhRecord.enhancementLevel}강</span></div>`;
+    } else {
+        enhDisplay.innerHTML = '<div class="no-record">아직 서버 최고 강화 기록이 없습니다.</div>';
+    }
+
+    const lootDisplay = elements.modals.loot.display;
+    let lootHTML = '';
+    const gradeOrder = ['Mystic', 'Epic', 'Legendary'];
+    let hasLootRecord = false;
+
+    gradeOrder.forEach(grade => {
+        const record = records[`topLoot_${grade}`];
+        if (record) {
+            hasLootRecord = true;
+            const userHtml = createFameUserHtml(record.username, 0);
+            lootHTML += `<h3>🌟 ${grade} 등급 최고 기록</h3><div class="record-item">${userHtml} 님이 <span class="${record.itemGrade}">${record.itemName}</span> 획득</div>`;
+        }
+    });
+
+    if (hasLootRecord) {
+        lootDisplay.innerHTML = lootHTML;
+    } else {
+        lootDisplay.innerHTML = '<div class="no-record">아직 서버 최고 득템 기록이 없습니다.</div>';
+    }
+}
     socket.on('initialGlobalRecords', renderGlobalRecords);
     socket.on('globalRecordsUpdate', renderGlobalRecords);
-    socket.on('onlineUsersData', (players) => {
-        const list = elements.modals.online.list; if (!players || !players.length) { list.innerHTML = '<li>현재 접속 중인 유저가 없습니다.</li>'; return; }
-        list.innerHTML = players.map(p => { const userHTML = `<span class="rank-name">${p.username}</span>`; const weapon = p.weapon ? `<span class="user-item-name ${p.weapon.grade}">${p.weapon.name}</span>` : `<span class="user-item-none">맨손</span>`; const armor = p.armor ? `<span class="user-item-name ${p.armor.grade}">${p.armor.name}</span>` : `<span class="user-item-none">맨몸</span>`; const level = `<span class="rank-value">${p.level}층</span>`; return `<li>${userHTML} 님 : ${weapon}, ${armor} 을 착용하고, ${level} 등반 중</li>`; }).join('');
-    });
+socket.on('onlineUsersData', (players) => {
+    const list = elements.modals.online.list; 
+    if (!players || !players.length) {
+        list.innerHTML = '<li>현재 접속 중인 유저가 없습니다.</li>';
+        return;
+    }
+    list.innerHTML = players.map(p => {
+        const userHTML = createFameUserHtml(p.username, p.fameScore);
+        const weapon = p.weapon ? `<span class="user-item-name ${p.weapon.grade}">${p.weapon.name}</span>` : `<span class="user-item-none">맨손</span>`;
+        const armor = p.armor ? `<span class="user-item-name ${p.armor.grade}">${p.armor.name}</span>` : `<span class="user-item-none">맨몸</span>`;
+        const level = `<span class="rank-value">${p.level}층</span>`;
+        return `<li>${userHTML} 님 : ${weapon}, ${armor} 을 착용하고, ${level} 등반 중</li>`;
+    }).join('');
+});
     
     let selectedInventoryItemUid = null;
     let currentPlayerState = null;
@@ -199,24 +668,7 @@ const createEnhancementItemHTML = (item) => {
     return `${imageHTML}${enhanceText}`;
 };
 
-    const createItemHTML = (item) => {
-        if (!item) return '';
-        let effectText = '';
-        if (item.type === 'weapon') {
-            let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
-            effectText = `⚔️공격력 +${(bonus * 100).toFixed(1)}%`;
-        } else if (item.type === 'armor') {
-            let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
-            effectText = `❤️🛡️체/방 +${(bonus * 100).toFixed(1)}%`;
-        } else if (item.type === 'pet') { effectText = item.description || '특별한 힘을 가진 펫';
-        } else { effectText = item.description || '다양한 효과를 가진 아이템'; }
-       
-        const nameClass = item.grade || 'Common'; 
-        const enhanceText = item.enhancement ? `<div class="item-enhancement-level">[+${item.enhancement}]</div>` : '';
-        const quantityText = item.quantity > 1 ? `<div class="item-quantity">x${item.quantity}</div>` : '';
-        const imageHTML = item.image ? `<div class="item-image"><img src="/image/${item.image}" alt="${item.name}" draggable="false"></div>` : '<div class="item-image"></div>';
-        return `${imageHTML}<div class="item-info"><div class="item-name ${nameClass}">${item.name}</div><div class="item-effect">${effectText}</div></div>${quantityText}${enhanceText}`;
-    };
+
 
     const getEnhanceClass = (lvl) => lvl > 0 ? `enhance-${Math.min(lvl, 20)}` : '';
     function findItemInState(uid) {
@@ -233,13 +685,18 @@ const createEnhancementItemHTML = (item) => {
 
     const updateUI = ({ player, monster }) => {
         currentPlayerState = player;
-        
+        const fameDetails = getFameDetails(player.fameScore);
+elements.userInfo.icon.textContent = fameDetails.icon;
+elements.userInfo.username.textContent = player.username;
+elements.userInfo.username.className = fameDetails.className;
         if (elements.gold.textContent !== formatInt(player.gold)) { elements.gold.textContent = formatInt(player.gold); }
         elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
         elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
         elements.player.totalHp.textContent = formatFloat(player.stats.total.hp);
         elements.player.totalAttack.textContent = formatFloat(player.stats.total.attack);
         elements.player.totalDefense.textContent = formatFloat(player.stats.total.defense);
+elements.player.critChance.textContent = `${(player.stats.critChance * 100).toFixed(2)}%`;
+elements.player.critResistance.textContent = `${(player.stats.critResistance * 100).toFixed(2)}%`;
         if (player.isExploring) {
             elements.monster.level.innerHTML = `<span style="color:var(--fail-color); font-weight:bold;">탐험 중</span>`;
             elements.monster.hpBar.style.width = `100%`;
@@ -261,30 +718,29 @@ const createEnhancementItemHTML = (item) => {
         }
 
 const renderItemInSlot = (slotElement, item, defaultText, type) => {
-            slotElement.innerHTML = '';
-            if (item) {
-                const itemDiv = document.createElement('div');
-                itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)}`;
-                itemDiv.dataset.uid = item.uid;
-                itemDiv.draggable = true;
-                itemDiv.dataset.itemType = type;
-                itemDiv.innerHTML = createItemHTML(item, { showDescription: false });
-                const imageDiv = itemDiv.querySelector('.item-image');
-                const infoDiv = itemDiv.querySelector('.item-info');
-                if (imageDiv) {
-                    imageDiv.style.height = '60px';
-                    imageDiv.style.flex = 'none';
-                }
-                if (infoDiv) {
-                    infoDiv.style.paddingTop = '4px';
-                    infoDiv.style.flex = '1';
-                }
+    slotElement.innerHTML = '';
+    if (item) {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)}`;
+        itemDiv.dataset.uid = item.uid;
+        itemDiv.draggable = true;
+        itemDiv.dataset.itemType = type;
+        itemDiv.innerHTML = createItemHTML(item, { showDescription: false });
+        const imageDiv = itemDiv.querySelector('.item-image');
+        const infoDiv = itemDiv.querySelector('.item-info');
+        if (imageDiv) {
 
-                slotElement.appendChild(itemDiv);
-            } else {
-                slotElement.innerHTML = defaultText;
-            }
-        };
+        }
+        if (infoDiv) {
+            infoDiv.style.paddingTop = '4px';
+            infoDiv.style.flex = '1';
+        }
+
+        slotElement.appendChild(itemDiv);
+    } else {
+        slotElement.innerHTML = defaultText;
+    }
+};
 
         renderItemInSlot(elements.equipment.weapon, player.equipment.weapon, '⚔️<br>무기', 'weapon');
         renderItemInSlot(elements.equipment.armor, player.equipment.armor, '🛡️<br>방어구', 'armor');
@@ -297,6 +753,7 @@ const renderItemInSlot = (slotElement, item, defaultText, type) => {
         elements.inventory.item.innerHTML = renderGrid(player.inventory.filter(i => i.type !== 'weapon' && i.type !== 'armor'));
         elements.inventory.pet.innerHTML = renderGrid(player.petInventory);
         renderIncubator(player.incubator);
+renderFusionPanel(player);
         elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
         updateAffordableButtons();
     };
@@ -332,8 +789,175 @@ const egg = incubator.egg;
     };
     
     setInterval(() => { if (currentPlayerState && currentPlayerState.incubator && currentPlayerState.incubator.hatchCompleteTime) { renderIncubator(currentPlayerState.incubator); } }, 1000);
-    const updateAffordableButtons = () => { if (!currentPlayerState) return; ['hp', 'attack', 'defense'].forEach(stat => { const base = currentPlayerState.stats.base[stat]; const gold = currentPlayerState.gold; const costN = n => [...Array(n).keys()].reduce((s, i) => s + base + i, 0); const affordable = { 1: gold >= base, 10: gold >= costN(10), 100: gold >= costN(100), MAX: gold >= base, }; document.querySelectorAll(`.stat-row[data-stat-row="${stat}"] .upgrade-btn`).forEach(btn => { btn.classList.toggle('affordable', affordable[btn.dataset.amount]); }); }); };
-    
+    const updateAffordableButtons = () => { if (!currentPlayerState) return; ['hp', 'attack', 'defense'].forEach(stat => { const base = currentPlayerState.stats.base[stat]; const gold = currentPlayerState.gold; const costN = n => [...Array(n).keys()].reduce((s, i) => s + base + i, 0); const affordable = { 1: gold >= base, 10: gold >= costN(10), 100: gold >= costN(100), MAX: gold >= base, }; document.querySelectorAll(`.stat-row[data-stat-row="${stat}"] .upgrade-btn`).forEach(btn => { btn.classList.toggle('affordable', affordable[btn.dataset.amount]); }); }); 
+
+
+
+
+};
+
+function renderFusionPanel(player) {
+    const fusionData = player.petFusion;
+    const { fusion } = elements; // elements.fusion의 단축 표현
+
+
+    if (fusionData.fuseEndTime) {
+        fusion.processUI.style.display = 'none';
+        fusion.timerUI.style.display = 'flex';
+        fusion.button.style.display = 'none';
+        document.getElementById('fusion-rules').style.display = 'none';
+
+        const remainingTime = Math.max(0, new Date(fusionData.fuseEndTime) - new Date());
+        const hours = String(Math.floor(remainingTime / 3600000)).padStart(2, '0');
+        const minutes = String(Math.floor((remainingTime % 3600000) / 60000)).padStart(2, '0');
+        const seconds = String(Math.floor((remainingTime % 60000) / 1000)).padStart(2, '0');
+        fusion.timer.textContent = `${hours}:${minutes}:${seconds}`;
+        return;
+    }
+
+    fusion.processUI.style.display = 'flex';
+    fusion.timerUI.style.display = 'none';
+    fusion.button.style.display = 'block';
+    document.getElementById('fusion-rules').style.display = 'block';
+
+ if (fusionData.slot1) {
+    fusion.slot1.innerHTML = createEnhancementItemHTML(fusionData.slot1); 
+    fusion.slot1.classList.add('filled');
+    fusion.info1.textContent = `[${fusionData.slot1.attribute}] ${fusionData.slot1.name}`;
+} else {
+    fusion.slot1.innerHTML = `<span class="fusion-slot-placeholder">재료1 (에픽 펫)</span>`;
+    fusion.slot1.classList.remove('filled');
+    fusion.info1.textContent = '';
+}
+
+
+if (fusionData.slot2) {
+    fusion.slot2.innerHTML = createEnhancementItemHTML(fusionData.slot2);
+    fusion.slot2.classList.add('filled');
+    fusion.info2.textContent = `[${fusionData.slot2.attribute}] ${fusionData.slot2.name}`;
+} else {
+    fusion.slot2.innerHTML = `<span class="fusion-slot-placeholder">재료2 (에픽 펫)</span>`;
+    fusion.slot2.classList.remove('filled');
+    fusion.info2.textContent = '';
+}
+
+
+    const canFuse = fusionData.slot1 && fusionData.slot2 && player.gold >= 100000000;
+    fusion.button.disabled = !canFuse;
+}
+
+
+function showBoardView(viewName) {
+    elements.board.listView.style.display = 'none';
+    elements.board.detailView.style.display = 'none';
+    elements.board.writeView.style.display = 'none';
+
+    if (viewName === 'list') elements.board.listView.style.display = 'block';
+    else if (viewName === 'detail') elements.board.detailView.style.display = 'flex';
+    else if (viewName === 'write') elements.board.writeView.style.display = 'flex';
+}
+
+
+function fetchAndRenderPosts(category, page) {
+    socket.emit('board:getPosts', { category, page }, ({ posts, totalPages }) => {
+        const { postList, pagination } = elements.board;
+        postList.innerHTML = ''; 
+
+        if (!posts || posts.length === 0) {
+            postList.innerHTML = `<tr><td colspan="6">게시글이 없습니다.</td></tr>`;
+        } else {
+            posts.forEach(post => {
+                const postRow = document.createElement('tr');
+                postRow.dataset.postId = post._id;
+                const isNotice = post.category === '공지';
+                const authorFameTier = post.authorFameTier || '';
+                
+                postRow.innerHTML = `
+                    <td class="col-category">${post.category}</td>
+                    <td class="col-title">
+                        <span class="post-title-content ${isNotice ? 'notice' : ''}">${post.title}</span>
+                        <span class="comment-count">[${post.commentCount || 0}]</span>
+                    </td>
+                    <td class="col-author"><span class="${authorFameTier}">${post.authorUsername}</span></td>
+                    <td class="col-likes">👍 ${post.likesCount || 0}</td>
+                    <td class="col-date">${new Date(post.createdAt).toLocaleDateString()}</td>
+                `;
+                postList.appendChild(postRow);
+            });
+        }
+
+        pagination.innerHTML = '';
+        if (totalPages > 1) {
+            for (let i = 1; i <= totalPages; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.textContent = i;
+                pageBtn.dataset.page = i;
+                if (i === currentPage) pageBtn.classList.add('active');
+                pagination.appendChild(pageBtn);
+            }
+        }
+        showBoardView('list');
+    });
+}
+
+function fetchAndRenderPostDetail(postId) {
+    currentPostId = postId;
+    socket.emit('board:getPost', { postId }, (post) => {
+        if (!post) {
+            alert('삭제되었거나 존재하지 않는 게시글입니다.');
+            fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
+            return;
+        }
+
+        const { postContentArea, commentList, commentInput } = elements.board;
+        const isAuthor = post.authorUsername === window.myUsername;
+
+        postContentArea.innerHTML = `
+            <div class="post-view-header">
+                <h3>${post.title}</h3>
+                <div class="post-meta">
+                    <span>작성자: ${createFameUserHtml(post.authorUsername, post.authorFameTier)}</span>
+                    <span>작성일: ${new Date(post.createdAt).toLocaleString()}</span>
+                </div>
+            </div>
+            <div class="post-view-body ql-snow"><div class="ql-editor">${post.content}</div></div>
+            <div class="post-view-actions">
+                <button class="action-btn" id="post-like-btn" data-post-id="${post._id}">👍 추천 ${post.likes.length}</button>
+                ${isAuthor ? `<button class="action-btn list-auction-btn" id="post-edit-btn">수정</button>` : ''}
+                ${isAuthor ? `<button class="action-btn sell-btn" id="post-delete-btn">삭제</button>` : ''}
+            </div>
+        `;
+
+      commentList.innerHTML = '';
+if (post.comments && post.comments.length > 0) {
+    post.comments.forEach(comment => {
+        const isCommentAuthor = comment.authorUsername === window.myUsername;
+        const commentItem = document.createElement('div');
+        commentItem.className = 'comment-item-new'; // 새로운 클래스 이름
+        commentItem.dataset.commentId = comment._id;
+
+        commentItem.innerHTML = `
+            <div class="comment-main-content">
+                <span class="comment-author-new">${createFameUserHtml(comment.authorUsername, comment.authorFameTier)}:</span>
+                <span class="comment-text">${comment.content}</span>
+            </div>
+            <div class="comment-meta-new">
+                <span class="comment-date-new">${new Date(comment.createdAt).toLocaleString()}</span>
+                <div class="comment-actions-new">
+                    <span class="like-btn" data-action="like-comment" style="cursor:pointer;">👍 ${comment.likes.length}</span>
+                    ${isCommentAuthor ? `<span class="delete-btn" data-action="delete-comment" style="cursor:pointer;">삭제</span>` : ''}
+                </div>
+            </div>
+        `;
+        commentList.appendChild(commentItem);
+    });
+}
+        
+        commentInput.value = '';
+        showBoardView('detail');
+    });
+}
+
     function updateInteractionPanel(overrideItem = null) {
         const item = overrideItem || findItemInState(selectedInventoryItemUid);
         const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
@@ -357,6 +981,15 @@ const egg = incubator.egg;
 
         let infoContentHTML = '';
         let buttonsHTML = '<div class="interaction-buttons" style="justify-content: center; width: 100%; flex-wrap: wrap; gap: 10px;">';
+
+ if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet') {
+        const isEquipped = (currentPlayerState.equipment.weapon?.uid === item.uid) || 
+                           (currentPlayerState.equipment.armor?.uid === item.uid) || 
+                           (currentPlayerState.equippedPet?.uid === item.uid);
+        if (!isEquipped) {
+            buttonsHTML += `<button class="action-btn equip-btn" data-action="equip">✔️ 장착하기</button>`;
+        }
+    }
 
         if (isEnhanceable) {
             const bonusArr = Array.from({ length: item.enhancement }, (_, i) => item.baseEffect * (i < 10 ? 0.1 : 0.5));
@@ -517,24 +1150,28 @@ const egg = incubator.egg;
             }
         });
     });
-    function handleItemSelection(e) {
-        const card = e.target.closest('.inventory-item');
-        if (!card || card.closest('#auction-grid') || card.closest('.equipment-slots')) return;
-        const uid = card.dataset.uid;
-        
+
+function handleItemSelection(e) {
+    const card = e.target.closest('.inventory-item');
+    if (!card || card.closest('#auction-grid') || card.closest('.equipment-slots')) return;
+
+    const uid = card.dataset.uid;
+    const item = findItemInState(uid);
+    if (item && item.type === 'pet') return; 
+
+    selectedInventoryItemUid = uid;
+    document.querySelector('.tab-button[data-tab="enhancement-tab"]').click();
+
+    setTimeout(() => {
         selectedInventoryItemUid = uid;
-        document.querySelector('.tab-button[data-tab="enhancement-tab"]').click();
-        
-        setTimeout(() => {
-            selectedInventoryItemUid = uid;
-            const item = findItemInState(uid);
-            if (item) {
-                document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
-                card.classList.add('selected');
-                updateInteractionPanel(item);
-            }
-        }, 10);
-    }
+        const updatedItem = findItemInState(uid);
+        if (updatedItem) {
+            document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
+            card.classList.add('selected');
+            updateInteractionPanel(updatedItem);
+        }
+    }, 10);
+}
     document.querySelector('.management-panel').addEventListener('click', handleItemSelection);
 
     elements.enhancement.anvil.addEventListener('click', (e) => {
@@ -544,6 +1181,16 @@ const egg = incubator.egg;
         const item = findItemInState(selectedInventoryItemUid);
         if (!item) return;
         switch (action) {
+case 'equip':
+            if (item.type === 'pet') {
+                socket.emit('equipPet', selectedInventoryItemUid);
+            } else {
+                socket.emit('equipItem', selectedInventoryItemUid);
+            }
+            selectedInventoryItemUid = null;
+            updateInteractionPanel(); 
+            break;
+
             case 'sell':
                 if (confirm("상점에 판매하면 거래소보다 낮은 가격을 받습니다. 정말 판매하시겠습니까?")) {
                     socket.emit('sellItem', { uid: selectedInventoryItemUid, sellAll: target.dataset.sellAll === 'true' });
@@ -672,6 +1319,23 @@ const egg = incubator.egg;
                 socket.emit('unequipItem', slotType); 
             }
         });
+
+
+     slot.addEventListener('click', () => {
+            const slotType = slot.dataset.slot;
+            if (slotType !== 'pet' && currentPlayerState.equipment[slotType]) {
+                const item = currentPlayerState.equipment[slotType];
+
+                document.querySelector('.tab-button[data-tab="enhancement-tab"]').click();
+                
+
+                setTimeout(() => {
+                    selectedInventoryItemUid = item.uid;
+                   
+                    updateInteractionPanel(item);
+                }, 50);
+            }
+        });
     });
 
     function fetchAuctionListings() { socket.emit('getAuctionListings', (items) => { renderAuctionListings(items); }); }
@@ -735,24 +1399,76 @@ const egg = incubator.egg;
         const myShare = totalContribution > 0 ? (myContribution / totalContribution) * 100 : 0;
         elements.worldBoss.contribution.textContent = `내 기여도: ${formatInt(myContribution)} (${myShare.toFixed(2)}%)`;
     }
-    elements.chat.form.addEventListener('submit', (e) => { e.preventDefault(); const message = elements.chat.input.value.trim(); if (message) { socket.emit('chatMessage', message); elements.chat.input.value = ''; } });
-    function addChatMessage(data) {
-        const { type, username, role, message, isSystem } = data;
-        const item = document.createElement('li');
-        if (isSystem) { item.classList.add('system-message'); item.innerHTML = message; } 
-        else {
-            item.classList.add(`${type || 'user'}-message`);
-            const usernameSpan = document.createElement('span'); usernameSpan.classList.add('username');
-            const messageSpan = document.createElement('span'); messageSpan.classList.add('message');
-            if (role === 'admin') { item.classList.add('admin-message'); usernameSpan.innerHTML = `👑 ${username}:`; } 
-            else { usernameSpan.textContent = `${username}:`; }
-            if (type === 'announcement') { item.classList.add('announcement-message'); messageSpan.innerHTML = `📢 ${message}`; usernameSpan.innerHTML = `[공지] ${username}:`; } 
-            else { messageSpan.textContent = message; }
-            item.appendChild(usernameSpan); item.appendChild(messageSpan);
+    elements.chat.form.addEventListener('submit', (e) => { e.preventDefault(); e.stopPropagation();  const message = elements.chat.input.value.trim(); if (message) { socket.emit('chatMessage', message); elements.chat.input.value = ''; } });
+
+elements.chat.messages.addEventListener('click', (e) => {
+    const targetUsernameSpan = e.target.closest('[data-username]');
+    if (targetUsernameSpan) {
+        const username = targetUsernameSpan.dataset.username;
+        if (username) {
+            socket.emit('requestUserInfo', username);
         }
-        elements.chat.messages.appendChild(item);
-        elements.chat.messages.scrollTop = elements.chat.messages.scrollHeight;
     }
+});
+
+socket.on('userInfoResponse', (playerData) => {
+    const modal = document.getElementById('user-info-modal');
+    const contentDiv = document.getElementById('user-info-modal-content');
+
+    if (playerData) {
+        contentDiv.innerHTML = createPlayerPanelHTML(playerData);
+    } else {
+        contentDiv.innerHTML = '<p style="text-align: center; padding: 50px 0;">현재 접속 중인 유저가 아니거나, 정보를 찾을 수 없습니다.</p>';
+    }
+    
+    modal.style.display = 'flex';
+});
+
+function addChatMessage(data) {
+    const { type, username, role, message, isSystem, fameScore } = data;
+    const item = document.createElement('li');
+
+    if (isSystem) {
+        item.classList.add('system-message');
+        item.innerHTML = message;
+    } else {
+        item.classList.add(`${type || 'user'}-message`);
+        const usernameSpan = document.createElement('span');
+        usernameSpan.classList.add('username');
+
+        usernameSpan.dataset.username = username;
+        usernameSpan.style.cursor = 'pointer';
+
+        const messageSpan = document.createElement('span');
+        messageSpan.classList.add('message');
+
+        const userHtml = createFameUserHtml(username, fameScore || 0);
+
+        if (role === 'admin') {
+            item.classList.add('admin-message');
+            usernameSpan.innerHTML = `👑 ${userHtml}:`;
+        } else {
+            usernameSpan.innerHTML = `${userHtml}:`;
+        }
+
+        if (type === 'announcement') {
+            item.classList.add('announcement-message');
+            messageSpan.innerHTML = `📢 ${message}`;
+            if (role === 'admin') {
+                usernameSpan.innerHTML = `[공지] 👑 ${userHtml}:`;
+            } else {
+                usernameSpan.innerHTML = `[공지] ${userHtml}:`;
+            }
+        } else {
+            messageSpan.textContent = message;
+        }
+
+        item.appendChild(usernameSpan);
+        item.appendChild(messageSpan);
+    }
+    elements.chat.messages.appendChild(item);
+    elements.chat.messages.scrollTop = elements.chat.messages.scrollHeight;
+}
     socket.on('chatHistory', (history) => { elements.chat.messages.innerHTML = ''; history.forEach(msg => addChatMessage(msg)); });
     socket.on('chatMessage', (data) => addChatMessage(data));
     socket.on('globalAnnouncement', (notice) => { const banner = elements.announcementBanner; if (banner) { banner.innerHTML = `📢 ${notice}`; banner.classList.add('active'); setTimeout(() => { banner.classList.remove('active'); }, 10000); } });

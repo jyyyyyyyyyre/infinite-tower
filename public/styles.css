@@ -58,41 +58,43 @@ body.auth-view {
     position: relative;
     width: 100%;
     flex-grow: 1;
-    min-height: 0; /* flex-grow가 제대로 동작하게 함  */
+    min-height: 0;
     display: flex;
-    flex-direction: column; /* 기본을 세로 배치로 변경  */
-    gap: 15px;
+    flex-direction: column; 
+    gap: 0; 
     padding: 15px;
-    background: var(--bg-color-dark) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath opacity='.5' d='M96 95h4v1h-4v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h5v-4h1v4h9v-4h1v4h9v-4h1v4h9v-4h1v4h9v-4h1v4h9v-4h1v4h9v-4h1v4h9v-4h1v4h5v1h-5v9h5v1h-5v9h5v1h-5v9h5v1h-5v9h5v1h-5v9h5v1h-5v9h5v1h-5v9h5v1h-5v9zm-1 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9z'/%3E%3Cpath d='M6 5V0h1v5h4v1H6v4H5V6H0V5h5z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+
+.left-sector {
+    flex: 4; 
+    display: flex;
+    flex-direction: column; 
+    gap: 15px;
+    min-width: 0;
+}
+
+.right-sector.management-panel {
+    flex: 6; /* 우측 섹터가 차지할 비율 (예: 60%) */
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.right-sector {
+    flex: 6; /* 우측 섹터가 차지할 비율 */
+    display: flex; /* management-panel이 flex를 갖도록 */
+    flex-direction: column;
+    min-width: 0;
 }
 
 .game-container::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
     background: radial-gradient(ellipse at center, rgba(28, 31, 45, .5) 0%, rgba(28, 31, 45, 1) 70%);
+    z-index: -1; /* ◀◀ 이 한 줄을 추가하여 배경을 맨 뒤로 보냅니다. */
 }
 
-.battle-panel,
-.management-panel,
-.world-boss-panel {
-    z-index: 1;
-    background: var(--surface-color);
-    backdrop-filter: blur(10px);
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
-}
-
-.battle-panel {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    position: relative;
-    flex-shrink: 0; /* battle-panel은 크기가 커지지 않도록 함 */
-}
 
 #damage-container {
     position: absolute;
@@ -278,7 +280,7 @@ body.auth-view {
     border: 3px dashed var(--border-color);
     border-radius: 12px;
     padding: 10px;
-    height: 120px;
+    height: 250px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -300,21 +302,27 @@ body.auth-view {
 .artifact-sockets {
     display: flex;
     justify-content: center;
-    gap: 20px;
+    gap: 90px;
 }
 
 .artifact-socket {
-    width: 90px;
-    height: 90px;
-    border: 3px solid var(--border-color);
-    border-radius: 50%;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%; /* 완벽한 원을 만드는 속성 */
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: rgba(0, 0, 0, 0.3);
     overflow: hidden;
     transition: all .3s;
-    cursor: help
+    cursor: help;
+    
+    /* ▼▼▼ 디자인 개선을 위해 추가된 스타일 ▼▼▼ */
+    position: relative; /* 자식 요소의 기준점 */
+    border: 2px solid #111; /* 테두리를 더 어둡고 얇게 */
+    background: radial-gradient(ellipse at center, #555 0%, #222 100%); /* 은은한 광원 효과 */
+    box-shadow: 
+        inset 0 0 10px rgba(0,0,0,0.8),  /* 입체감을 위한 내부 그림자 */
+        0 0 5px rgba(0,0,0,0.5);          /* 바닥에 깔리는 외부 그림자 */
 }
 
 .artifact-socket img {
@@ -514,24 +522,25 @@ body.auth-view {
     margin-top: 8px
 }
 
-/* === 장착 아이템 슬롯 UI 최종 수정 === */
 .slot .inventory-item {
-    display: flex;
-    flex-direction: column;
+    width: 100%;
     height: 100%;
-    padding: 5px;
+    padding: 8px;
     box-sizing: border-box;
-    justify-content: center;
+    display: flex;
+    flex-direction: column; /* 내부 요소들을 세로로 배치 */
     background: transparent;
     border: none;
 }
+
 .slot .item-image {
-    height: 60%; /* 이미지 영역 높이 */
+    flex-grow: 1; /* 이미지가 남는 공간을 모두 차지하여 커지도록 함 */
+    min-height: 0;
     width: 100%;
-    flex-shrink: 0; 
-    padding-top: 0 !important; 
     position: relative;
+    padding-top: 0 !important;
 }
+
 .slot .item-image img {
     position: absolute;
     top: 0;
@@ -540,25 +549,32 @@ body.auth-view {
     height: 100%;
     object-fit: contain;
 }
+
 .slot .item-info {
-    flex-grow: 1;
+    flex-shrink: 0; /* 텍스트 영역은 크기가 고정되도록 함 */
     text-align: center;
-    overflow: hidden;
-    padding-top: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding-top: 8px;
 }
-.slot .item-name {
-    font-size: 0.9em;
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    width: 100%;
+
+.item-name {
+    font-weight: 700;
+    font-size: 1.1em
 }
+
 .slot .item-effect {
-    display: none;
+    display: none◀◀ 숨겨져 있던 효과 텍스트를 다시 보이게 함 */
+    font-size: 0.5em;
+    font-weight: 100;
+    color: var(--text-color);
+}
+
+.slot .item-enhancement-level {
+    position: static; /* 위치 고정을 해제하여 텍스트 아래로 오도록 함 */
+    font-size: 0.9em;
+    background: none;
+    padding: 0;
+    margin-top: 2px;
+    color: var(--secondary-color);
 }
 
 .interaction-buttons {
@@ -1307,7 +1323,7 @@ body.auth-view {
 }
 
 #welcome-username {
-    color: var(--secondary-color)
+
 }
 
 #logout-button {
@@ -1488,7 +1504,6 @@ body.auth-view {
 }
 
 .rank-name {
-    color: var(--secondary-color);
     font-weight: 700;
     margin-right: 4px
 }
@@ -1848,14 +1863,15 @@ body.auth-view {
         height: auto; /* 모바일에서는 높이 제한을 풀어 스크롤이 가능하게 함 */
         min-height: 100vh;
     }
-    .game-container {
-        flex-direction: column; /* 세로 배치 강제 */
-        padding: 10px 5px;
+.game-container {
+    flex-direction: column; /* 세로 배치 강제 */
+    padding: 10px 5px;
+}
+
+    .main-content-wrapper {
+        flex-direction: column;
     }
-    .battle-panel {
-        grid-template-columns: 1fr; /* 전투 패널 내부도 세로로 쌓이도록 */
-        gap: 10px;
-    }
+
     .character-panel {
         padding:15px;
         gap:10px
@@ -2082,4 +2098,756 @@ body.auth-view {
     #auction-container {
         flex-direction: column
     }
+}
+
+/* 추가할 코드 */
+/* --- Fame System Styles --- */
+#welcome-username, .chat-message .username {
+    transition: all 0.3s ease;
+}
+
+#fame-icon {
+    margin-right: 8px;
+    font-size: 1.2em;
+    vertical-align: middle;
+}
+
+.fame-bronze {
+    color: #cd7f32;
+    font-weight: bold;
+}
+
+.fame-silver {
+    color: #c0c0c0;
+    font-weight: bold;
+    text-shadow: 0 0 3px rgba(192, 192, 192, 0.5);
+}
+
+.fame-gold {
+    color: #ffd700;
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.6);
+}
+
+.fame-diamond {
+    background: linear-gradient(45deg, #b9f2ff, #a9c9ff, #d3baff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: bold;
+    animation: fame-diamond-shine 3s infinite;
+}
+
+@keyframes fame-diamond-shine {
+    0%, 100% { text-shadow: 0 0 6px #a9c9ff; }
+    50% { text-shadow: 0 0 12px #ffffff; }
+}
+
+/* 추가할 코드 */
+/* --- Pet Fusion System Styles --- */
+#fusion-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-around;
+    height: 100%;
+    padding: 20px;
+    gap: 20px;
+}
+
+#fusion-process-ui {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    width: 100%;
+}
+
+.fusion-slot-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.fusion-slot {
+    width: 160px;
+    height: 160px;
+    border: 3px dashed var(--border-color);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    background-color: rgba(0,0,0,0.2);
+}
+
+.fusion-slot.filled {
+    border-style: solid;
+    border-color: var(--epic-color);
+}
+
+.fusion-slot:hover {
+    background-color: rgba(255,255,255,0.05);
+}
+
+.fusion-slot .inventory-item {
+    border: none;
+    background: transparent;
+    cursor: grab;
+    width: 100%;
+    height: 100%;
+}
+
+.fusion-slot-placeholder {
+    color: var(--text-muted);
+    text-align: center;
+    font-size: 1.1em;
+}
+
+.fusion-pet-info {
+    font-size: 1em;
+    color: var(--text-color);
+    text-align: center;
+    height: 2em; /* 정보 텍스트 높이 고정 */
+}
+
+.fusion-indicator {
+    font-size: 3em;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+#fusion-timer-ui {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    text-align: center;
+}
+
+.fusion-result-preview {
+    width: 180px;
+    height: 180px;
+    animation: pulse-orange 2s infinite; /* 강화 이펙트 재활용 */
+}
+.fusion-result-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+#fusion-timer-ui h3 {
+    font-size: 1.8em;
+}
+
+#fusion-timer {
+    font-size: 2.2em;
+    font-weight: bold;
+    color: var(--success-color);
+}
+
+.fusion-controls {
+    text-align: center;
+}
+
+#fusion-rules {
+    color: var(--text-muted);
+    margin-bottom: 15px;
+    line-height: 1.6;
+}
+
+
+.board-modal-content {
+    max-width: 1500px; 
+    width: 95%;
+flex-direction: column;
+}
+
+#board-main-container {
+    flex-grow: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.board-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-shrink: 0;
+}
+
+.board-tabs {
+    display: flex;
+    gap: 10px;
+}
+
+.board-tab-button {
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 1.1em;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+}
+
+.board-tab-button.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.board-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.board-table th, .board-table td {
+    padding: 12px;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.board-table th {
+    background-color: rgba(0,0,0,0.2);
+}
+
+.board-table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.board-table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.board-table .col-category { width: 10%; }
+.board-table .col-title { width: 50%; text-align: left; } /* 너비를 늘려 가독성 확보 */
+.board-table .col-author { width: 15%; }
+.board-table .col-likes { width: 10%; } /* 너비를 조금 늘림 */
+.board-table .col-date { width: 15%; }
+
+.post-title-content.notice { /* 공지사항 제목 스타일 */
+    font-weight: bold;
+    color: var(--success-color);
+    animation: fame-diamond-shine 2.5s infinite; /* 명성 스타일 재활용 */
+}
+.post-title-content .comment-count {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    margin-left: 8px;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 20px;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.pagination button {
+    background: var(--bg-color-dark);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.pagination button.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    font-weight: bold;
+}
+.pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#board-detail-view, #board-write-view {
+    display: none;
+    flex-direction: column;
+    height: 100%; /* ◀◀ 이 줄을 추가 (또는 기존 값을 100%로 변경) */
+}
+
+#post-content-area {
+    padding: 20px;
+    background-color: rgba(0,0,0,0.1);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    flex-grow: 1;      /* ◀ 남는 공간을 모두 차지하도록 설정 */
+    overflow-y: auto;  /* ◀ 내용이 길어지면 이 안에서 스크롤됨 */
+    min-height: 0;     /* ◀ flex 자식 요소의 스크롤을 위한 중요 속성 */
+}
+#post-content-area .post-header h3 { font-size: 1.8em; margin-bottom: 10px; }
+#post-content-area .post-meta { color: var(--text-muted); margin-bottom: 20px; }
+#post-content-area .post-body { font-size: 1.1em; line-height: 1.8; white-space: pre-wrap; word-break: break-word; }
+#post-content-area .post-actions { margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end; }
+#post-like-btn { background: var(--success-color); }
+
+#post-comment-area {
+    margin-top: auto;
+    flex-shrink: 0;         /* 크기가 줄어들지 않도록 함 */
+    max-height: 35%;        /* 화면 높이의 최대 45%까지만 커지도록 제한 */
+    display: flex;          /* 내부 요소(목록, 입력창)를 제어하기 위해 flex로 설정 */
+    flex-direction: column;
+}
+/* 댓글 목록 (가장 중요) */
+#comment-list {
+    overflow-y: auto;       /* ◀ 댓글이 많아지면 여기에 스크롤바가 생김 */
+    flex-grow: 1;           /* ◀ 댓글 영역 내부에서 남는 공간을 모두 차지 */
+    margin-bottom: 10px;
+}
+.comment-item { display: flex; flex-direction: column; padding: 10px; border-bottom: 1px solid var(--bg-color-dark); }
+.comment-author { font-weight: bold; margin-bottom: 5px; }
+.comment-content { flex-grow: 1; }
+.comment-actions { display: flex; align-items: center; gap: 15px; margin-top: 5px; font-size: 0.9em; }
+.comment-actions .like-btn { cursor: pointer; }
+.comment-actions .delete-btn { color: var(--fail-color); cursor: pointer; margin-left: auto; }
+
+#comment-form {
+    flex-shrink: 0; /* 크기가 고정되도록 함 */
+}
+#comment-form textarea {
+    flex-grow: 1;
+    height: 80px;
+    background-color: #2c2f3b;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 10px;
+    border-radius: 4px;
+    resize: vertical;
+    font-size: 1em;
+    line-height: 1.5;
+}
+#comment-form textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 5px var(--primary-color);
+}
+
+#comment-form button {
+    flex-shrink: 0;
+    width: 100px;
+    font-weight: bold;
+    background-color: var(--primary-color);
+    border: none;
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#comment-form button:hover {
+    background-color: #0056b3;
+}
+
+#board-write-view h3 { text-align: center; margin-bottom: 20px; }
+#post-form { display: flex; flex-direction: column; gap: 15px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group label { font-weight: bold; }
+.form-group input, .form-group select, .form-group textarea {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color-dark);
+    color: var(--text-color);
+    border-radius: 4px;
+    font-size: 1em;
+}
+.form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+
+/* 추가할 코드 */
+/* --- Comment Form UI Improvement --- */
+#comment-form {
+    display: flex;
+    align-items: stretch; /* 높이를 맞춰줌 */
+    gap: 10px;
+}
+
+#comment-form textarea {
+    flex-grow: 1;
+    resize: none;
+    padding: 10px;
+    height: 60px; /* 버튼과 높이를 맞추기 위한 초기 높이 */
+    line-height: 1.5;
+}
+
+#comment-form button {
+    flex-shrink: 0; /* 버튼 크기가 줄어들지 않도록 함 */
+    padding: 0 25px;
+    font-weight: bold;
+    background-color: var(--success-color);
+    transition: background-color 0.2s;
+}
+
+#comment-form button:hover {
+    background-color: #2ca04c;
+}
+
+.main-content-wrapper {
+    display: flex;
+    flex-direction: row; /* 이 래퍼가 좌우 배치를 담당 */
+    gap: 15px;           /* 기존 섹터 간의 간격 */
+    flex-grow: 1;
+    min-height: 0;
+}
+
+
+
+/* styles.css 파일 맨 아래에 추가 */
+
+/* --- 게시판 개편 스타일 --- */
+
+/* 모달 크기 확장 및 배경 개선 */
+.board-modal-content {
+    max-width: 1200px;
+    width: 95%;
+    height: 90vh; /* 높이도 확장 */
+    background-color: #1a1c23; /* 살짝 다른 배경색으로 구분 */
+}
+
+/* 게시글 상세 보기 레이아웃 */
+#board-detail-view {
+    display: none; /* 평소엔 숨김 */
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden; /* 내부에서 스크롤 관리 */
+}
+
+#post-content-area {
+    padding: 0;
+    margin: 0;
+    background: none;
+    overflow-y: auto; /* 내용이 길면 스크롤 */
+    flex-grow: 1;
+}
+
+.post-view-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+.post-view-header h3 {
+    font-size: 2em;
+    margin-bottom: 15px;
+}
+.post-view-header .post-meta {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    color: var(--text-muted);
+}
+
+/* DCInside 스타일 본문 영역 */
+.post-view-body {
+    padding: 25px 20px;
+    font-size: 1.1em;
+    line-height: 1.8;
+    min-height: 200px; /* 최소 높이 보장 */
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-color-dark);
+}
+
+/* styles.css에서 이 부분을 찾아 통째로 교체하세요. */
+.post-comments-section {
+    padding: 20px;
+    overflow-y: auto; /* 댓글이 많아지면 스크롤 가능하도록 */
+    flex-shrink: 0; /* 크기가 줄어들지 않도록 */
+    min-height: 100px; /* 최소 높이 설정 (필요에 따라 조절) */
+}
+
+.post-view-actions {
+    padding: 15px 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    background-color: var(--bg-color-dark);
+}
+
+.post-view-container {
+    padding: 20px;
+    overflow-y: auto; /* 내용이 많아지면 스크롤 가능하도록 */
+    flex-grow: 1; /* 남은 공간을 모두 차지하도록 설정 */
+    border-bottom: 1px solid var(--border-color); /* 댓글과의 구분선 */
+    position: relative; /* 버튼 위치 설정을 위해 필요 */
+}
+
+/* 댓글 영역 스타일 */
+#post-comment-area {
+    background-color: #1a1c23;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+#comment-list {
+    margin: 0;
+    max-height: none; /* 스크롤은 부모에서 하므로 제거 */
+}
+
+.comment-item {
+    padding: 15px 10px;
+    border-top: 1px solid rgba(128, 128, 128, 0.2); /* 명확한 경계선 */
+    display: flex;
+    gap: 15px;
+}
+.comment-item:first-child {
+    border-top: none;
+}
+.comment-author-section {
+    flex-shrink: 0;
+    width: 150px;
+}
+.comment-author-section .comment-author {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+}
+.comment-author-section .comment-date {
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.comment-content-section {
+    flex-grow: 1;
+}
+.comment-content-section .comment-content {
+    line-height: 1.6;
+    word-break: break-word; /* 긴 글 자동 줄바꿈 */
+}
+.comment-content-section .comment-actions {
+    margin-top: 10px;
+    font-size: 0.9em;
+    text-align: right;
+}
+
+/* 댓글 입력창 디자인 개선 */
+.comment-write-form {
+    display: flex;
+    gap: 10px;
+    padding: 15px;
+    border-top: 2px solid var(--border-color);
+    background-color: var(--bg-color-dark);
+}
+.comment-write-form textarea {
+    flex-grow: 1;
+    height: 80px;
+    background-color: #2c2f3b;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 10px;
+    border-radius: 4px;
+    resize: vertical;
+}
+.comment-write-form button {
+    flex-shrink: 0;
+    width: 100px;
+    font-weight: bold;
+    background-color: var(--primary-color);
+    border: none;
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.comment-write-form button:hover {
+    background-color: #0056b3;
+}
+
+/* styles.css 파일 맨 아래에 추가 */
+
+/* --- 댓글 입력창 디자인 개선 --- */
+.comment-write-form {
+    display: flex;
+    gap: 10px;
+    padding: 15px;
+    border-top: 2px solid var(--border-color);
+    background-color: var(--bg-color-dark);
+}
+
+.comment-write-form textarea {
+    flex-grow: 1;
+    height: 80px; /* 높이 조절 */
+    background-color: #2c2f3b; /* 어두운 배경색 */
+    border: 1px solid var(--border-color); /* 테두리 색상 */
+    color: var(--text-color); /* 글자 색상 */
+    padding: 10px;
+    border-radius: 4px;
+    resize: vertical; /* 세로 크기 조절 가능 */
+    font-size: 1em; /* 폰트 크기 */
+    line-height: 1.5; /* 줄 간격 */
+}
+
+/* 텍스트 입력창을 클릭(포커스)했을 때 효과 */
+.comment-write-form textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 5px var(--primary-color);
+}
+
+.comment-write-form button {
+    flex-shrink: 0;
+    width: 100px;
+    font-weight: bold;
+    background-color: var(--primary-color);
+    border: none;
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.comment-write-form button:hover {
+    background-color: #0056b3;
+}
+
+/* styles.css 파일 맨 아래에 추가 */
+
+/* --- 댓글 디자인 전면 개편 --- */
+
+/* 댓글 영역 전체 배경 */
+#post-comment-area {
+    background-color: var(--bg-color-dark); /* 전체 댓글 영역에 배경색 추가 */
+    border-top: 1px solid var(--border-color);
+    padding-top: 10px;
+}
+
+#comment-list {
+    border-top: 1px solid var(--border-color); /* 목록 시작 전 경계선 */
+}
+
+/* 개별 댓글 아이템 스타일 */
+.comment-item-new {
+    padding: 15px;
+    border-bottom: 1px solid var(--border-color); /* 댓글 간 경계선 */
+    background-color: rgba(0, 0, 0, 0.1); /* 각 댓글에 살짝 배경을 줌 */
+}
+
+/* 댓글 내용 부분 (닉네임 + 내용) */
+.comment-main-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px; /* 닉네임과 댓글 내용 사이 간격 */
+    line-height: 1.6;
+    word-break: break-word;
+}
+.comment-author-new {
+    font-weight: bold;
+    flex-shrink: 0; /* 닉네임이 줄어들지 않도록 */
+}
+
+/* 댓글 메타 정보 부분 (날짜 + 버튼) */
+.comment-meta-new {
+    display: flex;
+    justify-content: space-between; /* 양쪽 끝으로 정렬 */
+    align-items: center;
+    margin-top: 8px;
+    padding-left: 10px; /* 내용과 살짝 들여쓰기 */
+}
+.comment-date-new {
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+.comment-actions-new {
+    display: flex;
+    gap: 15px;
+    font-size: 0.9em;
+}
+.comment-actions-new .like-btn,
+.comment-actions-new .delete-btn {
+    color: var(--text-muted);
+    transition: color 0.2s;
+}
+.comment-actions-new .like-btn:hover,
+.comment-actions-new .delete-btn:hover {
+    color: var(--text-color);
+}
+
+.detail-view-controls {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+#board-back-arrow-btn {
+    background-color: var(--surface-color);
+}
+
+/* 공지사항 제목 빛나는 효과 */
+.post-title-content.notice {
+    font-weight: bold;
+    color: var(--success-color);
+    text-shadow: 0 0 8px var(--success-color);
+}
+
+/* styles.css 파일 맨 아래에 추가 */
+.editor-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 5px;
+}
+.html-editor {
+    height: 300px;
+    background-color: #1a1c23;
+    border: 1px solid var(--border-color);
+    color: #f5f5f7;
+    font-family: monospace;
+    font-size: 1em;
+    padding: 10px;
+    resize: vertical;
+}
+
+.action-btn.equip-btn {
+    background-color: var(--success-color);
+}
+.action-btn.equip-btn:hover {
+    background-color: #2ca04c;
+}
+
+#online-users-list .user-item-name.Common,
+#ranking-list .Common,
+.record-item .Common {
+    color: var(--common-color) !important;
+}
+#online-users-list .user-item-name.Rare,
+#ranking-list .Rare,
+.record-item .Rare {
+    color: var(--rare-color) !important;
+}
+#online-users-list .user-item-name.Legendary,
+#ranking-list .Legendary,
+.record-item .Legendary {
+    color: var(--legendary-color) !important;
+}
+#online-users-list .user-item-name.Epic,
+#ranking-list .Epic,
+.record-item .Epic {
+    color: var(--epic-color) !important;
+}
+#online-users-list .user-item-name.Mystic,
+#ranking-list .Mystic,
+.record-item .Mystic {
+    color: var(--mystic-color) !important;
+}
+
+/* 랭킹/기록창의 닉네임에도 색상이 적용되도록 추가 */
+#ranking-list .rank-name,
+.record-item .rank-name {
+    font-weight: 700;
+}
+.post-actions {
+    position: absolute; /* post-view-container 기준으로 위치 설정 */
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 10px;
 }

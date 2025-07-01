@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>무한의 탑</title>
     <link rel="stylesheet" href="styles.css">
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
     <script>
       if (/Mobi|Android/i.test(navigator.userAgent)) {
         document.documentElement.classList.add('is-mobile');
@@ -30,16 +32,16 @@
 
         <div class="top-bar">
             <div id="user-info">
-                <span id="welcome-username"></span>님 환영합니다!
+                <span id="fame-icon"></span><span id="welcome-username"></span>님 환영합니다!
             </div>
             <div class="top-buttons">
                 <button id="auction-button">⚖️ 거래소</button>
                 <button id="ranking-button">🏆 랭킹</button>
                 <button id="loot-record-button">💎 득템</button>
                 <button id="enhancement-record-button">✨ 강화</button>
+                <button id="board-button">📜 게시판</button>
                 <button id="online-users-button">👥 접속자</button>
             </div>
-            
             <div class="top-bar-right">
                 <div id="zoom-controls">
                     <button id="zoom-out-btn" class="zoom-button">-</button>
@@ -50,20 +52,22 @@
         </div>
         
         <div class="game-container">
-            <div id="world-boss-container" class="world-boss-panel" style="display: none;">
-                <div class="character-header">
-                    <h2 id="world-boss-name"></h2>
-                    <button id="attack-target-toggle-btn">일반 몬스터 공격</button>
-                </div>
-                <div class="hp-bar">
-                    <div class="hp-bar-inner" id="world-boss-hp-bar"></div>
-                    <div class="hp-bar-text" id="world-boss-hp-text"></div>
-                </div>
-                <div id="world-boss-contribution">내 기여도: 0 (0.00%)</div>
-            </div>
+    <div id="world-boss-container" class="world-boss-panel" style="display: none; margin-bottom: 15px;">
+        <div class="character-header">
+            <h2 id="world-boss-name"></h2>
+            <button id="attack-target-toggle-btn" class="explore">월드 보스 공격</button>
+        </div>
+        <div class="hp-bar">
+            <div id="world-boss-hp-bar" class="hp-bar-inner"></div>
+            <div id="world-boss-hp-text" class="hp-bar-text"></div>
+        </div>
+        <div id="world-boss-contribution"></div>
+    </div>
+  <div class="main-content-wrapper">
 
-            <header class="battle-panel">
-                <div id="damage-container"></div>
+
+            <div class="left-sector">
+
                 <div class="character-panel player-panel">
                     <div class="character-header">
                         <h2>플레이어</h2>
@@ -77,16 +81,16 @@
                         <div class="stat-row" data-stat-row="hp"><span class="stat-name">❤️ 총 체력</span><span class="stat-value" id="total-hp"></span><div class="button-group"><button class="upgrade-btn" data-stat="hp" data-amount="1">+1</button><button class="upgrade-btn" data-stat="hp" data-amount="10">+10</button><button class="upgrade-btn" data-stat="hp" data-amount="100">+100</button><button class="upgrade-btn" data-stat="hp" data-amount="MAX">MAX</button></div></div>
                         <div class="stat-row" data-stat-row="attack"><span class="stat-name">⚔️ 총 공격력</span><span class="stat-value" id="total-attack"></span><div class="button-group"><button class="upgrade-btn" data-stat="attack" data-amount="1">+1</button><button class="upgrade-btn" data-stat="attack" data-amount="10">+10</button><button class="upgrade-btn" data-stat="attack" data-amount="100">+100</button><button class="upgrade-btn" data-stat="attack" data-amount="MAX">MAX</button></div></div>
                         <div class="stat-row" data-stat-row="defense"><span class="stat-name">🛡️ 총 방어력</span><span class="stat-value" id="total-defense"></span><div class="button-group"><button class="upgrade-btn" data-stat="defense" data-amount="1">+1</button><button class="upgrade-btn" data-stat="defense" data-amount="10">+10</button><button class="upgrade-btn" data-stat="defense" data-amount="100">+100</button><button class="upgrade-btn" data-stat="defense" data-amount="MAX">MAX</button></div></div>
+                        <div class="stat-row-monster"><span class="stat-name">💥 치명타 확률</span><span class="stat-value" id="crit-chance"></span></div>
+                        <div class="stat-row-monster"><span class="stat-name">🔰 치명타 저항</span><span class="stat-value" id="crit-resistance"></span></div>
                     </div>
-
                     <div class="equipment-section">
                         <div class="equipment-slots">
                             <div class="slot" id="weapon-slot" data-slot="weapon"></div>
                             <div class="slot" id="armor-slot" data-slot="armor"></div>
                             <div class="slot" id="pet-slot" data-slot="pet"></div>
                         </div>
-                        <div class="artifact-sockets" id="artifact-sockets">
-                            </div>
+                        <div class="artifact-sockets" id="artifact-sockets"></div>
                     </div>
                 </div>
                 
@@ -107,9 +111,11 @@
                         <div class="stat-row-monster"><span>🛡️ 방어력</span><span id="monster-defense"></span></div>
                     </div>
                 </div>
-            </header>
+            </div>
 
-            <main class="management-panel">
+
+
+            <main class="management-panel right-sector">
                 <div class="tabs">
                     <button class="tab-button active" data-tab="weapon-inventory-tab">무기</button>
                     <button class="tab-button" data-tab="armor-inventory-tab">방어구</button>
@@ -117,18 +123,21 @@
                     <button class="tab-button" data-tab="pet-inventory-tab">펫</button>
                     <button class="tab-button" data-tab="incubator-tab">부화기</button>
                     <button class="tab-button" data-tab="enhancement-tab">강화</button>
+                    <button class="tab-button" data-tab="fusion-tab">융합</button>
                     <button class="tab-button" data-tab="log-tab">로그</button>
                     <button class="tab-button" data-tab="chat-tab">채팅</button>
                 </div>
 
                 <div class="tab-content active" id="weapon-inventory-tab">
                     <div class="inventory-header"><p class="inventory-tip">아이템을 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p></div>
-    <div class="inventory-container"> <div id="weapon-inventory" class="inventory-grid"></div>
-        <div id="weapon-interaction-panel" class="interaction-panel"></div> </div>
-</div>
+                    <div class="inventory-container">
+                        <div id="weapon-inventory" class="inventory-grid"></div>
+                        <div id="weapon-interaction-panel" class="interaction-panel"></div>
+                    </div>
+                </div>
 
                 <div class="tab-content" id="armor-inventory-tab">
-                     <div class="inventory-header"><p class="inventory-tip">아이템을 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p></div>
+                    <div class="inventory-header"><p class="inventory-tip">아이템을 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p></div>
                     <div id="armor-inventory" class="inventory-grid"></div>
                 </div>
 
@@ -172,12 +181,47 @@
                                 <input type="checkbox" id="use-prevention-ticket" disabled>
                                 <label for="use-prevention-ticket">파괴 방지권 사용</label>
                             </div>
-                             <div class="checkbox-wrapper">
+                            <div class="checkbox-wrapper">
                                 <input type="checkbox" id="use-hammer-ticket" disabled>
                                 <label for="use-hammer-ticket">헤파이토스의 망치 사용 (+15%p)</label>
                             </div>
                         </div>
                         <button class="enhance-execute-btn" id="enhance-button" disabled>강 화</button>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="fusion-tab">
+                    <div id="fusion-container">
+                        <div id="fusion-process-ui">
+                            <div class="fusion-slot-wrapper">
+                                <div class="fusion-slot" id="fusion-slot-1" data-slot-index="1">
+                                    <span class="fusion-slot-placeholder">재료1 (에픽 펫)</span>
+                                </div>
+                                <div class="fusion-pet-info" id="fusion-pet-info-1"></div>
+                            </div>
+                            <div class="fusion-indicator">+</div>
+                            <div class="fusion-slot-wrapper">
+                                <div class="fusion-slot" id="fusion-slot-2" data-slot-index="2">
+                                    <span class="fusion-slot-placeholder">재료2 (에픽 펫)</span>
+                                </div>
+                                <div class="fusion-pet-info" id="fusion-pet-info-2"></div>
+                            </div>
+                        </div>
+                        <div id="fusion-timer-ui" style="display: none;">
+                            <div class="fusion-result-preview">
+                                <img src="/image/egg_mythic.png" alt="융합 중">
+                            </div>
+                            <h3>융합 진행 중...</h3>
+                            <div id="fusion-timer">12:00:00</div>
+                            <p>완료 시 새로운 펫이 펫 인벤토리로 지급됩니다.</p>
+                        </div>
+                        <div class="fusion-controls">
+                            <p id="fusion-rules">
+                                규칙: 서로 다른 속성(물, 불, 바람)의 에픽 펫 2마리를 재료로 사용합니다.<br>
+                                비용: <span class="gold-text">100,000,000 G</span>
+                            </p>
+                            <button id="fusion-start-button" class="enhance-execute-btn" disabled>융합 시작</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -190,6 +234,7 @@
                     </form>
                 </div>
             </main>
+            
         </div>
     </div>
     
@@ -244,8 +289,94 @@
         </div>
     </div>
 
+    <div id="board-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content board-modal-content">
+            <span class="close-button" id="board-close-button">&times;</span>
+            <h2>📜 커뮤니티 게시판</h2>
+            <div id="board-main-container">
+                <div id="board-list-view">
+                    <div class="board-header">
+                        <div class="board-tabs">
+                            <button class="board-tab-button active" data-category="자유">자유</button>
+                            <button class="board-tab-button" data-category="공략">공략</button>
+                            <button class="board-tab-button" data-category="공지">공지</button>
+                        </div>
+                        <button id="board-write-post-btn" class="action-btn">글쓰기</button>
+                    </div>
+                    <table class="board-table">
+                        <thead>
+                            <tr>
+                                <th class="col-category">분류</th>
+                                <th class="col-title">제목</th>
+                                <th class="col-author">작성자</th>
+                                <th class="col-likes">추천</th>
+                                <th class="col-date">날짜</th>
+                            </tr>
+                        </thead>
+                        <tbody id="board-post-list"></tbody>
+                    </table>
+                    <div id="board-pagination" class="pagination"></div>
+                </div>
+                <div id="board-detail-view" style="display: none;">
+    <div class="detail-view-controls">
+        <button id="board-back-arrow-btn" class="action-btn">←</button>
+        <button id="board-back-to-list-btn" class="action-btn">목록으로</button>
+    </div>
+                    <div id="post-content-area"></div>
+                    <div id="post-comment-area">
+                        <h4>댓글</h4>
+                        <div id="comment-list"></div>
+                        <form id="comment-form">
+                            <textarea id="comment-input" placeholder="댓글을 입력하세요..." required></textarea>
+                            <button type="submit">등록</button>
+                        </form>
+                    </div>
+                    <button id="board-back-to-list-btn" class="action-btn">목록으로</button>
+                </div>
+                <div id="board-write-view" style="display: none;">
+                    <h3>게시글 작성</h3>
+                    <form id="post-form">
+                        <input type="hidden" id="post-edit-id">
+                        <div class="form-group">
+                            <label for="post-category">분류</label>
+                            <select id="post-category" required>
+                                <option value="자유">자유</option>
+                                <option value="공략">공략</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="post-title">제목</label>
+                            <input type="text" id="post-title" placeholder="제목을 입력하세요" required>
+                        </div>
+<div class="form-group">
+    <label for="post-content-input">내용</label>
+    <div class="editor-mode-toggle">
+        <input type="checkbox" id="html-mode-checkbox">
+        <label for="html-mode-checkbox">HTML</label>
+    </div>
+</div>
+<div class="form-group">
+    <div id="editor-container" style="height: 300px;"></div>
+<textarea id="html-editor-textarea" class="html-editor" style="display: none;"></textarea>
+</div>
+                        <div class="form-actions">
+                            <button type="submit" id="post-submit-btn" class="action-btn">등록하기</button>
+                            <button type="button" id="board-cancel-btn" class="action-btn sell-btn">취소</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+<div id="user-info-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 700px;">
+        <span class="close-button">&times;</span>
+        <div id="user-info-modal-content">
+            </div>
+    </div>
+</div>
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/drag-dro-touch@1.3.1/drag-dro-touch.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/drag-dro-touch@1.3.1/drag-dro-touch.js"></script>
 </body>
 </html>
