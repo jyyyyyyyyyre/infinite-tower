@@ -464,25 +464,6 @@ backArrowBtn.addEventListener('click', () => showBoardView('list'));
     
     elements.board.cancelBtn.addEventListener('click', () => showBoardView('list'));
 
-    elements.board.postForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const data = {
-            category: elements.board.postCategory.value,
-            title: elements.board.postTitle.value,
-        content: quillEditor.root.innerHTML,
-        postId: elements.board.postEditId.value || null
-        };
-        const eventName = data.postId ? 'board:updatePost' : 'board:createPost';
-        socket.emit(eventName, data, (success) => {
-            if (success) {
-                currentBoardPage = 1;
-                fetchAndRenderPosts(data.category, 1);
-            } else {
-                alert('글 처리 중 오류가 발생했습니다.');
-            }
-        });
-    });
-
     elements.board.postContentArea.addEventListener('click', (e) => {
         const action = e.target.id;
 
