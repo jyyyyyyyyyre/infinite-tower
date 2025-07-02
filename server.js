@@ -1670,15 +1670,43 @@ async function onWorldBossDefeated() {
     console.log('[월드보스] 처치되어 보상 분배를 시작합니다.');
     worldBossState.isActive = false;
     await WorldBossState.updateOne({ uniqueId: 'singleton' }, { $set: { isActive: false, currentHp: 0 } });
+    
     const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + p.damageDealt, 0);
     if (totalDamage <= 0) {
         io.emit('worldBossDefeated');
         worldBossState = null;
         return;
     }
+    
     const defeatedMessage = `[월드보스] 🔥 ${worldBossState.name} 🔥 처치 완료! 보상 분배를 시작합니다.`;
     io.emit('globalAnnouncement', defeatedMessage);
     io.emit('chatMessage', { isSystem: true, message: defeatedMessage });
+
+    // ----- [추가된 코드] 월드보스 참여 상자 지급 로직 -----
+    const participationBoxMessage = "[월드보스] 토벌에 참여한 모든 용사에게 '월드보스 참여 상자'가 지급됩니다!";
+    io.emit('chatMessage', { isSystem: true, message: participationBoxMessage });
+
+    for (const [userId, participant] of worldBossState.participants.entries()) {
+        if (participant.damageDealt > 0) { // 피해를 입힌 경우에만 지급
+            const boxItem = createItemInstance('boss_participation_box');
+            if (!boxItem) continue;
+
+            const onlinePlayer = onlinePlayers[userId];
+            if (onlinePlayer) {
+                handleItemStacking(onlinePlayer, boxItem);
+                pushLog(onlinePlayer, "[월드보스] 참여 보상으로 '월드보스 참여 상자' 1개를 획득했습니다.");
+            } else {
+                // 오프라인 유저 처리
+                const playerData = await GameData.findOne({ user: userId });
+                if (playerData) {
+                    handleItemStacking(playerData, boxItem);
+                    await playerData.save();
+                }
+            }
+        }
+    }
+    // ----- [코드 추가 끝] -----
+
     const sortedParticipants = Array.from(worldBossState.participants.entries()).sort((a, b) => b[1].damageDealt - a[1].damageDealt);
     io.emit('chatMessage', { isSystem: true, message: "<b>[월드보스] ✨ 기여도 랭킹 ✨</b>" });
     io.emit('chatMessage', { isSystem: true, message: "====================" });
@@ -1800,6 +1828,9 @@ async function onWorldBossDefeated() {
     if (worldBossTimer) clearTimeout(worldBossTimer);
     worldBossTimer = setTimeout(spawnWorldBoss, WORLD_BOSS_CONFIG.SPAWN_INTERVAL);
 }
+
+
+
 
 async function listOnAuction(player, { uid, price, quantity }) { if (!player || !uid || !price || !quantity) return; const nPrice = parseInt(price, 10); const nQuantity = parseInt(quantity, 10); if (isNaN(nPrice) || nPrice <= 0 || isNaN(nQuantity) || nQuantity <= 0) { pushLog(player, '[거래소] 올바른 가격과 수량을 입력하세요.'); return; } const itemIndex = player.inventory.findIndex(i => i.uid === uid); if (itemIndex === -1) { pushLog(player, '[거래소] 인벤토리에 없는 아이템입니다.'); return; } const itemInInventory = player.inventory[itemIndex]; if (itemInInventory.quantity < nQuantity) { pushLog(player, '[거래소] 보유한 수량보다 많이 등록할 수 없습니다.'); return; } try { let itemForAuction; if (itemInInventory.quantity === nQuantity) { itemForAuction = player.inventory.splice(itemIndex, 1)[0]; } else { itemInInventory.quantity -= nQuantity; itemForAuction = { ...itemInInventory, quantity: nQuantity, uid: Date.now() + Math.random().toString(36).slice(2, 11) }; } const auctionItem = new AuctionItem({ sellerId: player.user, sellerUsername: player.username, item: itemForAuction, price: nPrice }); await auctionItem.save(); pushLog(player, `[거래소] ${itemForAuction.name} (${nQuantity}개) 을(를) 개당 ${nPrice.toLocaleString()} G에 등록했습니다.`); const itemNameHTML = `<span class="${itemForAuction.grade}">${itemForAuction.name}</span>`; const announcementMessage = `[거래소] ${player.username}님이 ${itemNameHTML} 아이템을 등록했습니다.`; io.emit('chatMessage', { isSystem: true, message: announcementMessage }); io.emit('auctionUpdate'); } catch (e) { console.error('거래소 등록 오류:', e); pushLog(player, '[거래소] 아이템 등록에 실패했습니다.'); } }
 async function buyFromAuction(player, { listingId, quantity }) { if (!player || !listingId || !quantity) return; const amountToBuy = parseInt(quantity, 10); if (isNaN(amountToBuy) || amountToBuy <= 0) { player.socket.emit('serverAlert', '유효한 구매 수량을 입력해주세요.'); return; } try { const listing = await AuctionItem.findById(listingId); if (!listing) { pushLog(player, '[거래소] 이미 판매되었거나 존재하지 않는 물품입니다.'); io.emit('auctionUpdate'); return; } if (listing.sellerId.toString() === player.user.toString()) { player.socket.emit('serverAlert', '자신이 등록한 물품은 구매할 수 없습니다.'); return; } if (listing.item.quantity < amountToBuy) { player.socket.emit('serverAlert', '구매하려는 수량이 재고보다 많습니다.'); return; } const totalPrice = listing.price * amountToBuy; if (player.gold < totalPrice) { const feedbackMsg = `골드가 부족하여 구매에 실패했습니다.\n\n필요 골드: ${totalPrice.toLocaleString()} G\n보유 골드: ${player.gold.toLocaleString()} G`; player.socket.emit('serverAlert', feedbackMsg); return; } await GameData.updateOne({ user: player.user }, { $inc: { gold: -totalPrice } }); player.gold -= totalPrice; const boughtItem = { ...listing.item, quantity: amountToBuy }; handleItemStacking(player, boughtItem); const sellerId = listing.sellerId; const seller = onlinePlayers[sellerId.toString()]; await GameData.updateOne({ user: sellerId }, { $inc: { gold: totalPrice } }); if (seller) { seller.gold += totalPrice; pushLog(seller, `[거래소] ${listing.item.name} ${amountToBuy}개 판매 대금 ${totalPrice.toLocaleString()} G가 입금되었습니다.`); sendState(seller.socket, seller, calcMonsterStats(seller)); } listing.item.quantity -= amountToBuy; if (listing.item.quantity <= 0) { await AuctionItem.findByIdAndDelete(listingId); } else { await AuctionItem.findByIdAndUpdate(listingId, { $set: { item: listing.item } }); } const itemNameHTML = `<span class="${listing.item.grade}">${listing.item.name}</span>`; const announcementMessage = `[거래소] ${listing.sellerUsername}님이 등록한 ${itemNameHTML} 아이템을 ${player.username}님이 구매했습니다.`; io.emit('chatMessage', { isSystem: true, message: announcementMessage }); pushLog(player, `[거래소] ${listing.sellerUsername}님으로부터 ${listing.item.name} ${amountToBuy}개를 ${totalPrice.toLocaleString()} G에 구매했습니다.`); io.emit('auctionUpdate'); } catch (e) { console.error('거래소 구매 오류:', e); pushLog(player, '[거래소] 아이템 구매에 실패했습니다.'); } }
@@ -1923,21 +1954,48 @@ async function spawnWorldBoss() {
     io.emit('chatMessage', { isSystem: true, message: `[월드보스] 거대한 악의 기운과 함께 파멸의 군주가 모습을 드러냈습니다!` });
     io.emit('globalAnnouncement', `[월드보스] ${worldBossState.name}가 출현했습니다!`);
 }
-
 async function onWorldBossDefeated() {
     if (!worldBossState || !worldBossState.isActive) return;
     console.log('[월드보스] 처치되어 보상 분배를 시작합니다.');
     worldBossState.isActive = false;
     await WorldBossState.updateOne({ uniqueId: 'singleton' }, { $set: { isActive: false, currentHp: 0 } });
+    
     const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + p.damageDealt, 0);
     if (totalDamage <= 0) {
         io.emit('worldBossDefeated');
         worldBossState = null;
         return;
     }
+    
     const defeatedMessage = `[월드보스] 🔥 ${worldBossState.name} 🔥 처치 완료! 보상 분배를 시작합니다.`;
     io.emit('globalAnnouncement', defeatedMessage);
     io.emit('chatMessage', { isSystem: true, message: defeatedMessage });
+
+    // ----- [추가된 코드] 월드보스 참여 상자 지급 로직 -----
+    const participationBoxMessage = "[월드보스] 토벌에 참여한 모든 등반자에게 '월드보스 참여 상자'가 지급됩니다!";
+    io.emit('chatMessage', { isSystem: true, message: participationBoxMessage });
+
+    for (const [userId, participant] of worldBossState.participants.entries()) {
+        if (participant.damageDealt > 0) { // 피해를 입힌 경우에만 지급
+            const boxItem = createItemInstance('boss_participation_box');
+            if (!boxItem) continue;
+
+            const onlinePlayer = onlinePlayers[userId];
+            if (onlinePlayer) {
+                handleItemStacking(onlinePlayer, boxItem);
+                pushLog(onlinePlayer, "[월드보스] 참여 보상으로 '월드보스 참여 상자' 1개를 획득했습니다.");
+            } else {
+                // 오프라인 유저 처리
+                const playerData = await GameData.findOne({ user: userId });
+                if (playerData) {
+                    handleItemStacking(playerData, boxItem);
+                    await playerData.save();
+                }
+            }
+        }
+    }
+    // ----- [코드 추가 끝] -----
+
     const sortedParticipants = Array.from(worldBossState.participants.entries()).sort((a, b) => b[1].damageDealt - a[1].damageDealt);
     io.emit('chatMessage', { isSystem: true, message: "<b>[월드보스] ✨ 기여도 랭킹 ✨</b>" });
     io.emit('chatMessage', { isSystem: true, message: "====================" });

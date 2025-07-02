@@ -123,15 +123,21 @@ function createFameUserHtml(username, score) {
 
 function createPlayerPanelHTML(player) {
     if (!player) return '<p>유저 정보를 찾을 수 없습니다.</p>';
+    
+    // 기존 무기, 방어구, 펫 정보에 액세서리 3종을 추가
     const weaponHTML = player.equipment?.weapon ? createItemHTML(player.equipment.weapon) : '⚔️<br>무기';
     const armorHTML = player.equipment?.armor ? createItemHTML(player.equipment.armor) : '🛡️<br>방어구';
     const petHTML = player.equippedPet ? createItemHTML(player.equippedPet) : '🐾<br>펫';
+    const necklaceHTML = player.equipment?.necklace ? createItemHTML(player.equipment.necklace) : '💍<br>목걸이';
+    const earringHTML = player.equipment?.earring ? createItemHTML(player.equipment.earring) : '👂<br>귀걸이';
+    const wristwatchHTML = player.equipment?.wristwatch ? createItemHTML(player.equipment.wristwatch) : '⏱️<br>손목시계';
     
     const artifactSocketsHTML = (player.unlockedArtifacts || []).map(artifact => 
         artifact 
         ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` 
         : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`
     ).join('');
+    
     return `
         <div class="character-panel player-panel" style="background: none; box-shadow: none;">
             <div class="character-header">
@@ -150,13 +156,15 @@ function createPlayerPanelHTML(player) {
                     <div class="slot">${weaponHTML}</div>
                     <div class="slot">${armorHTML}</div>
                     <div class="slot">${petHTML}</div>
+                    <div class="slot">${necklaceHTML}</div>
+                    <div class="slot">${earringHTML}</div>
+                    <div class="slot">${wristwatchHTML}</div>
                 </div>
                 <div class="artifact-sockets" style="margin-top: 15px;">${artifactSocketsHTML}</div>
             </div>
         </div>
     `;
 }
-
 function initializeGame(socket) {
 let quillEditor = null;
  let currentBoardCategory = '자유';
