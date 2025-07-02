@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.myUsername = decodedToken.username;
         window.myUserId = decodedToken.userId;
         
-        const socket = io({ auth: { token } });
+const socket = io({ auth: { token }, transports: ['websocket'] });
         socket.on('connect_error', (err) => { alert(err.message); localStorage.removeItem('jwt_token'); location.reload(); });
         initializeGame(socket);
     }
@@ -95,36 +95,41 @@ function createFameUserHtml(username, score) {
 }
 
  const createItemHTML = (item, options = {}) => {
-    const { showName = true } = options;
+
+    const { showName = true, showEffect = true } = options;
 
     if (!item) return '';
+
     let effectText = '';
-    if (item.type === 'weapon') {
-        let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
-        effectText = `⚔️공격력 +${(bonus * 100).toFixed(1)}%`;
-    } else if (item.type === 'armor') {
-        let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
-        effectText = `❤️🛡️체/방 +${(bonus * 100).toFixed(1)}%`;
-    } else if (item.type === 'accessory') { 
-        effectText = item.description || '특별한 힘을 가진 장신구';
-    } else if (item.type === 'pet') { 
-        effectText = item.description || '특별한 힘을 가진 펫';
-    } else { 
-        effectText = item.description || '다양한 효과를 가진 아이템'; 
+    if (showEffect) { 
+        if (item.type === 'weapon') {
+            let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
+            effectText = `⚔️공격력 +${(bonus * 100).toFixed(1)}%`;
+        } else if (item.type === 'armor') {
+            let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
+            effectText = `❤️🛡️체/방 +${(bonus * 100).toFixed(1)}%`;
+        } else if (item.type === 'accessory' || item.type === 'pet') {
+            effectText = item.description || '';
+        } else {
+            effectText = item.description || '';
+        }
     }
-   
-    const nameClass = item.grade || 'Common'; 
+
+
+    const nameClass = item.grade || 'Common';
     const nameHTML = showName ? `<div class="item-name ${nameClass}">${item.name}</div>` : '';
     const enhanceText = item.enhancement ? `<div class="item-enhancement-level">[+${item.enhancement}]</div>` : '';
     const quantityText = item.quantity > 1 ? `<div class="item-quantity">x${item.quantity}</div>` : '';
     const imageHTML = item.image ? `<div class="item-image"><img src="/image/${item.image}" alt="${item.name}" draggable="false"></div>` : '<div class="item-image"></div>';
-    return `${imageHTML}<div class="item-info">${nameHTML}<div class="item-effect">${effectText}</div></div>${quantityText}${enhanceText}`;
+
+    const effectHTML = effectText ? `<div class="item-effect">${effectText}</div>` : '';
+
+    return `${imageHTML}<div class="item-info">${nameHTML}${effectHTML}</div>${quantityText}${enhanceText}`;
 };
 
 function createPlayerPanelHTML(player) {
     if (!player) return '<p>유저 정보를 찾을 수 없습니다.</p>';
     
-    // 기존 무기, 방어구, 펫 정보에 액세서리 3종을 추가
     const weaponHTML = player.equipment?.weapon ? createItemHTML(player.equipment.weapon) : '⚔️<br>무기';
     const armorHTML = player.equipment?.armor ? createItemHTML(player.equipment.armor) : '🛡️<br>방어구';
     const petHTML = player.equippedPet ? createItemHTML(player.equippedPet) : '🐾<br>펫';
@@ -165,6 +170,12 @@ function createPlayerPanelHTML(player) {
         </div>
     `;
 }
+
+ function closePetChoiceModal() {
+        elements.petChoice.overlay.style.display = 'none';
+        selectedPetChoiceUid = null;
+    }
+
 function initializeGame(socket) {
 let quillEditor = null;
  let currentBoardCategory = '자유';
@@ -173,22 +184,38 @@ let quillEditor = null;
 
     const elements = {
         gold: document.getElementById('gold'),
-        player: { panel: document.querySelector('.player-panel'), hpBar: document.getElementById('player-hp-bar'), hpText: document.getElementById('player-hp-text'), totalHp: document.getElementById('total-hp'), totalAttack: document.getElementById('total-attack'), totalDefense: document.getElementById('total-defense'),critChance: document.getElementById('crit-chance'),
-        critResistance: document.getElementById('crit-resistance') },
-        monster: { panel: document.querySelector('.monster-panel'), level: document.getElementById('monster-level'), hpBar: document.getElementById('monster-hp-bar'), hpText: document.getElementById('monster-hp-text'), totalHp: document.getElementById('monster-hp-total'), attack: document.getElementById('monster-attack'), defense: document.getElementById('monster-defense'), },
+        player: { 
+            panel: document.querySelector('.player-panel'), 
+            hpBar: document.getElementById('player-hp-bar'), 
+            hpText: document.getElementById('player-hp-text'), 
+            totalHp: document.getElementById('total-hp'), 
+            totalAttack: document.getElementById('total-attack'), 
+            totalDefense: document.getElementById('total-defense'),
+            critChance: document.getElementById('crit-chance'),
+            critResistance: document.getElementById('crit-resistance') 
+        },
+        monster: { 
+            panel: document.querySelector('.monster-panel'), 
+            level: document.getElementById('monster-level'), 
+            hpBar: document.getElementById('monster-hp-bar'), 
+            hpText: document.getElementById('monster-hp-text'), 
+            totalHp: document.getElementById('monster-hp-total'), 
+            attack: document.getElementById('monster-attack'), 
+            defense: document.getElementById('monster-defense'), 
+        },
         equipment: { 
- weapon: document.getElementById('weapon-slot'), 
-    armor: document.getElementById('armor-slot'),
-    pet: document.getElementById('pet-slot'),
-    necklace: document.getElementById('necklace-slot'),   
-    earring: document.getElementById('earring-slot'),       
-    wristwatch: document.getElementById('wristwatch-slot') 
+            weapon: document.getElementById('weapon-slot'), 
+            armor: document.getElementById('armor-slot'),
+            pet: document.getElementById('pet-slot'),
+            necklace: document.getElementById('necklace-slot'),   
+            earring: document.getElementById('earring-slot'),       
+            wristwatch: document.getElementById('wristwatch-slot') 
         },
         artifactSockets: document.getElementById('artifact-sockets'),
         inventory: { 
             weapon: document.getElementById('weapon-inventory'), 
             armor: document.getElementById('armor-inventory'),
-	accessory: document.getElementById('accessory-inventory'),
+	        accessory: document.getElementById('accessory-inventory'),
             item: document.getElementById('item-inventory'),
             pet: document.getElementById('pet-inventory'),
             all: document.querySelectorAll('.inventory-grid'), 
@@ -211,51 +238,46 @@ let quillEditor = null;
             useHammerCheck: document.getElementById('use-hammer-ticket'),
             checkboxes: document.querySelector('.enhancement-checkboxes-wrapper'),
         },
-fusion: {
-    panel: document.getElementById('fusion-container'),
-    processUI: document.getElementById('fusion-process-ui'),
-    timerUI: document.getElementById('fusion-timer-ui'),
-    slot1: document.getElementById('fusion-slot-1'),
-    slot2: document.getElementById('fusion-slot-2'),
-    info1: document.getElementById('fusion-pet-info-1'),
-    info2: document.getElementById('fusion-pet-info-2'),
-    timer: document.getElementById('fusion-timer'),
-    button: document.getElementById('fusion-start-button')
-},
-
-board: {
-    container: document.getElementById('board-main-container'),
-    closeButton: document.getElementById('board-close-button'),
-    listView: document.getElementById('board-list-view'),
-    tabs: document.querySelector('.board-tabs'),
-    postList: document.getElementById('board-post-list'),
-    pagination: document.getElementById('board-pagination'),
-    writePostBtn: document.getElementById('board-write-post-btn'),
-    detailView: document.getElementById('board-detail-view'),
-    postContentArea: document.getElementById('post-content-area'),
-    commentArea: document.getElementById('post-comment-area'),
-    commentList: document.getElementById('comment-list'),
-    commentForm: document.getElementById('comment-form'),
-    commentInput: document.getElementById('comment-input'),
-    backToListBtn: document.getElementById('board-back-to-list-btn'),
-    writeView: document.getElementById('board-write-view'),
-    postForm: document.getElementById('post-form'),
-    postEditId: document.getElementById('post-edit-id'),
-    postCategory: document.getElementById('post-category'),
-    postTitle: document.getElementById('post-title'),
-    postContentInput: document.getElementById('post-content-input'),
-    postSubmitBtn: document.getElementById('post-submit-btn'),
-    cancelBtn: document.getElementById('board-cancel-btn')
-},
-userInfo: {
-
-    container: document.getElementById('user-info'),
-
-    username: document.getElementById('welcome-username'),
-
-    icon: document.getElementById('fame-icon')
-
-},
+        fusion: {
+            panel: document.getElementById('fusion-container'),
+            processUI: document.getElementById('fusion-process-ui'),
+            timerUI: document.getElementById('fusion-timer-ui'),
+            slot1: document.getElementById('fusion-slot-1'),
+            slot2: document.getElementById('fusion-slot-2'),
+            info1: document.getElementById('fusion-pet-info-1'),
+            info2: document.getElementById('fusion-pet-info-2'),
+            timer: document.getElementById('fusion-timer'),
+            button: document.getElementById('fusion-start-button')
+        },
+        board: {
+            container: document.getElementById('board-main-container'),
+            closeButton: document.getElementById('board-close-button'),
+            listView: document.getElementById('board-list-view'),
+            tabs: document.querySelector('.board-tabs'),
+            postList: document.getElementById('board-post-list'),
+            pagination: document.getElementById('board-pagination'),
+            writePostBtn: document.getElementById('board-write-post-btn'),
+            detailView: document.getElementById('board-detail-view'),
+            postContentArea: document.getElementById('post-content-area'),
+            commentArea: document.getElementById('post-comment-area'),
+            commentList: document.getElementById('comment-list'),
+            commentForm: document.getElementById('comment-form'),
+            commentInput: document.getElementById('comment-input'),
+            backToListBtn: document.getElementById('board-back-to-list-btn'),
+            writeView: document.getElementById('board-write-view'),
+            postForm: document.getElementById('post-form'),
+            postEditId: document.getElementById('post-edit-id'),
+            postCategory: document.getElementById('post-category'),
+            postTitle: document.getElementById('post-title'),
+            postContentInput: document.getElementById('post-content-input'),
+            postSubmitBtn: document.getElementById('post-submit-btn'),
+            cancelBtn: document.getElementById('board-cancel-btn')
+        },
+        userInfo: {
+            container: document.getElementById('user-info'),
+            username: document.getElementById('welcome-username'),
+            icon: document.getElementById('fame-icon')
+        },
         incubator: {
             content: document.getElementById('incubator-content'),
             slot: document.getElementById('incubator-slot'),
@@ -265,18 +287,46 @@ userInfo: {
             timer: document.getElementById('hatch-timer'),
         },
         explorationButton: document.getElementById('exploration-button'),
-        worldBoss: { container: document.getElementById('world-boss-container'), name: document.getElementById('world-boss-name'), hpBar: document.getElementById('world-boss-hp-bar'), hpText: document.getElementById('world-boss-hp-text'), contribution: document.getElementById('world-boss-contribution'), toggleBtn: document.getElementById('attack-target-toggle-btn'), },
+        worldBoss: { 
+            container: document.getElementById('world-boss-container'), 
+            name: document.getElementById('world-boss-name'), 
+            hpBar: document.getElementById('world-boss-hp-bar'), 
+            hpText: document.getElementById('world-boss-hp-text'), 
+            contribution: document.getElementById('world-boss-contribution'), 
+            toggleBtn: document.getElementById('attack-target-toggle-btn'), 
+        },
         modals: {
-	board: { button: document.getElementById('board-button'), overlay: document.getElementById('board-modal') },
+            board: { button: document.getElementById('board-button'), overlay: document.getElementById('board-modal') },
             auction: { button: document.getElementById('auction-button'), overlay: document.getElementById('auction-modal'), grid: document.getElementById('auction-grid'), detail: document.getElementById('auction-item-detail'), refreshBtn: document.getElementById('auction-refresh-btn'), },
             ranking: { button: document.getElementById('ranking-button'), overlay: document.getElementById('ranking-modal'), list: document.getElementById('ranking-list'), },
             loot: { button: document.getElementById('loot-record-button'), overlay: document.getElementById('loot-record-modal'), display: document.getElementById('loot-record-display'), },
             enhancement: { button: document.getElementById('enhancement-record-button'), overlay: document.getElementById('enhancement-record-modal'), display: document.getElementById('enhancement-record-display'), },
             online: { button: document.getElementById('online-users-button'), overlay: document.getElementById('online-users-modal'), list: document.getElementById('online-users-list'), },
+            mailbox: { 
+                button: document.getElementById('mailbox-button'), 
+                overlay: document.getElementById('mailbox-modal'), 
+                list: document.getElementById('mailbox-list'), 
+                claimAllBtn: document.getElementById('mailbox-claim-all-btn')
+            }
         },
-        chat: { messages: document.getElementById('chat-messages'), form: document.getElementById('chat-form'), input: document.getElementById('chat-input'), },
+        chat: { 
+            messages: document.getElementById('chat-messages'), 
+            form: document.getElementById('chat-form'), 
+            input: document.getElementById('chat-input'), 
+        },
         announcementBanner: document.getElementById('announcement-banner'),
-        zoom: { gameContainer: document.getElementById('game-app-container'), inBtn: document.getElementById('zoom-in-btn'), outBtn: document.getElementById('zoom-out-btn'), }
+        zoom: { 
+            gameContainer: document.getElementById('game-app-container'), 
+            inBtn: document.getElementById('zoom-in-btn'), 
+            outBtn: document.getElementById('zoom-out-btn'), 
+        },
+        petChoice: {
+            overlay: document.getElementById('pet-choice-modal'),
+            title: document.getElementById('pet-choice-title'),
+            equipBtn: document.getElementById('pet-choice-equip-btn'),
+            fusionBtn: document.getElementById('pet-choice-fusion-btn'),
+            closeBtn: document.querySelector('#pet-choice-modal .close-button')
+        }
     };
     
     const weaponTabInteractionPanel = document.querySelector('#weapon-inventory-tab .interaction-panel');
@@ -291,23 +341,52 @@ userInfo: {
     };
     zoomLogic.init();
 
-document.querySelectorAll('.modal-overlay').forEach(modal => { 
-    const closeBtn = modal.querySelector('.close-button');
-    if(closeBtn) {
-        closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+ document.querySelectorAll('.modal-overlay').forEach(modal => { 
+        const closeBtn = modal.querySelector('.close-button');
+        if(closeBtn) {
+            closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+        }
+        modal.addEventListener('click', (e) => { 
+            if (e.target === modal && modal.id !== 'board-modal') { 
+                modal.style.display = 'none'; 
+            } 
+        }); 
+    });
+
+    let selectedPetChoiceUid = null;
+
+    function closePetChoiceModal() {
+        elements.petChoice.overlay.style.display = 'none';
+        selectedPetChoiceUid = null;
     }
-    modal.addEventListener('click', (e) => { 
-        if (e.target === modal && modal.id !== 'board-modal') { 
-            modal.style.display = 'none'; 
-        } 
-    }); 
-});
+
+    elements.petChoice.equipBtn.addEventListener('click', () => {
+        if (selectedPetChoiceUid) {
+            socket.emit('equipPet', selectedPetChoiceUid);
+            closePetChoiceModal();
+        }
+    });
+
+    elements.petChoice.fusionBtn.addEventListener('click', () => {
+        if (selectedPetChoiceUid) {
+            document.querySelector('.tab-button[data-tab="fusion-tab"]').click();
+            socket.emit('slotPetForFusion', { uid: selectedPetChoiceUid });
+            closePetChoiceModal();
+        }
+    });
+    
+    elements.petChoice.closeBtn.addEventListener('click', closePetChoiceModal);
+    
+    elements.petChoice.overlay.addEventListener('click', (e) => {
+        if (e.target === elements.petChoice.overlay) {
+            closePetChoiceModal();
+        }
+    });
 
     elements.modals.ranking.button.addEventListener('click', () => { socket.emit('requestRanking'); elements.modals.ranking.overlay.style.display = 'flex'; });
     elements.modals.loot.button.addEventListener('click', () => { elements.modals.loot.overlay.style.display = 'flex'; });
     elements.modals.enhancement.button.addEventListener('click', () => { elements.modals.enhancement.overlay.style.display = 'flex'; });
     elements.modals.online.button.addEventListener('click', () => { socket.emit('requestOnlineUsers'); elements.modals.online.overlay.style.display = 'flex'; });
-    elements.modals.auction.button.addEventListener('click', () => { fetchAuctionListings(); elements.modals.auction.overlay.style.display = 'flex'; });
     
     const setupFusionSlot = (slotElement) => {
         slotElement.addEventListener('dblclick', () => {
@@ -335,18 +414,25 @@ document.querySelectorAll('.modal-overlay').forEach(modal => {
     elements.inventory.pet.addEventListener('click', (e) => {
         const card = e.target.closest('.inventory-item');
         if (!card) return;
+
         const uid = card.dataset.uid;
         const item = findItemInState(uid);
-        if (item && item.grade === 'Epic' && !item.fused) {
-            document.querySelector('.tab-button[data-tab="fusion-tab"]').click();
-            socket.emit('slotPetForFusion', { uid });
+
+        if (!item || item.type !== 'pet') return;
+
+        if (item.grade === 'Epic' && !item.fused) {
+            selectedPetChoiceUid = uid; // 선택한 펫의 uid를 임시 저장
+            elements.petChoice.title.textContent = `[${item.name}] 어떻게 할까요?`;
+            elements.petChoice.overlay.style.display = 'flex';
+        } else {
+            handleItemSelection(e);
         }
     });
 
     elements.fusion.button.addEventListener('click', () => {
         if (!currentPlayerState) return;
         const { slot1, slot2 } = currentPlayerState.petFusion;
-        if (slot1 && slot2 && confirm(`[${slot1.name}]와(과) [${slot2.name}]의 융합을 시작하시겠습니까?\n\n비용: 1억 골드\n(융합 시작 시 취소할 수 없습니다)`)) {
+        if (slot1 && slot2 && confirm(`[${slot1.name}]와(과) [${slot2.name}]의 융합을 시작하시겠습니까?\n\n비용: 1억 골드\n(융합 시작 시 취소할 수 없으며 융합된펫을 융합시도시 시간만 날리게됩니다)`)) {
             socket.emit('startPetFusion');
         }
     });
@@ -561,6 +647,162 @@ backArrowBtn.addEventListener('click', () => showBoardView('list'));
             });
         }
     });
+
+
+
+let auctionDataCache = { groupedList: [], allListings: [] };
+let selectedAuctionGroupKey = null;
+
+elements.modals.auction.button.addEventListener('click', () => {
+    fetchAuctionListings();
+    elements.modals.auction.overlay.style.display = 'flex';
+});
+
+elements.modals.auction.refreshBtn.addEventListener('click', fetchAuctionListings);
+
+function renderAuctionGroupedList() {
+    const grid = document.getElementById('auction-grouped-grid');
+    const searchKeyword = document.getElementById('auction-search-input').value.toLowerCase();
+    const selectedGrade = document.getElementById('auction-grade-filter').value;
+    
+    const filteredList = auctionDataCache.groupedList.filter(group => {
+        const nameMatch = group.item.name.toLowerCase().includes(searchKeyword);
+        const gradeMatch = selectedGrade === '전체' || group.item.grade === selectedGrade;
+        return nameMatch && gradeMatch;
+    });
+
+    if (!filteredList || filteredList.length === 0) {
+        grid.innerHTML = '<p class="inventory-tip">표시할 물품이 없습니다.</p>';
+        return;
+    }
+    
+    grid.innerHTML = filteredList.map(group => {
+        const item = group.item;
+        const infoHTML = `
+            <div class="item-name ${item.grade}">${item.enhancement > 0 ? `+${item.enhancement} ` : ''}${item.name}</div>
+            <div class="item-effect" style="font-size: 0.9em;">
+                최저가: <span class="gold-text">${group.lowestPrice.toLocaleString()} G</span><br>
+                총 수량: ${group.totalQuantity.toLocaleString()} 개
+            </div>`;
+
+        return `
+            <div class="inventory-item auction-item ${getEnhanceClass(item.enhancement)} ${group.key === selectedAuctionGroupKey ? 'selected' : ''}" data-group-key="${group.key}">
+                <div class="item-image"><img src="/image/${item.image}" alt="${item.name}" draggable="false"></div>
+                <div class="item-info">${infoHTML}</div>
+            </div>`;
+    }).join('');
+}
+
+function fetchAuctionListings() {
+    socket.emit('getAuctionListings', (data) => {
+        if (data) {
+            auctionDataCache = data;
+            renderAuctionGroupedList();
+            if (selectedAuctionGroupKey) {
+                renderAuctionDetailList(selectedAuctionGroupKey);
+            } else {
+                document.getElementById('auction-detail-list').innerHTML = `<p class="inventory-tip" style="text-align: center; margin-top: 50px;">왼쪽에서 아이템을 선택하세요.</p>`;
+            }
+        }
+    });
+}
+
+function renderAuctionDetailList(groupKey) {
+    const detailList = document.getElementById('auction-detail-list');
+
+    const listingsForGroup = auctionDataCache.allListings.filter(listing => {
+        const item = listing.item;
+        return `${item.id}_${item.enhancement || 0}` === groupKey;
+    });
+
+    listingsForGroup.sort((a, b) => {
+        if (a.price !== b.price) return a.price - b.price;
+        return new Date(a.listedAt) - new Date(b.listedAt);
+    });
+
+    if (listingsForGroup.length === 0) {
+        detailList.innerHTML = '<p class="inventory-tip">해당 아이템의 판매 목록이 없습니다.</p>';
+        return;
+    }
+
+    detailList.innerHTML = listingsForGroup.map(listing => {
+        const isMyItem = listing.sellerUsername === window.myUsername;
+        const item      = listing.item;
+        const buttonHTML = isMyItem
+            ? `<button class="action-btn cancel-auction-btn small-btn" data-listing-id="${listing._id}">취소</button>`
+            : `<button class="action-btn buy-auction-btn small-btn" data-listing-id="${listing._id}" data-max-quantity="${listing.item.quantity}">구매</button>`;
+        return `
+            <div class="auction-detail-entry ${isMyItem ? 'my-listing-highlight' : ''}">
+                <div class="seller-info">
+                    <img src="/image/${item.image}" alt="${item.name}" class="auction-detail-item-image">
+                    <span class="seller-name">${listing.sellerUsername}</span>
+                </div>
+
+                <div class="item-price-info">
+                    <span class="price">${listing.price.toLocaleString()} G</span>
+                    <span class="quantity">(${listing.item.quantity.toLocaleString()}개)</span>
+                </div>
+
+                <div class="auction-actions">
+                    ${buttonHTML}
+                </div>
+            </div>`;
+    }).join('');
+}
+
+
+document.getElementById('auction-search-input').addEventListener('input', renderAuctionGroupedList);
+document.getElementById('auction-grade-filter').addEventListener('change', renderAuctionGroupedList);
+
+
+document.getElementById('auction-grouped-grid').addEventListener('click', (e) => {
+    const card = e.target.closest('.auction-item');
+    if (!card) return;
+    
+    selectedAuctionGroupKey = card.dataset.groupKey;
+
+
+    document.querySelectorAll('#auction-grouped-grid .auction-item').forEach(el => el.classList.remove('selected'));
+    card.classList.add('selected');
+    
+    renderAuctionDetailList(selectedAuctionGroupKey);
+});
+
+document.getElementById('auction-detail-list').addEventListener('click', (e) => {
+    const target = e.target;
+    const listingId = target.dataset.listingId;
+    if (!listingId) return;
+
+    if (target.classList.contains('buy-auction-btn')) {
+        const maxQuantity = parseInt(target.dataset.maxQuantity, 10);
+        let quantity = 1;
+        if (maxQuantity > 1) {
+            const input = prompt(`구매할 수량을 입력하세요. (최대 ${maxQuantity}개)`, "1");
+            if (input === null) return;
+            quantity = parseInt(input, 10);
+            if (isNaN(quantity) || quantity <= 0 || quantity > maxQuantity) {
+                return alert("올바른 수량을 입력해주세요.");
+            }
+        }
+        if (confirm(`${quantity}개를 구매하시겠습니까?`)) {
+            socket.emit('buyFromAuction', { listingId, quantity });
+        }
+    } else if (target.classList.contains('cancel-auction-btn')) {
+        if (confirm('등록을 취소하시겠습니까?')) {
+            socket.emit('cancelAuctionListing', listingId);
+        }
+    }
+});
+
+
+socket.on('auctionUpdate', () => {
+    if (document.getElementById('auction-modal').style.display === 'flex') {
+        fetchAuctionListings();
+    }
+});
+
+
+
 socket.on('rankingData', ({ topLevel, topGold, topWeapon, topArmor }) => {
     const list = elements.modals.ranking.list;
     if (!list) return;
@@ -773,6 +1015,7 @@ elements.inventory.pet.innerHTML = renderGrid(player.petInventory);
         renderIncubator(player.incubator);
 renderFusionPanel(player);
         elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
+elements.modals.mailbox.button.classList.toggle('new-mail', player.hasUnreadMail);
         updateAffordableButtons();
     };
 
@@ -1176,11 +1419,12 @@ if (post.comments && post.comments.length > 0) {
 
 function handleItemSelection(e) {
     const card = e.target.closest('.inventory-item');
+
     if (!card || card.closest('#auction-grid') || card.closest('.equipment-slots')) return;
 
     const uid = card.dataset.uid;
-    const item = findItemInState(uid);
-    if (item && item.type === 'pet') return; 
+
+    // if (item && item.type === 'pet') return; // 이 줄을 삭제!
 
     selectedInventoryItemUid = uid;
     document.querySelector('.tab-button[data-tab="enhancement-tab"]').click();
@@ -1190,7 +1434,12 @@ function handleItemSelection(e) {
         const updatedItem = findItemInState(uid);
         if (updatedItem) {
             document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
-            card.classList.add('selected');
+
+            const visibleCard = document.querySelector(`.inventory-item[data-uid="${uid}"]`);
+            if (visibleCard) {
+                visibleCard.classList.add('selected');
+            }
+            
             updateInteractionPanel(updatedItem);
         }
     }, 10);
@@ -1370,41 +1619,9 @@ case 'equip':
         });
     });
 
-    function fetchAuctionListings() { socket.emit('getAuctionListings', (items) => { renderAuctionListings(items); }); }
-    function renderAuctionListings(items) {
-        const grid = elements.modals.auction.grid;
-        if (!items || items.length === 0) { grid.innerHTML = '<p class="inventory-tip">등록된 물품이 없습니다.</p>'; return; }
-        grid.innerHTML = items.map(listing => `<div class="inventory-item auction-item ${getEnhanceClass(listing.item.enhancement)}" data-listing-id="${listing._id}" draggable="false">${createItemHTML(listing.item)}</div>`).join('');
-    }
-    elements.modals.auction.grid.addEventListener('click', (e) => {
-        const card = e.target.closest('.auction-item'); if (!card) return;
-        document.querySelectorAll('.auction-item').forEach(el => el.classList.remove('selected'));
-        card.classList.add('selected');
-        const listingId = card.dataset.listingId;
-        socket.emit('getAuctionListings', (items) => { const listing = items.find(i => i._id === listingId); if (listing) { renderAuctionDetail(listing); } });
-    });
-    function renderAuctionDetail(listing) {
-        const detail = elements.modals.auction.detail; const isMyItem = listing.sellerUsername === window.myUsername;
-        let html = `<h3>아이템 정보</h3><div class="auction-detail-item ${getEnhanceClass(listing.item.enhancement)}">${createItemHTML(listing.item)}</div><p>판매자: ${listing.sellerUsername}</p><p>개당 가격: <span class="gold-text">${listing.price.toLocaleString()} G</span></p>`;
-        if (isMyItem) { html += `<button class="action-btn cancel-auction-btn" data-listing-id="${listing._id}">등록 취소</button>`; }
-        else { html += `<button class="action-btn buy-auction-btn" data-listing-id="${listing._id}" data-max-quantity="${listing.item.quantity}">구매하기</button>`; }
-        detail.innerHTML = html;
-    }
-    elements.modals.auction.detail.addEventListener('click', (e) => {
-        const target = e.target; const listingId = target.dataset.listingId; if (!listingId) return;
-        if(target.classList.contains('buy-auction-btn')) {
-            const maxQuantity = parseInt(target.dataset.maxQuantity, 10); let quantity = 1;
-            if (maxQuantity > 1) {
-                const input = prompt(`구매할 수량을 입력하세요. (최대 ${maxQuantity}개)`, "1"); if (input === null) return;
-                quantity = parseInt(input, 10);
-                if (isNaN(quantity) || quantity <= 0 || quantity > maxQuantity) { alert("올바른 수량을 입력해주세요."); return; }
-            }
-            if (confirm(`${quantity}개를 구매하시겠습니까?`)) { socket.emit('buyFromAuction', { listingId, quantity }); }
-        }
-        else if (target.classList.contains('cancel-auction-btn')) { if (confirm('등록을 취소하시겠습니까?')) { socket.emit('cancelAuctionListing', listingId); } }
-    });
-    elements.modals.auction.refreshBtn.addEventListener('click', fetchAuctionListings);
-    socket.on('auctionUpdate', () => { fetchAuctionListings(); elements.modals.auction.detail.innerHTML = '<p>아이템을 선택하여 상세 정보를 확인하세요.</p>'; });
+
+
+ 
     elements.worldBoss.toggleBtn.addEventListener('click', () => { attackTarget = attackTarget === 'monster' ? 'worldBoss' : 'monster'; socket.emit('setAttackTarget', attackTarget); });
  socket.on('attackTargetChanged', (target) => {
     attackTarget = target;
@@ -1509,7 +1726,108 @@ function addChatMessage(data) {
     socket.on('chatHistory', (history) => { elements.chat.messages.innerHTML = ''; history.forEach(msg => addChatMessage(msg)); });
     socket.on('chatMessage', (data) => addChatMessage(data));
     socket.on('globalAnnouncement', (notice) => { const banner = elements.announcementBanner; if (banner) { banner.innerHTML = `📢 ${notice}`; banner.classList.add('active'); setTimeout(() => { banner.classList.remove('active'); }, 10000); } });
-    socket.on('forceDisconnect', (data) => { alert(data.message); socket.disconnect(); localStorage.removeItem('jwt_token'); location.reload(); });
+elements.modals.mailbox.button.addEventListener('click', () => {
+    elements.modals.mailbox.button.classList.remove('new-mail');
+    socket.emit('mailbox:get', (mails) => {
+        renderMailbox(mails);
+        elements.modals.mailbox.overlay.style.display = 'flex';
+    });
+});
+
+elements.modals.mailbox.list.addEventListener('click', (e) => {
+    if (e.target.classList.contains('claim-mail-btn')) {
+        const mailId = e.target.dataset.mailId;
+        e.target.disabled = true;
+        e.target.textContent = '수령중...';
+        socket.emit('mailbox:claim', { mailId }, (response) => {
+            if (response.success) {
+                socket.emit('mailbox:get', renderMailbox);
+            } else {
+                alert(response.message);
+                e.target.disabled = false;
+                e.target.textContent = '수령';
+            }
+        });
+    }
+});
+
+elements.modals.mailbox.claimAllBtn.addEventListener('click', () => {
+    elements.modals.mailbox.claimAllBtn.disabled = true;
+    socket.emit('mailbox:claimAll', (response) => {
+        if (response.success) {
+            socket.emit('mailbox:get', renderMailbox);
+        }
+        elements.modals.mailbox.claimAllBtn.disabled = false;
+    });
+});
+
+socket.on('newMailNotification', () => {
+     elements.modals.mailbox.button.classList.add('new-mail');
+});
+
+function renderMailbox(mails) {
+    const listEl = elements.modals.mailbox.list;
+    listEl.innerHTML = '';
+    if (!mails || mails.length === 0) {
+        listEl.innerHTML = '<li style="text-align:center; padding: 50px; color: var(--text-muted);">받은 우편이 없습니다.</li>';
+        elements.modals.mailbox.claimAllBtn.style.display = 'none';
+        return;
+    }
+
+    elements.modals.mailbox.claimAllBtn.style.display = 'block';
+
+    mails.forEach(mail => {
+        const li = document.createElement('li');
+        li.className = 'mail-item';
+
+        let iconHTML = '';
+        let infoHTML = '';
+
+        if (mail.item) {
+
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'inventory-item';
+
+            itemDiv.innerHTML = createItemHTML(mail.item, { showName: false, showEffect: false });
+            iconHTML = `<div class="mail-item-icon">${itemDiv.outerHTML}</div>`;
+
+            infoHTML = `
+                <h4>${mail.description}</h4>
+                <p>(From: ${mail.senderUsername})</p>
+            `;
+        } else if (mail.gold > 0) {
+
+
+            iconHTML = `
+                <div class="mail-item-icon">
+                    <div class="inventory-item">
+                        <div class="item-image"><img src="/image/gold_pouch.png"></div>
+                    </div>
+                </div>
+            `;
+
+
+            const reasonText = mail.description ? ` (${mail.description})` : '';
+            infoHTML = `
+                <h4><span class="gold-text">${mail.gold.toLocaleString()} G</span> 를 획득했습니다.${reasonText}</h4>
+                <p>(From: ${mail.senderUsername})</p>
+            `;
+        }
+
+        li.innerHTML = `
+            ${iconHTML}
+            <div class="mail-item-info">
+                ${infoHTML}
+            </div>
+            <div class="mail-item-actions">
+                <button class="action-btn claim-mail-btn" data-mail-id="${mail._id}">수령</button>
+            </div>
+        `;
+        listEl.appendChild(li);
+    });
+}
+
+ socket.on('forceDisconnect', (data) => { alert(data.message); socket.disconnect(); localStorage.removeItem('jwt_token'); location.reload(); });
  setInterval(() => {
         if (socket.connected) {
             socket.emit('client-heartbeat');

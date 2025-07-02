@@ -1764,21 +1764,7 @@ body.auth-view {
     font-weight: 700
 }
 
-#auction-modal .action-btn.buy-auction-btn {
-    background: var(--success-color);
-    width: 80%;
-    padding: 15px;
-    font-size: 1.2em;
-    margin-top: 20px
-}
 
-#auction-modal .action-btn.cancel-auction-btn {
-    background: var(--fail-color);
-    width: 80%;
-    padding: 15px;
-    font-size: 1.2em;
-    margin-top: 20px
-}
 
 .auction-header {
     display: flex;
@@ -2991,4 +2977,161 @@ body > * {
 .climb { /* ID(#)를 삭제하여 클래스로만 스타일을 적용 */
     background-color: var(--secondary-color);
     color: #fff;
+}
+/* --- 거래소 개편 스타일 (최종 수정) --- */
+
+/* 모달 전체 크기 확장 */
+.auction-modal-content {
+    max-width: 1600px;
+    width: 95%;
+    height: 95vh;
+}
+
+#auction-container {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    flex-grow: 1;
+    min-height: 0;
+    overflow-y: hidden;
+}
+
+/* 왼쪽/오른쪽 패널 크기 1:1로 동일하게 수정 */
+.auction-list-panel,
+.auction-detail-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: rgba(0, 0, 0, .2);
+    padding: 10px;
+    border-radius: 8px;
+}
+
+#auction-grouped-grid,
+#auction-detail-list {
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.auction-list-panel .inventory-item:hover {
+    transform: none;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.auction-detail-entry {
+    display: flex;
+    align-items: center;
+    padding: 8px; /* 오른쪽 패딩만 0으로 수정 */
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* 판매자 정보 (이미지 + 이름) - 내용만큼의 너비만 차지 */
+.auction-detail-entry .seller-info {
+    display: 0 0 15%;
+    max-width: 15%;   /* 넘치지 않게 */
+    min-width: 0;     /* 너무 좁아질 때 줄어들도록 */
+    white-space: nowrap; /* 이름이 줄바꿈되지 않도록 */
+}
+
+.auction-detail-item-image {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.seller-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+/* 가격 정보 - 내용만큼의 너비만 차지 */
+.auction-detail-entry .item-price-info {
+    flex: 0 0 65%;
+    max-width: 65%;
+    min-width: 0;
+    padding: 0 20px;
+    white-space: nowrap;
+}
+
+.auction-detail-entry .price {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: var(--gold-color);
+}
+
+.auction-detail-entry .quantity {
+    font-size: 0.9em;
+    color: var(--text-muted);
+    margin-left: 5px;
+}
+
+/* 버튼 영역 - 모든 남는 공간을 왼쪽에 만들고 자신은 오른쪽 끝으로 */
+.auction-detail-entry .auction-actions {
+    flex: 0 0 20%;
+    max-width: 20%;
+    display: flex;          /* 버튼 가로 정렬 */
+    justify-content: flex-end;
+    gap: 8px;   
+}
+
+
+
+
+
+/* 내가 올린 물품 하이라이트 */
+.my-listing-highlight {
+    background-color: rgba(0, 122, 255, 0.15);
+}
+
+/* 검색 및 필터 컨트롤 */
+.auction-controls {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-shrink: 0;
+}
+
+#auction-search-input {
+    flex-grow: 1;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color-dark);
+    color: var(--text-color);
+    border-radius: 6px;
+    font-size: 1em;
+}
+
+#auction-grade-filter {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color-dark);
+    color: var(--text-color);
+    border-radius: 6px;
+}
+
+@keyframes glitter {
+    0%, 100% { box-shadow: 0 0 5px #ffd700; transform: scale(1); }
+    50% { box-shadow: 0 0 15px #fff, 0 0 25px #ffd700; transform: scale(1.05); }
+}
+#mailbox-button { background: #8e44ad; color: #fff; transition: all 0.3s ease; }
+#mailbox-button.new-mail { animation: glitter 1.5s infinite; }
+.mail-item { display: flex; align-items: center; gap: 15px; padding: 10px; border-bottom: 1px solid var(--border-color); }
+.mail-item-icon .inventory-item { width: 60px; height: 60px; background: rgba(0,0,0,0.3); border-radius: 8px; cursor: default; }
+.mail-item-info { flex-grow: 1; }
+.mail-item-info h4 { margin: 0; font-size: 1.1em; }
+.mail-item-info p { margin: 5px 0 0; color: var(--text-muted); font-size: 0.9em; }
+
+.mail-item-icon-placeholder {
+    width: 100px; /* 기존 아이콘과 너비를 맞춤 */
+    height: 100px;
+    flex-shrink: 0;
+}
+
+.mail-item-info h4 .gold-text {
+    font-weight: bold;
 }
