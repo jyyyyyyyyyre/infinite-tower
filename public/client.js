@@ -94,24 +94,32 @@ function createFameUserHtml(username, score) {
     return `${fame.icon} <span class="${fame.className}">${username}(${(score || 0).toLocaleString()})</span>`;
 }
 
-  const createItemHTML = (item) => {
-        if (!item) return '';
-        let effectText = '';
-        if (item.type === 'weapon') {
-            let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
-            effectText = `⚔️공격력 +${(bonus * 100).toFixed(1)}%`;
-        } else if (item.type === 'armor') {
-            let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
-            effectText = `❤️🛡️체/방 +${(bonus * 100).toFixed(1)}%`;
-        } else if (item.type === 'pet') { effectText = item.description || '특별한 힘을 가진 펫';
-        } else { effectText = item.description || '다양한 효과를 가진 아이템'; }
-       
-        const nameClass = item.grade || 'Common'; 
-        const enhanceText = item.enhancement ? `<div class="item-enhancement-level">[+${item.enhancement}]</div>` : '';
-        const quantityText = item.quantity > 1 ? `<div class="item-quantity">x${item.quantity}</div>` : '';
-        const imageHTML = item.image ? `<div class="item-image"><img src="/image/${item.image}" alt="${item.name}" draggable="false"></div>` : '<div class="item-image"></div>';
-        return `${imageHTML}<div class="item-info"><div class="item-name ${nameClass}">${item.name}</div><div class="item-effect">${effectText}</div></div>${quantityText}${enhanceText}`;
-    };
+ const createItemHTML = (item, options = {}) => {
+    const { showName = true } = options;
+
+    if (!item) return '';
+    let effectText = '';
+    if (item.type === 'weapon') {
+        let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
+        effectText = `⚔️공격력 +${(bonus * 100).toFixed(1)}%`;
+    } else if (item.type === 'armor') {
+        let bonus = item.baseEffect; for (let i = 1; i <= item.enhancement; i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
+        effectText = `❤️🛡️체/방 +${(bonus * 100).toFixed(1)}%`;
+    } else if (item.type === 'accessory') { 
+        effectText = item.description || '특별한 힘을 가진 장신구';
+    } else if (item.type === 'pet') { 
+        effectText = item.description || '특별한 힘을 가진 펫';
+    } else { 
+        effectText = item.description || '다양한 효과를 가진 아이템'; 
+    }
+   
+    const nameClass = item.grade || 'Common'; 
+    const nameHTML = showName ? `<div class="item-name ${nameClass}">${item.name}</div>` : '';
+    const enhanceText = item.enhancement ? `<div class="item-enhancement-level">[+${item.enhancement}]</div>` : '';
+    const quantityText = item.quantity > 1 ? `<div class="item-quantity">x${item.quantity}</div>` : '';
+    const imageHTML = item.image ? `<div class="item-image"><img src="/image/${item.image}" alt="${item.name}" draggable="false"></div>` : '<div class="item-image"></div>';
+    return `${imageHTML}<div class="item-info">${nameHTML}<div class="item-effect">${effectText}</div></div>${quantityText}${enhanceText}`;
+};
 
 function createPlayerPanelHTML(player) {
     if (!player) return '<p>유저 정보를 찾을 수 없습니다.</p>';
@@ -161,14 +169,18 @@ let quillEditor = null;
         critResistance: document.getElementById('crit-resistance') },
         monster: { panel: document.querySelector('.monster-panel'), level: document.getElementById('monster-level'), hpBar: document.getElementById('monster-hp-bar'), hpText: document.getElementById('monster-hp-text'), totalHp: document.getElementById('monster-hp-total'), attack: document.getElementById('monster-attack'), defense: document.getElementById('monster-defense'), },
         equipment: { 
-            weapon: document.getElementById('weapon-slot'), 
-            armor: document.getElementById('armor-slot'),
-            pet: document.getElementById('pet-slot'),
+ weapon: document.getElementById('weapon-slot'), 
+    armor: document.getElementById('armor-slot'),
+    pet: document.getElementById('pet-slot'),
+    necklace: document.getElementById('necklace-slot'),   
+    earring: document.getElementById('earring-slot'),       
+    wristwatch: document.getElementById('wristwatch-slot') 
         },
         artifactSockets: document.getElementById('artifact-sockets'),
         inventory: { 
             weapon: document.getElementById('weapon-inventory'), 
             armor: document.getElementById('armor-inventory'),
+	accessory: document.getElementById('accessory-inventory'),
             item: document.getElementById('item-inventory'),
             pet: document.getElementById('pet-inventory'),
             all: document.querySelectorAll('.inventory-grid'), 
@@ -448,7 +460,7 @@ backArrowBtn.addEventListener('click', () => showBoardView('list'));
                     ['bold', 'italic', 'underline', 'strike'],
                     [{ 'color': [] }, { 'background': [] }],
                     [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                    ['link'] // 이미지 버튼은 अस्थिर하여 잠시 제외
+                    ['link'] 
                 ]
             }
         });
@@ -705,24 +717,20 @@ const renderItemInSlot = (slotElement, item, defaultText, type) => {
         itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)}`;
         itemDiv.dataset.uid = item.uid;
         itemDiv.draggable = true;
-        itemDiv.dataset.itemType = type;
-        itemDiv.innerHTML = createItemHTML(item, { showDescription: false });
+        itemDiv.dataset.itemType = (item.type === 'accessory') ? item.accessoryType : type;
+        itemDiv.innerHTML = createItemHTML(item, { showName: false }); 
         const imageDiv = itemDiv.querySelector('.item-image');
         const infoDiv = itemDiv.querySelector('.item-info');
-        if (imageDiv) {
-
-        }
+        if (imageDiv) {}
         if (infoDiv) {
             infoDiv.style.paddingTop = '4px';
             infoDiv.style.flex = '1';
         }
-
         slotElement.appendChild(itemDiv);
     } else {
         slotElement.innerHTML = defaultText;
     }
 };
-
  const buffsContainer = document.getElementById('player-buffs-container');
     buffsContainer.innerHTML = ''; 
     if (player.buffs && player.buffs.length > 0) {
@@ -739,13 +747,21 @@ const renderItemInSlot = (slotElement, item, defaultText, type) => {
         renderItemInSlot(elements.equipment.weapon, player.equipment.weapon, '⚔️<br>무기', 'weapon');
         renderItemInSlot(elements.equipment.armor, player.equipment.armor, '🛡️<br>방어구', 'armor');
         renderItemInSlot(elements.equipment.pet, player.equippedPet, '🐾<br>펫', 'pet');
+renderItemInSlot(elements.equipment.necklace, player.equipment.necklace, '💍<br>목걸이', 'necklace');
+renderItemInSlot(elements.equipment.earring, player.equipment.earring, '👂<br>귀걸이', 'earring');
+renderItemInSlot(elements.equipment.wristwatch, player.equipment.wristwatch, '⏱️<br>손목시계', 'wristwatch');
         
         elements.artifactSockets.innerHTML = player.unlockedArtifacts.map(artifact => artifact ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`).join('');
-        const renderGrid = (items) => items.map(item => `<div class="inventory-item ${getEnhanceClass(item.enhancement)} ${selectedInventoryItemUid === item.uid ? 'selected' : ''}" data-uid="${item.uid}" draggable="true" data-item-type="${item.type}">${createItemHTML(item)}</div>`).join('');
-        elements.inventory.weapon.innerHTML = renderGrid(player.inventory.filter(i => i.type === 'weapon'));
-        elements.inventory.armor.innerHTML = renderGrid(player.inventory.filter(i => i.type === 'armor'));
-        elements.inventory.item.innerHTML = renderGrid(player.inventory.filter(i => i.type !== 'weapon' && i.type !== 'armor'));
-        elements.inventory.pet.innerHTML = renderGrid(player.petInventory);
+const renderGrid = (items) => items.map(item => {
+    const itemType = (item.type === 'accessory') ? item.accessoryType : item.type;
+    return `<div class="inventory-item ${getEnhanceClass(item.enhancement)} ${selectedInventoryItemUid === item.uid ? 'selected' : ''}" data-uid="${item.uid}" draggable="true" data-item-type="${itemType}">${createItemHTML(item)}</div>`;
+}).join('');
+
+elements.inventory.weapon.innerHTML = renderGrid(player.inventory.filter(i => i.type === 'weapon'));
+elements.inventory.armor.innerHTML = renderGrid(player.inventory.filter(i => i.type === 'armor'));
+elements.inventory.accessory.innerHTML = renderGrid(player.inventory.filter(i => i.type === 'accessory'));
+elements.inventory.item.innerHTML = renderGrid(player.inventory.filter(i => i.type !== 'weapon' && i.type !== 'armor' && i.type !== 'accessory'));
+elements.inventory.pet.innerHTML = renderGrid(player.petInventory);
         renderIncubator(player.incubator);
 renderFusionPanel(player);
         elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
@@ -792,7 +808,7 @@ const egg = incubator.egg;
 
 function renderFusionPanel(player) {
     const fusionData = player.petFusion;
-    const { fusion } = elements; // elements.fusion의 단축 표현
+    const { fusion } = elements;
 
 
     if (fusionData.fuseEndTime) {
@@ -927,7 +943,7 @@ if (post.comments && post.comments.length > 0) {
     post.comments.forEach(comment => {
         const isCommentAuthor = comment.authorUsername === window.myUsername;
         const commentItem = document.createElement('div');
-        commentItem.className = 'comment-item-new'; // 새로운 클래스 이름
+        commentItem.className = 'comment-item-new';
         commentItem.dataset.commentId = comment._id;
 
         commentItem.innerHTML = `
@@ -952,34 +968,39 @@ if (post.comments && post.comments.length > 0) {
     });
 }
 
-    function updateInteractionPanel(overrideItem = null) {
-        const item = overrideItem || findItemInState(selectedInventoryItemUid);
-        const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
+   function updateInteractionPanel(overrideItem = null) {
+    const item = overrideItem || findItemInState(selectedInventoryItemUid);
+    const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
+    if (!item) {
+        slot.innerHTML = '강화 또는 사용할 아이템을<br>인벤토리/장비창에서 선택하세요';
+        details.style.display = 'none';
+        button.style.display = 'none';
+        checkboxes.style.display = 'none';
+        info.innerHTML = '';
+        return;
+    }
 
-        if (!item) {
-            slot.innerHTML = '강화 또는 사용할 아이템을<br>인벤토리/장비창에서 선택하세요';
-            details.style.display = 'none';
-            button.style.display = 'none';
-            checkboxes.style.display = 'none';
-            info.innerHTML = '';
-            return;
-        }
+    const isEnhanceable = item.type === 'weapon' || item.type === 'armor';
 
-        const isEnhanceable = item.type === 'weapon' || item.type === 'armor';
+    details.style.display = isEnhanceable ? 'flex' : 'none';
+    button.style.display = isEnhanceable ? 'block' : 'none';
+    checkboxes.style.display = isEnhanceable ? 'flex' : 'none';
 
-        details.style.display = isEnhanceable ? 'flex' : 'none';
-        button.style.display = isEnhanceable ? 'block' : 'none';
-        checkboxes.style.display = isEnhanceable ? 'flex' : 'none';
+    slot.innerHTML = createEnhancementItemHTML(item); 
 
-         slot.innerHTML = createEnhancementItemHTML(item); 
+    let infoContentHTML = '';
+    let buttonsHTML = '<div class="interaction-buttons" style="justify-content: center; width: 100%; flex-wrap: wrap; gap: 10px;">';
 
-        let infoContentHTML = '';
-        let buttonsHTML = '<div class="interaction-buttons" style="justify-content: center; width: 100%; flex-wrap: wrap; gap: 10px;">';
 
- if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet') {
+    if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet' || item.type === 'accessory') {
+
         const isEquipped = (currentPlayerState.equipment.weapon?.uid === item.uid) || 
-                           (currentPlayerState.equipment.armor?.uid === item.uid) || 
+                           (currentPlayerState.equipment.armor?.uid === item.uid) ||
+                           (currentPlayerState.equipment.necklace?.uid === item.uid) ||
+                           (currentPlayerState.equipment.earring?.uid === item.uid) ||
+                           (currentPlayerState.equipment.wristwatch?.uid === item.uid) ||
                            (currentPlayerState.equippedPet?.uid === item.uid);
+        
         if (!isEquipped) {
             buttonsHTML += `<button class="action-btn equip-btn" data-action="equip">✔️ 장착하기</button>`;
         }
@@ -1206,7 +1227,7 @@ case 'equip':
                 } else if (price !== null) { alert("올바른 가격을 입력해주세요."); }
                 break;
          case 'use':
-    { // 중괄호를 추가하여 변수 스코프를 제한합니다.
+    { 
         const itemToUse = findItemInState(selectedInventoryItemUid);
         if (itemToUse && itemToUse.id === 'return_scroll') {
             if (confirm(`[복귀 스크롤]을 사용하시겠습니까?\n사용 시 최고층으로 이동하며 10초간 각성 상태가 됩니다.`)) {
@@ -1382,10 +1403,10 @@ case 'equip':
     const button = elements.worldBoss.toggleBtn;
     if (target === 'worldBoss') {
         button.textContent = '일반 몬스터 공격';
-        button.className = 'climb'; // '등반하기'와 동일한 빨간색 스타일 적용
+        button.className = 'climb'; 
     } else {
         button.textContent = '월드 보스 공격';
-        button.className = 'explore'; // '탐험하기'와 동일한 초록색 스타일 적용
+        button.className = 'explore'; 
     }
 });
     socket.on('worldBossSpawned', (bossState) => { elements.worldBoss.container.style.display = 'flex'; socket.emit('setAttackTarget', 'monster'); updateWorldBossUI(bossState); });

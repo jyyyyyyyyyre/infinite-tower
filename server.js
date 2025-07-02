@@ -61,7 +61,13 @@ const GameDataSchema = new mongoose.Schema({
     maxArmorEnhancement: { type: Number, default: 0 },
     maxArmorName: { type: String, default: '' },
     inventory: { type: [Object], default: [] },
-    equipment: { weapon: { type: Object, default: null }, armor: { type: Object, default: null } },
+equipment: { 
+    weapon: { type: Object, default: null }, 
+    armor: { type: Object, default: null },
+    necklace: { type: Object, default: null }, 
+    earring: { type: Object, default: null },   
+    wristwatch: { type: Object, default: null } 
+},
     log: { type: [String], default: ["'무한의 탑'에 오신 것을 환영합니다!"] },
     destructionPreventionTickets: { type: Number, default: 0 },
     worldBossContribution: { damageDealt: { type: Number, default: 0 }, bossId: { type: String, default: null } },
@@ -179,10 +185,40 @@ const adminItemAlias = {
     '물2': 'leviathan',
     '바람2': 'griffin', 
 '참여상자': 'boss_participation_box',
+'악세1': 'acc_necklace_01',
+'악세2': 'acc_earring_01',
+'악세3': 'acc_wristwatch_01',
     '신화1': 'bahamut'
 };
 
 const itemData = {
+ 'acc_necklace_01': { 
+        name: '윤회의 목걸이', 
+        type: 'accessory', 
+        accessoryType: 'necklace',
+        grade: 'Mystic', 
+        description: '사망 시 1층이 아닌, 현재 층수의 2/3 지점에서 다시 시작합니다.', 
+        image: 'necklace_01.png', 
+        tradable: true 
+    },
+    'acc_earring_01': { 
+        name: '찰나의 각성 이어링', 
+        type: 'accessory', 
+        accessoryType: 'earring', 
+        grade: 'Mystic', 
+        description: '공격시 3% 확률로 10초간 각성돌입(공/방/체 10배)', 
+        image: 'earring_01.png',
+        tradable: true 
+    },
+    'acc_wristwatch_01': { 
+        name: '통찰자의 크로노그래프', 
+        type: 'accessory', 
+        accessoryType: 'wristwatch',
+        grade: 'Mystic', 
+        description: '치명타 확률 20% 증가', 
+        image: 'wristwatch_01.png', 
+        tradable: true 
+    },
     w001: { name: '낡은 단검', type: 'weapon', grade: 'Common', baseEffect: 0.05, image: 'sword1.png', tradable: true },
     a001: { name: '가죽 갑옷', type: 'armor', grade: 'Common', baseEffect: 0.05, image: 'armor1.png', tradable: true },
     w002: { name: '강철 검', type: 'weapon', grade: 'Rare', baseEffect: 0.12, image: 'sword2.png', tradable: true },
@@ -248,6 +284,9 @@ const explorationLootTable = [
     { id: 'tome_socket2', chance: 0.0000065 },
     { id: 'tome_socket3', chance: 0.000005 },
     { id: 'return_scroll', chance: 0.000009 },
+    { id: 'acc_necklace_01', chance: 0.000003 },
+    { id: 'acc_earring_01', chance: 0.000003 },
+    { id: 'acc_wristwatch_01', chance: 0.000003 },
     { id: 'pet_egg_mythic', chance: 0.0000005 } 
 ];
 
@@ -292,6 +331,7 @@ function createItemInstance(id, quantity = 1) {
         grade: d.grade,
         category: d.category,
         image: d.image, 
+accessoryType: d.accessoryType,
         description: d.description,
         tradable: d.tradable,
         ...(d.baseEffect && { baseEffect: d.baseEffect, enhancement: 0 }),
@@ -360,27 +400,27 @@ function calculateTotalStats(player) {
     const base = player.stats.base;
     let weaponBonus = 0;
     let armorBonus = 0;
-
-    // 버프 및 유물 효과를 위한 승수 초기화
     let buffAttackMultiplier = 1;
     let buffDefenseMultiplier = 1;
     let buffHpMultiplier = 1;
     let artifactAttackMultiplier = 1;
     let artifactDefenseMultiplier = 1;
 
-    player.stats.critChance = 0;
-    player.stats.critResistance = 0;
-    let petDefPenetration = 0;
+player.stats.critChance = 0; 
+player.stats.critResistance = 0;
+let petDefPenetration = 0;
 
-    // 펫 효과 적용
     if (player.equippedPet && player.equippedPet.effects) {
         const effects = player.equippedPet.effects;
         player.stats.critChance = effects.critChance || 0;
         player.stats.critResistance = effects.critResistance || 0;
         petDefPenetration = effects.defPenetration || 0;
     }
-    
-    // 버프 효과 적용
+
+if (player.equipment.wristwatch && player.equipment.wristwatch.id === 'acc_wristwatch_01') {
+    player.stats.critChance += 0.20;
+}
+
     if (player.buffs && player.buffs.length > 0) {
         player.buffs.forEach(buff => {
             if (buff.effects.attackMultiplier) buffAttackMultiplier *= buff.effects.attackMultiplier;
@@ -389,17 +429,14 @@ function calculateTotalStats(player) {
         });
     }
 
-    // 장비 효과 적용
     if (player.equipment.weapon) weaponBonus = computeEnhanceBonus(player.equipment.weapon);
     if (player.equipment.armor) armorBonus = computeEnhanceBonus(player.equipment.armor);
 
-    // 유물 효과 적용
     if (player.unlockedArtifacts[1] && isBossFloor(player.level)) {
         artifactAttackMultiplier += 0.50;
         artifactDefenseMultiplier += 0.50;
     }
 
-    // 최종 능력치 계산
     player.stats.total = {
         hp: (base.hp * (1 + armorBonus)) * buffHpMultiplier,
         attack: (base.attack * (1 + weaponBonus)) * artifactAttackMultiplier * buffAttackMultiplier,
@@ -445,6 +482,15 @@ io.on('connection', async (socket) => {
         return socket.disconnect(); 
     }
 
+  if (!gameData.equipment) {
+        gameData.equipment = {}; 
+    }
+    const requiredSlots = ['weapon', 'armor', 'necklace', 'earring', 'wristwatch'];
+    requiredSlots.forEach(slotName => {
+        if (typeof gameData.equipment[slotName] === 'undefined') {
+            gameData.equipment[slotName] = null; 
+        }
+    });
  
     if (typeof gameData.isExploring === 'undefined') gameData.isExploring = false;
     if (typeof gameData.levelBeforeExploration === 'undefined') gameData.levelBeforeExploration = gameData.level;
@@ -524,13 +570,13 @@ updatePlayerFame(onlinePlayers[socket.userId]);
         if (typeof msg !== 'string' || msg.trim().length === 0) return;
         const trimmedMsg = msg.slice(0, 200);
 
-        // 관리자 명령어 처리
+
         if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
             const args = trimmedMsg.substring(1).split(' ').filter(arg => arg.length > 0);
             const command = args.shift().toLowerCase();
             const adminUsername = socket.username;
 
-            // 1. /공지 [메시지]
+
             if (command === '공지') {
                 const noticeMessage = args.join(' ');
                 if (!noticeMessage) {
@@ -542,14 +588,14 @@ updatePlayerFame(onlinePlayers[socket.userId]);
                 return;
             }
 
-            // 2. /보스소환
+
             if (command === '보스소환') {
                 spawnWorldBoss();
                 pushLog(onlinePlayers[socket.userId], '[관리자] 월드 보스를 강제로 소환했습니다.');
                 return;
             }
 
-            // 3. /대상 지급항목 [수량]
+
             const target = command;
             const subject = args.shift();
             const amountStr = args.shift() || '1';
@@ -586,7 +632,7 @@ updatePlayerFame(onlinePlayers[socket.userId]);
                 return pushLog(onlinePlayers[socket.userId], `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
             }
 
-            // 지급 처리 (골드)
+
             if (subject.toLowerCase() === '골드') {
                 for (const t of targets) {
                     if (t.socket) {
@@ -596,10 +642,10 @@ updatePlayerFame(onlinePlayers[socket.userId]);
                     }
                 }
                 const goldMessage = `[관리자] ${targetName}에게 골드 ${amount.toLocaleString()}G를 지급했습니다.`;
-                io.emit('globalAnnouncement', goldMessage); // 상단 배너 공지 추가
+                io.emit('globalAnnouncement', goldMessage);
                 io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: goldMessage });
             
-            // 지급 처리 (아이템/펫)
+
             } else {
                 const id = adminItemAlias[subject];
                 if (!id) return pushLog(onlinePlayers[socket.userId], `[관리자] '${subject}'는 잘못된 아이템/펫 단축어입니다.`);
@@ -629,14 +675,13 @@ updatePlayerFame(onlinePlayers[socket.userId]);
                     }
                 }
                 const itemMessage = `[관리자] ${targetName}에게 <span class="${template.grade}">${template.name}</span> ${isPet ? '펫' : `${amount}개`}를 지급했습니다.`;
-                const bannerMessage = `[관리자] ${targetName}에게 ${template.name} ${isPet ? '펫' : `${amount}개`}를 지급했습니다.`; // 배너용 (HTML 태그 제외)
-                io.emit('globalAnnouncement', bannerMessage); // 상단 배너 공지 추가
+                const bannerMessage = `[관리자] ${targetName}에게 ${template.name} ${isPet ? '펫' : `${amount}개`}를 지급했습니다.`;
+                io.emit('globalAnnouncement', bannerMessage); 
                 io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: itemMessage });
             }
             return;
         }
 
-        // 일반 채팅 메시지 처리
         const player = onlinePlayers[socket.userId];
         const newChatMessage = new ChatMessage({
             username: socket.username,
@@ -948,6 +993,24 @@ updatePlayerFame(onlinePlayers[socket.userId]);
         });
 });
 
+function applyAwakeningBuff(player) {
+    player.buffs = player.buffs || [];
+    const existingBuffIndex = player.buffs.findIndex(b => b.id === 'return_scroll_awakening');
+    if (existingBuffIndex > -1) {
+        player.buffs[existingBuffIndex].endTime = Date.now() + 10000;
+    } else {
+        player.buffs.push({
+            id: 'return_scroll_awakening',
+            name: '각성',
+            endTime: Date.now() + 10000,
+            effects: { attackMultiplier: 10, defenseMultiplier: 10, hpMultiplier: 10 }
+        });
+    }
+    calculateTotalStats(player);
+    player.currentHp = player.stats.total.hp; 
+    pushLog(player, `[찰나의 각성] 체력이 모두회복되며 10초간 모든 능력이 폭발적으로 증가합니다!`);
+}
+
 function gameTick(player) {
     if (!player || !player.socket) return;
 
@@ -957,12 +1020,11 @@ function gameTick(player) {
         player.buffs = player.buffs.filter(buff => buff.endTime > now);
         
         if (player.buffs.length < initialBuffCount) {
-            // 버프가 만료되었을 경우
+
             const hpBefore = player.stats.total.hp;
-            calculateTotalStats(player); // 능력치 재계산
+            calculateTotalStats(player); 
             const hpAfter = player.stats.total.hp;
             
-            // 현재 체력을 새로운 최대 체력에 맞춰 조정
             const currentHpRatio = player.currentHp / hpBefore;
             player.currentHp = Math.min(hpAfter, hpAfter * currentHpRatio);
 
@@ -980,7 +1042,11 @@ function gameTick(player) {
  if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
         const pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
         worldBossState.currentHp = Math.max(0, (worldBossState.currentHp || 0) - pDmg);
-        
+
+ if (player.equipment.earring && player.equipment.earring.id === 'acc_earring_01' && Math.random() < 0.03) {
+        applyAwakeningBuff(player);
+    }        
+
         const userId = player.user.toString();
         const participant = worldBossState.participants.get(userId) || { username: player.username, damageDealt: 0 };
         participant.damageDealt = (participant.damageDealt || 0) + pDmg;
@@ -1032,6 +1098,9 @@ function gameTick(player) {
     if (pDmg > 0 || mDmg > 0) {
         player.currentHp -= mDmg;
         player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg });
+}
+if (pDmg > 0 && player.equipment.earring && player.equipment.earring.id === 'acc_earring_01' && Math.random() < 0.03) {
+    applyAwakeningBuff(player);
     }
 
     if (player.currentHp <= 0) {
@@ -1295,10 +1364,57 @@ const formatFloat = n => n.toLocaleString(undefined, { minimumFractionDigits: 1,
 function pushLog(p, text) { p.log.unshift(text); if (p.log.length > 15) p.log.pop(); }
 const isBossFloor = (level) => level > 0 && level % BOSS_INTERVAL === 0;
 function calcMonsterStats(p) { const level = p.level; if (isBossFloor(level)) { const prevLevelMonsterAttack = Math.max(1, (level - 1) / 2); return { level: level, hp: level * 10, attack: prevLevelMonsterAttack * 2, defense: level / 3, isBoss: true }; } return { level: level, hp: level, attack: level / 2, defense: level / 5, isBoss: false }; }
-function resetPlayer(p, msg) { p.level = 1; calculateTotalStats(p); p.currentHp = p.stats.total.hp; p.monster.currentHp = 1; pushLog(p, msg); }
+function resetPlayer(p, msg) {
+    let returnFloor = 1;
+    if (p.equipment.necklace && p.equipment.necklace.id === 'acc_necklace_01') {
+        returnFloor = Math.floor(p.level * 2 / 3);
+        if (returnFloor < 1) returnFloor = 1;
+    }
+    p.level = returnFloor;
+    calculateTotalStats(p);
+    p.currentHp = p.stats.total.hp;
+    p.monster.currentHp = calcMonsterStats(p).hp;
+    pushLog(p, msg);
+}
 function upgradeStat(player, { stat, amount }) { if (!player) return; if (amount === 'MAX') { let base = player.stats.base[stat]; let gold = player.gold; let inc = 0; let sum = 0; while (true) { const next = base + inc; if (sum + next > gold) break; sum += next; inc += 1; } if (inc > 0) { player.stats.base[stat] += inc; player.gold -= sum; } } else { const n = Number(amount); let cost = 0; for (let i = 0; i < n; i++) cost += player.stats.base[stat] + i; if (player.gold >= cost) { player.gold -= cost; player.stats.base[stat] += n; } } calculateTotalStats(player); }
-function equipItem(player, uid) { if (!player) return; const idx = player.inventory.findIndex(i => i.uid === uid && (i.type === 'weapon' || i.type === 'armor')); if (idx === -1) return; const item = player.inventory[idx]; const slot = item.type; if (player.equipment[slot]) { handleItemStacking(player, player.equipment[slot]); } if (item.quantity > 1) { item.quantity--; player.equipment[slot] = { ...item, quantity: 1, uid: new mongoose.Types.ObjectId().toString() }; } else { player.equipment[slot] = player.inventory.splice(idx, 1)[0]; } calculateTotalStats(player); const hpAfter = player.stats.total.hp; player.currentHp = player.stats.total.hp; }
-function unequipItem(player, slot) { if (!player || !player.equipment[slot]) return; const hpBefore = player.stats.total.hp; handleItemStacking(player, player.equipment[slot]); player.equipment[slot] = null; calculateTotalStats(player); const hpAfter = player.stats.total.hp; player.currentHp = hpBefore > 0 && hpAfter > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter; if (player.currentHp > hpAfter) player.currentHp = hpAfter; }
+function equipItem(player, uid) {
+    if (!player) return;
+    const idx = player.inventory.findIndex(i => i.uid === uid && (i.type === 'weapon' || i.type === 'armor' || i.type === 'accessory'));
+    if (idx === -1) return;
+    const item = player.inventory[idx];
+    
+    let slot;
+    if (item.type === 'accessory') {
+        slot = item.accessoryType; 
+    } else {
+        slot = item.type; 
+    }
+
+    if (!slot || typeof player.equipment[slot] === 'undefined') return;
+
+    if (player.equipment[slot]) {
+        handleItemStacking(player, player.equipment[slot]);
+    }
+
+    if (item.quantity > 1) {
+        item.quantity--;
+        player.equipment[slot] = { ...item, quantity: 1, uid: new mongoose.Types.ObjectId().toString() };
+    } else {
+        player.equipment[slot] = player.inventory.splice(idx, 1)[0];
+    }
+    calculateTotalStats(player);
+    player.currentHp = player.stats.total.hp;
+}
+function unequipItem(player, slot) {
+    if (!player || !player.equipment[slot]) return;
+    const hpBefore = player.stats.total.hp;
+    handleItemStacking(player, player.equipment[slot]);
+    player.equipment[slot] = null;
+    calculateTotalStats(player);
+    const hpAfter = player.stats.total.hp;
+    player.currentHp = hpBefore > 0 && hpAfter > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter;
+    if (player.currentHp > hpAfter) player.currentHp = hpAfter;
+}
 function sellItem(player, uid, sellAll) { if (!player) return; const itemIndex = player.inventory.findIndex(i => i.uid === uid); if (itemIndex === -1) { pushLog(player, '[판매] 인벤토리에서 아이템을 찾을 수 없습니다.'); return; } const item = player.inventory[itemIndex]; if (item.type !== 'weapon' && item.type !== 'armor') { pushLog(player, '[판매] 해당 아이템은 상점에 판매할 수 없습니다.'); return; } const basePrice = SELL_PRICES[item.grade] || 0; if (item.enhancement > 0 || !sellAll) { let finalPrice = basePrice; if (item.enhancement > 0) { const enhancementCost = getEnhancementCost(item.enhancement); const priceWithEnhancement = basePrice + enhancementCost; if (item.enhancement <= 8) { finalPrice = priceWithEnhancement; } else if (item.enhancement <= 10) { finalPrice = priceWithEnhancement + 10000; } else { finalPrice = Math.floor(priceWithEnhancement * 1.5); } } if (item.quantity > 1) { item.quantity--; } else { player.inventory.splice(itemIndex, 1); } player.gold += finalPrice; const itemName = item.enhancement > 0 ? `+${item.enhancement} ${item.name}` : item.name; pushLog(player, `[판매] ${itemName} 1개를 ${finalPrice.toLocaleString()} G에 판매했습니다.`); } else { const quantityToSell = item.quantity; const totalPrice = basePrice * quantityToSell; player.inventory.splice(itemIndex, 1); player.gold += totalPrice; pushLog(player, `[판매] ${item.name} ${quantityToSell}개를 ${totalPrice.toLocaleString()} G에 판매했습니다.`); } }
 function getEnhancementCost(level) { let totalCost = 0; for (let i = 0; i < level; i++) { totalCost += Math.floor(1000 * Math.pow(2.1, i)); } return totalCost; }
 function calculateFameScore(player) {
@@ -1415,17 +1531,17 @@ function useItem(player, uid, useAll = false) {
     switch (item.id) {
 
 case 'boss_participation_box':
-    // 1. 100% 확률의 기본 보상
     const goldGained = 3000000;
     player.gold += goldGained;
     messages.push(`[참여 상자] 상자에서 ${goldGained.toLocaleString()} G를 획득했습니다!`);
-
-    // 2. 1% 확률의 추가 보상 (각각 독립적으로 추첨)
     const bonusItems = [
         { id: 'hammer_hephaestus', chance: 0.01 },
         { id: 'prevention_ticket', chance: 0.01 },
         { id: 'return_scroll', chance: 0.01 },
-        { id: 'pet_egg_ancient', chance: 0.01 }
+        { id: 'pet_egg_ancient', chance: 0.01 },
+        { id: 'acc_necklace_01', chance: 0.005 },
+        { id: 'acc_earring_01', chance: 0.005 },
+        { id: 'acc_wristwatch_01', chance: 0.005 }
     ];
 
     bonusItems.forEach(itemInfo => {
@@ -1452,14 +1568,12 @@ case 'boss_participation_box':
     }
     player.level = player.maxLevel;
     
-    // 각성 버프 적용 로직
     player.buffs = player.buffs || [];
-    // 중복 적용을 막기 위해 기존 각성 버프는 제거
     player.buffs = player.buffs.filter(b => b.id !== 'return_scroll_awakening'); 
     player.buffs.push({
         id: 'return_scroll_awakening',
         name: '각성',
-        endTime: Date.now() + 10000, // 10초
+        endTime: Date.now() + 10000, 
         effects: {
             attackMultiplier: 10,
             defenseMultiplier: 10,
@@ -1467,9 +1581,9 @@ case 'boss_participation_box':
         }
     });
     
-    calculateTotalStats(player); // 버프 적용 후 능력치 재계산
-    player.currentHp = player.stats.total.hp; // 증폭된 체력으로 전체 회복
-    player.monster.currentHp = calcMonsterStats(player).hp; // 몬스터 리셋
+    calculateTotalStats(player); 
+    player.currentHp = player.stats.total.hp; 
+    player.monster.currentHp = calcMonsterStats(player).hp;
     
     messages.push(`[복귀 스크롤] 스크롤의 힘으로 ${player.level}층으로 이동하며 10초간 각성합니다!`);
     break;

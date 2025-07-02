@@ -87,9 +87,12 @@
 		<div id="player-buffs-container"></div>
                     <div class="equipment-section">
                         <div class="equipment-slots">
-                            <div class="slot" id="weapon-slot" data-slot="weapon"></div>
-                            <div class="slot" id="armor-slot" data-slot="armor"></div>
-                            <div class="slot" id="pet-slot" data-slot="pet"></div>
+<div class="slot" id="weapon-slot" data-slot="weapon"></div>
+    <div class="slot" id="armor-slot" data-slot="armor"></div>
+    <div class="slot" id="pet-slot" data-slot="pet"></div>
+    <div class="slot" id="necklace-slot" data-slot="necklace"></div>
+    <div class="slot" id="earring-slot" data-slot="earring"></div>
+    <div class="slot" id="wristwatch-slot" data-slot="wristwatch"></div>
                         </div>
                         <div class="artifact-sockets" id="artifact-sockets"></div>
                     </div>
@@ -120,6 +123,7 @@
                 <div class="tabs">
                     <button class="tab-button active" data-tab="weapon-inventory-tab">무기</button>
                     <button class="tab-button" data-tab="armor-inventory-tab">방어구</button>
+	<button class="tab-button" data-tab="accessory-inventory-tab">액세서리</button>
                     <button class="tab-button" data-tab="item-inventory-tab">아이템</button>
                     <button class="tab-button" data-tab="pet-inventory-tab">펫</button>
                     <button class="tab-button" data-tab="incubator-tab">부화기</button>
@@ -141,6 +145,11 @@
                     <div class="inventory-header"><p class="inventory-tip">아이템을 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p></div>
                     <div id="armor-inventory" class="inventory-grid"></div>
                 </div>
+
+<div class="tab-content" id="accessory-inventory-tab">
+    <div class="inventory-header"><p class="inventory-tip">액세서리를 드래그하여 장착하고, 클릭하여 상세 정보를 확인하세요.</p></div>
+    <div id="accessory-inventory" class="inventory-grid"></div>
+</div>
 
                 <div class="tab-content" id="item-inventory-tab">
                     <div class="inventory-header"><p class="inventory-tip">아이템을 클릭하여 사용하거나 부화기에 넣을 수 있습니다.</p></div>
