@@ -383,6 +383,8 @@ const adminItemAlias = {
 
 '참여상자': 'boss_participation_box',
 
+'권능상자': 'box_power',
+
 '악세1': 'acc_necklace_01',
 
 '악세2': 'acc_earring_01',
@@ -450,6 +452,9 @@ const itemData = {
         tradable: true 
 
     },
+
+
+box_power: { name: '권능의 상자', type: 'Special', category: 'Consumable', grade: 'Mystic', description: '고대 신의 권능이 깃든 상자. 평범한 방법으로는 얻을 수 없다', image: 'box_power.png', tradable: true },
 
     w001: { name: '낡은 단검', type: 'weapon', grade: 'Common', baseEffect: 0.05, image: 'sword1.png', tradable: true },
 
@@ -524,6 +529,20 @@ const petData = {
 };
 
 
+
+const powerBoxLootTable = [
+    { id: 'w005', chance: 0.0016 },              // 태초의 파편
+    { id: 'a005', chance: 0.0016 },              // 세계수의 심장
+    { id: 'acc_necklace_01', chance: 0.0016 },   // 윤회의 목걸이
+    { id: 'acc_earring_01', chance: 0.0016 },    // 찰나의 각성 이어링
+    { id: 'acc_wristwatch_01', chance: 0.0016 }, // 통찰자의 크로노그래프
+    { id: 'pet_egg_mythic', chance: 0.0020 },    // 신화종 알
+
+    // 기타 유용한 아이템 (총합 99%)
+    { id: 'hammer_hephaestus', quantity: [1, 5], chance: 0.40 },
+    { id: 'prevention_ticket', quantity: [1, 5], chance: 0.40 },
+    { id: 'return_scroll', quantity: 1, chance: 0.19 }
+];
 
 const artifactData = {
 
@@ -2530,7 +2549,7 @@ updatePlayerFame(p);
                         updateGlobalRecord(`topLoot_${droppedItem.grade}`, { username: p.username, itemName: droppedItem.name, itemGrade: droppedItem.grade });
 
                     }
-
+announceMysticDrop(p.username, droppedItem);
                 }
 
             }
@@ -2673,7 +2692,7 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
 
         msg = `[+${cur} ${item.name}] 강화 성공! → [+${item.enhancement}]`;
 
-        if (item.enhancement >= 10) {
+        if (item.enhancement >= 12) {
 
             const announcementMsg = `🎉 ${p.username}님이 [+${item.enhancement} ${item.name}] 강화에 성공하였습니다! 모두 축하해주세요! 🎉`;
 
@@ -2826,6 +2845,16 @@ function pushLog(p, text) {
     if (p.socket) {
         p.socket.emit('logUpdate', p.log);
     }
+}
+
+function announceMysticDrop(username, item) {
+    if (!item || item.grade !== 'Mystic') return;
+
+    const itemNameHTML = `<span class="${item.grade}">${item.name}</span>`;
+    const announcementMessage = `🎉 ★★★ 축하합니다! ${username}님이 ${itemNameHTML} 아이템을 획득했습니다!(미스틱) ★★★ 🎉`;
+
+    io.emit('globalAnnouncement', announcementMessage);
+    io.emit('chatMessage', { type: 'announcement', username: 'SYSTEM', role: 'admin', message: announcementMessage });
 }
 
 function sendInventoryUpdate(player) {
@@ -3223,6 +3252,8 @@ function runExploration(player) {
 
                 pushLog(player, `[탐험] <span class="${newItem.grade}">${newItem.name}</span>을(를) 발견했습니다!`);
 
+announceMysticDrop(player.username, newItem);
+
             }
 
             return;
@@ -3244,6 +3275,35 @@ function useItem(player, uid, useAll = false) {
     let messages = [];
 
     switch (item.id) {
+  case 'box_power':
+            const guaranteedGold = 50000000;
+            player.gold += guaranteedGold;
+            messages.push(`[권능의 상자] 확정 보상으로 ${guaranteedGold.toLocaleString()} G를 획득했습니다!`);
+            const rand = Math.random();
+            let cumulativeChance = 0;
+            let wonItem = null;
+
+            for (const itemInfo of powerBoxLootTable) {
+                cumulativeChance += itemInfo.chance;
+                if (rand < cumulativeChance) {
+                    const quantity = Array.isArray(itemInfo.quantity) 
+                        ? Math.floor(Math.random() * (itemInfo.quantity[1] - itemInfo.quantity[0] + 1)) + itemInfo.quantity[0] 
+                        : (itemInfo.quantity || 1);
+                    
+                    wonItem = createItemInstance(itemInfo.id, quantity);
+                    break; 
+                }
+            }
+
+            if (wonItem) {
+                handleItemStacking(player, wonItem);
+                messages.push(`[권능의 상자] 추가 보상으로 (${wonItem.quantity}개) 아이템을 획득했습니다!`);
+                announceMysticDrop(player.username, wonItem);
+            } else {
+                messages.push('[권능의 상자] 아쉽지만, 추가 보상은 없었습니다.');
+            }
+            break;
+
         case 'boss_participation_box':
             const goldGained = 3000000;
             player.gold += goldGained;
@@ -3258,10 +3318,11 @@ function useItem(player, uid, useAll = false) {
                 { id: 'acc_wristwatch_01', chance: 0.005 }
             ];
             bonusItems.forEach(itemInfo => {
-                if (Math.random() < itemInfo.chance) {
+               if (Math.random() < itemInfo.chance) {
                     const wonItem = createItemInstance(itemInfo.id);
                     if (wonItem) {
                         handleItemStacking(player, wonItem);
+                        announceMysticDrop(player.username, wonItem);
                         messages.push(`[참여 상자] ✨ 상자에서 추가 아이템이 나왔습니다!!! 인벤토리를 확인하세요`);
                     }
                 }
