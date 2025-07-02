@@ -524,10 +524,14 @@ elements.board.postForm.addEventListener('submit', (e) => {
         }
     });
     
-    elements.board.backToListBtn.addEventListener('click', () => {
-        fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
-    });
+    const backToListButtons = document.querySelectorAll('.js-board-back-to-list');
     
+backToListButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        showBoardView('list');
+    });
+});
+
 const backArrowBtn = document.getElementById('board-back-arrow-btn');
 backArrowBtn.addEventListener('click', () => showBoardView('list'));
 
@@ -1371,16 +1375,6 @@ if (post.comments && post.comments.length > 0) {
 
 socket.on('initialState', (data) => {
 
-    console.log("--- INITIAL STATE RECEIVED ---");
-    if (data && data.player) {
-        console.log("Player Data:", data.player);
-        console.log("Inventory:", data.player.inventory);
-        console.log("Equipment:", data.player.equipment);
-    } else {
-        console.log("Received data is invalid or has no player object.");
-    }
-
-
     if (!data || !data.player) {
         console.error("비정상적인 초기 데이터 수신:", data);
         return;
@@ -1860,7 +1854,29 @@ function addChatMessage(data) {
 }
     socket.on('chatHistory', (history) => { elements.chat.messages.innerHTML = ''; history.forEach(msg => addChatMessage(msg)); });
     socket.on('chatMessage', (data) => addChatMessage(data));
-    socket.on('globalAnnouncement', (notice) => { const banner = elements.announcementBanner; if (banner) { banner.innerHTML = `📢 ${notice}`; banner.classList.add('active'); setTimeout(() => { banner.classList.remove('active'); }, 10000); } });
+   let announcementTimer = null;
+    elements.announcementBanner.addEventListener('click', (e) => {
+        if (e.target.id === 'announcement-close-btn') {
+            elements.announcementBanner.classList.remove('active');
+            if (announcementTimer) {
+                clearTimeout(announcementTimer);
+            }
+        }
+    });
+
+    socket.on('globalAnnouncement', (notice) => {
+        const banner = elements.announcementBanner;
+        if (banner) {
+            if (announcementTimer) {
+                clearTimeout(announcementTimer);
+            }
+            banner.innerHTML = `📢 ${notice} <span id="announcement-close-btn">&times;</span>`;
+            banner.classList.add('active');
+            announcementTimer = setTimeout(() => {
+                banner.classList.remove('active');
+            }, 10000);
+        }
+    });
 elements.modals.mailbox.button.addEventListener('click', () => {
     elements.modals.mailbox.button.classList.remove('new-mail');
     socket.emit('mailbox:get', (mails) => {

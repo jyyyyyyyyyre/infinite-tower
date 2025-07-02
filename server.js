@@ -2539,6 +2539,7 @@ function onClearFloor(p) {
                 if (droppedItem) {
 
                     handleItemStacking(p, droppedItem);
+sendInventoryUpdate(p);
 
 updatePlayerFame(p);
 
@@ -3249,7 +3250,7 @@ function runExploration(player) {
             if (newItem) {
 
                 handleItemStacking(player, newItem);
-
+		sendInventoryUpdate(player);
                 pushLog(player, `[탐험] <span class="${newItem.grade}">${newItem.name}</span>을(를) 발견했습니다!`);
 
 announceMysticDrop(player.username, newItem);

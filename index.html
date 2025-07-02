@@ -340,22 +340,23 @@
                     </table>
                     <div id="board-pagination" class="pagination"></div>
                 </div>
-                <div id="board-detail-view" style="display: none;">
+
+              <div id="board-detail-view" style="display: none;">
     <div class="detail-view-controls">
         <button id="board-back-arrow-btn" class="action-btn">←</button>
-        <button id="board-back-to-list-btn" class="action-btn">목록으로</button>
+        <button class="action-btn js-board-back-to-list">목록으로</button>
     </div>
-                    <div id="post-content-area"></div>
-                    <div id="post-comment-area">
-                        <h4>댓글</h4>
-                        <div id="comment-list"></div>
-                        <form id="comment-form">
-                            <textarea id="comment-input" placeholder="댓글을 입력하세요..." required></textarea>
-                            <button type="submit">등록</button>
-                        </form>
-                    </div>
-                    <button id="board-back-to-list-btn" class="action-btn">목록으로</button>
-                </div>
+    <div id="post-content-area"></div>
+    <div id="post-comment-area">
+        <h4>댓글</h4>
+        <div id="comment-list"></div>
+        <form id="comment-form">
+            <textarea id="comment-input" placeholder="댓글을 입력하세요..." required></textarea>
+            <button type="submit">등록</button>
+        </form>
+    </div>
+    </div>
+
                 <div id="board-write-view" style="display: none;">
                     <h3>게시글 작성</h3>
                     <form id="post-form">
