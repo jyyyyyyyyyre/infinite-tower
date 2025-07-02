@@ -421,7 +421,7 @@ let quillEditor = null;
         if (!item || item.type !== 'pet') return;
 
         if (item.grade === 'Epic' && !item.fused) {
-            selectedPetChoiceUid = uid; // 선택한 펫의 uid를 임시 저장
+            selectedPetChoiceUid = uid;
             elements.petChoice.title.textContent = `[${item.name}] 어떻게 할까요?`;
             elements.petChoice.overlay.style.display = 'flex';
         } else {
@@ -896,7 +896,7 @@ socket.on('onlineUsersData', (players) => {
     let enhancementRates = null;
 
     const formatInt = n => Math.floor(n).toLocaleString();
-    const formatFloat = n => n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const formatFloat = n => (typeof n === 'number' ? n : 0).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     
 const createEnhancementItemHTML = (item) => {
     if (!item) {
@@ -926,7 +926,30 @@ const createEnhancementItemHTML = (item) => {
         return allItems.find(i => i && i.uid === uid);
     }
 
+const renderItemInSlot = (slotElement, item, defaultText, type) => {
+    slotElement.innerHTML = '';
+    if (item) {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)}`;
+        itemDiv.dataset.uid = item.uid;
+        itemDiv.draggable = true;
+        itemDiv.dataset.itemType = (item.type === 'accessory') ? item.accessoryType : type;
+        itemDiv.innerHTML = createItemHTML(item, { showName: false }); 
+        const imageDiv = itemDiv.querySelector('.item-image');
+        const infoDiv = itemDiv.querySelector('.item-info');
+        if (imageDiv) {}
+        if (infoDiv) {
+            infoDiv.style.paddingTop = '4px';
+            infoDiv.style.flex = '1';
+        }
+        slotElement.appendChild(itemDiv);
+    } else {
+        slotElement.innerHTML = defaultText;
+    }
+};
+
     const updateUI = ({ player, monster }) => {
+
         currentPlayerState = player;
         const fameDetails = getFameDetails(player.fameScore);
 elements.userInfo.icon.textContent = fameDetails.icon;
@@ -960,27 +983,6 @@ elements.player.critResistance.textContent = `${(player.stats.critResistance * 1
             elements.explorationButton.className = 'explore';
         }
 
-const renderItemInSlot = (slotElement, item, defaultText, type) => {
-    slotElement.innerHTML = '';
-    if (item) {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)}`;
-        itemDiv.dataset.uid = item.uid;
-        itemDiv.draggable = true;
-        itemDiv.dataset.itemType = (item.type === 'accessory') ? item.accessoryType : type;
-        itemDiv.innerHTML = createItemHTML(item, { showName: false }); 
-        const imageDiv = itemDiv.querySelector('.item-image');
-        const infoDiv = itemDiv.querySelector('.item-info');
-        if (imageDiv) {}
-        if (infoDiv) {
-            infoDiv.style.paddingTop = '4px';
-            infoDiv.style.flex = '1';
-        }
-        slotElement.appendChild(itemDiv);
-    } else {
-        slotElement.innerHTML = defaultText;
-    }
-};
  const buffsContainer = document.getElementById('player-buffs-container');
     buffsContainer.innerHTML = ''; 
     if (player.buffs && player.buffs.length > 0) {
@@ -1367,7 +1369,125 @@ if (post.comments && post.comments.length > 0) {
         setTimeout(() => { anim.className = 'enhancement-animation'; anim.textContent = ''; }, 1500);
     };
 
-    socket.on('gameState', updateUI);
+socket.on('initialState', (data) => {
+
+    console.log("--- INITIAL STATE RECEIVED ---");
+    if (data && data.player) {
+        console.log("Player Data:", data.player);
+        console.log("Inventory:", data.player.inventory);
+        console.log("Equipment:", data.player.equipment);
+    } else {
+        console.log("Received data is invalid or has no player object.");
+    }
+
+
+    if (!data || !data.player) {
+        console.error("비정상적인 초기 데이터 수신:", data);
+        return;
+    }
+  
+    updateUI(data);
+});
+
+socket.on('stateUpdate', (data) => {
+    if (!currentPlayerState || !data || !data.player) {
+        return;
+    }
+
+    Object.assign(currentPlayerState, data.player);
+    const player = currentPlayerState;
+    const monster = data.monster;
+
+    elements.gold.textContent = formatInt(player.gold);
+
+    elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
+    elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
+    elements.player.totalHp.textContent = formatFloat(player.stats.total.hp);
+    elements.player.totalAttack.textContent = formatFloat(player.stats.total.attack);
+    elements.player.totalDefense.textContent = formatFloat(player.stats.total.defense);
+    elements.player.critChance.textContent = `${(player.stats.critChance * 100).toFixed(2)}%`;
+    elements.player.critResistance.textContent = `${(player.stats.critResistance * 100).toFixed(2)}%`;
+
+
+    if (player.isExploring) {
+        elements.monster.level.innerHTML = `<span style="color:var(--fail-color); font-weight:bold;">탐험 중</span>`;
+        elements.monster.hpBar.style.width = `100%`;
+        elements.monster.hpText.textContent = `1 / 1`;
+        elements.monster.totalHp.textContent = `1`;
+        elements.monster.attack.textContent = `0`;
+        elements.monster.defense.textContent = `0`;
+    } else {
+        elements.monster.level.innerHTML = monster.isBoss ? `<span style="color:var(--fail-color); font-weight:bold;">${formatInt(monster.level)}층 보스</span>` : `${formatInt(monster.level)}층 몬스터`;
+        elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
+        elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
+        elements.monster.totalHp.textContent = formatFloat(monster.hp);
+        elements.monster.attack.textContent = formatFloat(monster.attack);
+        elements.monster.defense.textContent = formatFloat(monster.defense);
+    }
+    
+
+    const buffsContainer = document.getElementById('player-buffs-container');
+    buffsContainer.innerHTML = ''; 
+    if (player.buffs && player.buffs.length > 0) {
+        player.buffs.forEach(buff => {
+            const remainingTime = Math.max(0, Math.floor((new Date(buff.endTime) - new Date()) / 1000));
+            buffsContainer.innerHTML += `
+                <div class="buff-icon" title="${buff.name}">
+                    ✨ 각성 (${remainingTime}초)
+                </div>
+            `;
+        });
+    }
+
+    updateEquipmentAndArtifacts(player);
+    elements.modals.mailbox.button.classList.toggle('new-mail', player.hasUnreadMail);
+updateAffordableButtons(); 
+});
+
+
+socket.on('inventoryUpdate', (data) => {
+    if (!currentPlayerState || !data) return;
+
+    currentPlayerState.inventory = data.inventory;
+    currentPlayerState.petInventory = data.petInventory;
+    currentPlayerState.incubator = data.incubator;
+
+    renderAllInventories(currentPlayerState);
+    renderIncubator(currentPlayerState.incubator);
+});
+
+socket.on('logUpdate', (logs) => {
+    if (!currentPlayerState || !logs) return;
+
+    currentPlayerState.log = logs;
+    elements.log.innerHTML = logs.map(msg => `<li>${msg}</li>`).join('');
+});
+
+function updateEquipmentAndArtifacts(player) {
+    if (!player) return;
+    renderItemInSlot(elements.equipment.weapon, player.equipment.weapon, '⚔️<br>무기', 'weapon');
+    renderItemInSlot(elements.equipment.armor, player.equipment.armor, '🛡️<br>방어구', 'armor');
+    renderItemInSlot(elements.equipment.pet, player.equippedPet, '🐾<br>펫', 'pet');
+    renderItemInSlot(elements.equipment.necklace, player.equipment.necklace, '💍<br>목걸이', 'necklace');
+    renderItemInSlot(elements.equipment.earring, player.equipment.earring, '👂<br>귀걸이', 'earring');
+    renderItemInSlot(elements.equipment.wristwatch, player.equipment.wristwatch, '⏱️<br>손목시계', 'wristwatch');
+    elements.artifactSockets.innerHTML = player.unlockedArtifacts.map(artifact => artifact ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`).join('');
+}
+
+function renderAllInventories(player) {
+    if (!player) return;
+    const renderGrid = (items) => items.map(item => {
+        const itemType = (item.type === 'accessory') ? item.accessoryType : item.type;
+        return `<div class="inventory-item ${getEnhanceClass(item.enhancement)} ${selectedInventoryItemUid === item.uid ? 'selected' : ''}" data-uid="${item.uid}" draggable="true" data-item-type="${itemType}">${createItemHTML(item)}</div>`;
+    }).join('');
+
+    elements.inventory.weapon.innerHTML = renderGrid(player.inventory.filter(i => i.type === 'weapon'));
+    elements.inventory.armor.innerHTML = renderGrid(player.inventory.filter(i => i.type === 'armor'));
+    elements.inventory.accessory.innerHTML = renderGrid(player.inventory.filter(i => i.type === 'accessory'));
+    elements.inventory.item.innerHTML = renderGrid(player.inventory.filter(i => i.type !== 'weapon' && i.type !== 'armor' && i.type !== 'accessory'));
+    elements.inventory.pet.innerHTML = renderGrid(player.petInventory);
+}
+
     socket.on('combatResult', (damages) => { 
         if (currentPlayerState.isExploring) { const m = elements.monster.panel; m.classList.add('hit-flash'); setTimeout(() => m.classList.remove('hit-flash'), 100);
         } else {
@@ -1424,8 +1544,6 @@ function handleItemSelection(e) {
 
     const uid = card.dataset.uid;
 
-    // if (item && item.type === 'pet') return; // 이 줄을 삭제!
-
     selectedInventoryItemUid = uid;
     document.querySelector('.tab-button[data-tab="enhancement-tab"]').click();
 
@@ -1446,43 +1564,55 @@ function handleItemSelection(e) {
 }
     document.querySelector('.management-panel').addEventListener('click', handleItemSelection);
 
-    elements.enhancement.anvil.addEventListener('click', (e) => {
-        const target = e.target;
-        const action = target.dataset.action;
-        if (!action || !selectedInventoryItemUid) return;
-        const item = findItemInState(selectedInventoryItemUid);
-        if (!item) return;
-        switch (action) {
-case 'equip':
+  elements.enhancement.anvil.addEventListener('click', (e) => {
+    const target = e.target;
+    const action = target.dataset.action;
+    if (!action || !selectedInventoryItemUid) return;
+
+    const item = findItemInState(selectedInventoryItemUid);
+    if (!item) return;
+
+    switch (action) {
+        case 'equip':
             if (item.type === 'pet') {
                 socket.emit('equipPet', selectedInventoryItemUid);
             } else {
                 socket.emit('equipItem', selectedInventoryItemUid);
             }
+            alert(`[${item.name}] 을(를) 장착했습니다.`);
             selectedInventoryItemUid = null;
-            updateInteractionPanel(); 
+            updateInteractionPanel();
             break;
 
-            case 'sell':
-                if (confirm("상점에 판매하면 거래소보다 낮은 가격을 받습니다. 정말 판매하시겠습니까?")) {
-                    socket.emit('sellItem', { uid: selectedInventoryItemUid, sellAll: target.dataset.sellAll === 'true' });
-                    selectedInventoryItemUid = null;
+        case 'sell':
+            if (confirm("상점에 판매하면 거래소보다 낮은 가격을 받습니다. 정말 판매하시겠습니까?")) {
+                socket.emit('sellItem', { uid: selectedInventoryItemUid, sellAll: target.dataset.sellAll === 'true' });
+                alert('아이템을 판매했습니다.');
+                selectedInventoryItemUid = null;
+                updateInteractionPanel(); 
+            }
+            break;
+
+        case 'list-auction':
+            let quantity = 1;
+            if (item.quantity > 1) {
+                const inputQty = prompt(`등록할 수량을 입력하세요. (최대 ${item.quantity}개)`, item.quantity);
+                if (inputQty === null) return;
+                quantity = parseInt(inputQty, 10);
+                if (isNaN(quantity) || quantity <= 0 || quantity > item.quantity) {
+                    return alert("올바른 수량을 입력해주세요.");
                 }
-                break;
-            case 'list-auction':
-                let quantity = 1;
-                if (item.quantity > 1) {
-                    const inputQty = prompt(`등록할 수량을 입력하세요. (최대 ${item.quantity}개)`, item.quantity);
-                    if (inputQty === null) return;
-                    quantity = parseInt(inputQty, 10);
-                    if (isNaN(quantity) || quantity <= 0 || quantity > item.quantity) { return alert("올바른 수량을 입력해주세요."); }
-                }
-                const price = prompt("개당 판매할 가격(골드)을 숫자로만 입력하세요:");
-                if (price && !isNaN(price) && parseInt(price, 10) > 0) {
-                    socket.emit('listOnAuction', { uid: selectedInventoryItemUid, price: parseInt(price, 10), quantity });
-                    selectedInventoryItemUid = null;
-                } else if (price !== null) { alert("올바른 가격을 입력해주세요."); }
-                break;
+            }
+            const price = prompt("개당 판매할 가격(골드)을 숫자로만 입력하세요:");
+            if (price && !isNaN(price) && parseInt(price, 10) > 0) {
+                socket.emit('listOnAuction', { uid: selectedInventoryItemUid, price: parseInt(price, 10), quantity });
+                alert('거래소에 아이템을 등록했습니다.');
+                selectedInventoryItemUid = null;
+                updateInteractionPanel(); 
+            } else if (price !== null) {
+                alert("올바른 가격을 입력해주세요.");
+            }
+            break;
          case 'use':
     { 
         const itemToUse = findItemInState(selectedInventoryItemUid);
@@ -1498,13 +1628,18 @@ case 'equip':
             case 'use-all':
                 socket.emit('useItem', { uid: selectedInventoryItemUid, useAll: true });
                 break;
-            case 'hatch':
-                if (confirm(`[${item.name}]을(를) 부화기에 넣으시겠습니까?`)) {
-                    socket.emit('placeEggInIncubator', { uid: selectedInventoryItemUid });
-                    selectedInventoryItemUid = null;
-                    document.querySelector('.tab-button[data-tab="incubator-tab"]').click();
-                }
-                break;
+     case 'hatch':
+    if (confirm(`[${item.name}]을(를) 부화기에 넣으시겠습니까?`)) {
+        socket.emit('placeEggInIncubator', { uid: selectedInventoryItemUid });
+        selectedInventoryItemUid = null;
+        updateInteractionPanel();
+        document.querySelector('.tab-button[data-tab="incubator-tab"]').click();
+    }
+    break;
+
+
+
+
         }
     });
 

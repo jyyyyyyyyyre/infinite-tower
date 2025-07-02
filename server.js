@@ -83,9 +83,9 @@ const BOSS_INTERVAL = 200;
 
 const WORLD_BOSS_CONFIG = {
 
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 150000000, ATTACK: 0, DEFENSE: 0,
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 1500000000, ATTACK: 0, DEFENSE: 0,
 
-    REWARDS: { GOLD: 50000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.50, Legendary: 0.10, Epic: 0.39, Mystic: 0.001 } }
+    REWARDS: { GOLD: 200000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.79, Mystic: 0.001 } }
 
 };
 
@@ -1113,6 +1113,12 @@ onlinePlayers[socket.userId] = { ...gameData, monster: { currentHp: 1 }, socket:
     sendState(socket, onlinePlayers[socket.userId], calcMonsterStats(onlinePlayers[socket.userId]));
 
 updatePlayerFame(onlinePlayers[socket.userId]);
+const player = onlinePlayers[socket.userId];
+const { socket: _, ...playerForClient } = player;
+socket.emit('initialState', {
+    player: playerForClient, 
+    monster: calcMonsterStats(player)
+});
 
 
 
@@ -1604,25 +1610,17 @@ const bannerAnnounceMsg = `[관리자] ${targetName}에게 ${givenItemName} 아�
 
         .on('unequipPet', () => unequipPet(onlinePlayers[socket.userId]))
 
-        .on('removeEggFromIncubator', () => {
-
-            const player = onlinePlayers[socket.userId];
-
-            if (player && player.incubator.egg && !player.incubator.hatchCompleteTime) {
-
-                const egg = player.incubator.egg;
-
-                handleItemStacking(player, egg);
-
-                player.incubator.egg = null;
-
-                player.incubator.hatchDuration = 0;
-
-                pushLog(player, `[부화기] ${egg.name}을(를) 인벤토리로 옮겼습니다.`);
-
-            }
-
-        })
+       .on('removeEggFromIncubator', () => {
+    const player = onlinePlayers[socket.userId];
+    if (player && player.incubator.egg && !player.incubator.hatchCompleteTime) {
+        const egg = player.incubator.egg;
+        handleItemStacking(player, egg);
+        player.incubator.egg = null;
+        player.incubator.hatchDuration = 0;
+        pushLog(player, `[부화기] ${egg.name}을(를) 인벤토리로 옮겼습니다.`);
+        sendInventoryUpdate(player);
+    }
+})
 
 
 
@@ -2044,95 +2042,57 @@ const bannerAnnounceMsg = `[관리자] ${targetName}에게 ${givenItemName} 아�
 })
 
 .on('mailbox:claim', async ({ mailId }, callback) => {
+    try {
+        const player = onlinePlayers[socket.userId];
+        if (!player) return callback({ success: false, message: '플레이어 정보를 찾을 수 없습니다.' });
 
-    try {
+        const mail = await Mail.findById(mailId);
+        if (!mail || mail.recipientId.toString() !== socket.userId) {
+            return callback({ success: false, message: '우편을 수령할 수 없습니다.' });
+        }
 
-        const player = onlinePlayers[socket.userId];
+        if (mail.item) handleItemStacking(player, mail.item);
+        if (mail.gold > 0) player.gold += mail.gold;
 
-        if (!player) return callback({ success: false, message: '플레이어 정보를 찾을 수 없습니다.' });
+        await Mail.findByIdAndDelete(mailId);
 
+        pushLog(player, `[우편] '${mail.description}' 보상을 수령했습니다.`);
+        
+        sendState(socket, player, calcMonsterStats(player));
+        sendInventoryUpdate(player);
 
-
-        const mail = await Mail.findById(mailId);
-
-        if (!mail || mail.recipientId.toString() !== socket.userId) {
-
-            return callback({ success: false, message: '우편을 수령할 수 없습니다.' });
-
-        }
-
-
-
-        if (mail.item) handleItemStacking(player, mail.item);
-
-        if (mail.gold > 0) player.gold += mail.gold;
-
-
-
-        await Mail.findByIdAndDelete(mailId);
-
-
-
-        pushLog(player, `[우편] '${mail.description}' 보상을 수령했습니다.`);
-
-        await sendState(socket, player, calcMonsterStats(player));
-
-        callback({ success: true });
-
-    } catch (e) {
-
-        callback({ success: false, message: '오류가 발생했습니다.' });
-
-    }
-
+        callback({ success: true });
+    } catch (e) {
+        callback({ success: false, message: '오류가 발생했습니다.' });
+    }
 })
 
 .on('mailbox:claimAll', async (callback) => {
+    try {
+        const player = onlinePlayers[socket.userId];
+        if (!player) return callback({ success: false, message: '플레이어 정보를 찾을 수 없습니다.' });
 
-    try {
+        const mails = await Mail.find({ recipientId: socket.userId });
+        if (mails.length === 0) return callback({ success: true });
 
-        const player = onlinePlayers[socket.userId];
+        let totalGold = 0;
+        for (const mail of mails) {
+            if (mail.item) handleItemStacking(player, mail.item);
+            if (mail.gold > 0) totalGold += mail.gold;
+        }
+        player.gold += totalGold;
 
-        if (!player) return callback({ success: false, message: '플레이어 정보를 찾을 수 없습니다.' });
+        await Mail.deleteMany({ recipientId: socket.userId });
 
+        pushLog(player, `[우편] ${mails.length}개의 우편을 모두 수령했습니다.`);
+        
+        sendState(socket, player, calcMonsterStats(player));
+        sendInventoryUpdate(player);
 
-
-        const mails = await Mail.find({ recipientId: socket.userId });
-
-        if (mails.length === 0) return callback({ success: true });
-
-
-
-        let totalGold = 0;
-
-        for (const mail of mails) {
-
-            if (mail.item) handleItemStacking(player, mail.item);
-
-            if (mail.gold > 0) totalGold += mail.gold;
-
-        }
-
-        player.gold += totalGold;
-
-
-
-        await Mail.deleteMany({ recipientId: socket.userId });
-
-
-
-        pushLog(player, `[우편] ${mails.length}개의 우편을 모두 수령했습니다.`);
-
-        await sendState(socket, player, calcMonsterStats(player));
-
-        callback({ success: true });
-
-    } catch (e) {
-
-        callback({ success: false, message: '오류가 발생했습니다.' });
-
-    }
-
+        callback({ success: true });
+    } catch (e) {
+        callback({ success: false, message: '오류가 발생했습니다.' });
+    }
 })
 
 
@@ -2584,73 +2544,35 @@ updatePlayerFame(p);
 
 
 async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
-
     if (!p) return;
-
     let item;
-
     let isEquipped = false;
-
     let itemIndex = p.inventory.findIndex(i => i.uid === uid);
-
-
-
     if (itemIndex !== -1) {
-
         item = p.inventory[itemIndex];
-
     } else {
-
         for (const key of Object.keys(p.equipment)) {
-
             if (p.equipment[key] && p.equipment[key].uid === uid) {
-
                 item = p.equipment[key];
-
                 isEquipped = true;
-
                 break;
-
             }
-
         }
-
     }
-
-
-
     if (!item || (item.type !== 'weapon' && item.type !== 'armor')) return;
-
-
-
     if (!isEquipped && item.quantity > 1) {
-
         item.quantity--;
-
         const newItemForEnhance = { ...item, quantity: 1, uid: new mongoose.Types.ObjectId().toString() };
-
         p.inventory.push(newItemForEnhance);
-
         item = newItemForEnhance;
-
         uid = item.uid;
-
         itemIndex = p.inventory.length - 1;
-
     }
-
-
-
     const cur = item.enhancement;
-
     const cost = Math.floor(1000 * Math.pow(2.1, cur));
-
     if (p.gold < cost) {
-
         pushLog(p, '[강화] 골드가 부족합니다.');
-
         return;
-
     }
 
 
@@ -2888,7 +2810,8 @@ updatePlayerFame(p);
 
 
     socket.emit('enhancementResult', { result, newItem: (result !== 'destroy' ? item : null), destroyed: result === 'destroy' });
-
+    sendState(p.socket, p, calcMonsterStats(p));
+    sendInventoryUpdate(p);
 }
 
 const formatInt = n => Math.floor(n).toLocaleString();
@@ -2897,7 +2820,23 @@ const formatFloat = n => n.toLocaleString(undefined, { minimumFractionDigits: 1,
 
 
 
-function pushLog(p, text) { p.log.unshift(text); if (p.log.length > 15) p.log.pop(); }
+function pushLog(p, text) { 
+    p.log.unshift(text); 
+    if (p.log.length > 15) p.log.pop(); 
+    if (p.socket) {
+        p.socket.emit('logUpdate', p.log);
+    }
+}
+
+function sendInventoryUpdate(player) {
+    if (player && player.socket) {
+        player.socket.emit('inventoryUpdate', {
+            inventory: player.inventory,
+            petInventory: player.petInventory,
+            incubator: player.incubator 
+        });
+    }
+}
 
 const isBossFloor = (level) => level > 0 && level % BOSS_INTERVAL === 0;
 
@@ -2927,85 +2866,134 @@ function resetPlayer(p, msg) {
 
 }
 
-function upgradeStat(player, { stat, amount }) { if (!player) return; if (amount === 'MAX') { let base = player.stats.base[stat]; let gold = player.gold; let inc = 0; let sum = 0; while (true) { const next = base + inc; if (sum + next > gold) break; sum += next; inc += 1; } if (inc > 0) { player.stats.base[stat] += inc; player.gold -= sum; } } else { const n = Number(amount); let cost = 0; for (let i = 0; i < n; i++) cost += player.stats.base[stat] + i; if (player.gold >= cost) { player.gold -= cost; player.stats.base[stat] += n; } } calculateTotalStats(player); }
+function upgradeStat(player, { stat, amount }) {
+    if (!player) return;
+
+    const nAmount = (amount === 'MAX') ? Infinity : parseInt(amount, 10);
+    if (isNaN(nAmount) || nAmount <= 0) return;
+
+    let cost = 0;
+    let upgradedCount = 0;
+
+    for (let i = 0; i < nAmount; i++) {
+
+
+        const nextLevelCost = player.stats.base[stat];
+
+
+        if (player.gold >= nextLevelCost) {
+            player.gold -= nextLevelCost;
+            player.stats.base[stat]++;
+            cost += nextLevelCost;
+            upgradedCount++;
+        } else {
+            if (amount !== 'MAX') {
+                pushLog(player, '[스탯] 골드가 부족합니다.');
+            }
+            break; 
+        }
+    }
+
+    if (upgradedCount > 0) {
+        pushLog(player, `[스탯] ${stat.toUpperCase()} 스탯을 ${upgradedCount}번 올려 ${cost.toLocaleString()} G를 사용했습니다.`);
+        calculateTotalStats(player);
+    }
+
+    sendPlayerState(player);
+}
 
 function equipItem(player, uid) {
+    if (!player) return;
+    const idx = player.inventory.findIndex(i => i.uid === uid && (i.type === 'weapon' || i.type === 'armor' || i.type === 'accessory'));
+    if (idx === -1) return;
 
-    if (!player) return;
+    const item = player.inventory[idx];
+    let slot = (item.type === 'accessory') ? item.accessoryType : item.type;
 
-    const idx = player.inventory.findIndex(i => i.uid === uid && (i.type === 'weapon' || i.type === 'armor' || i.type === 'accessory'));
+    if (!slot || typeof player.equipment[slot] === 'undefined') return;
 
-    if (idx === -1) return;
+    if (player.equipment[slot]) {
+        handleItemStacking(player, player.equipment[slot]);
+    }
 
-    const item = player.inventory[idx];
-
-    
-
-    let slot;
-
-    if (item.type === 'accessory') {
-
-        slot = item.accessoryType; 
-
-    } else {
-
-        slot = item.type; 
-
-    }
-
-
-
-    if (!slot || typeof player.equipment[slot] === 'undefined') return;
-
-
-
-    if (player.equipment[slot]) {
-
-        handleItemStacking(player, player.equipment[slot]);
-
-    }
-
-
-
-    if (item.quantity > 1) {
-
-        item.quantity--;
-
-        player.equipment[slot] = { ...item, quantity: 1, uid: new mongoose.Types.ObjectId().toString() };
-
-    } else {
-
-        player.equipment[slot] = player.inventory.splice(idx, 1)[0];
-
-    }
-
-    calculateTotalStats(player);
-
-    player.currentHp = player.stats.total.hp;
-
+    if (item.quantity > 1) {
+        item.quantity--;
+        player.equipment[slot] = { ...item, quantity: 1, uid: new mongoose.Types.ObjectId().toString() };
+    } else {
+        player.equipment[slot] = player.inventory.splice(idx, 1)[0];
+pushLog(player, `[장비] ${player.equipment[slot].name} 을(를) 장착했습니다.`);
+    }
+    
+    calculateTotalStats(player);
+    player.currentHp = player.stats.total.hp;
+    sendPlayerState(player);
+    sendInventoryUpdate(player);
 }
 
 function unequipItem(player, slot) {
+    if (!player || !player.equipment[slot]) return;
+    const hpBefore = player.stats.total.hp;
+    
+    handleItemStacking(player, player.equipment[slot]);
+    player.equipment[slot] = null;
+    
+    calculateTotalStats(player);
+    
+    const hpAfter = player.stats.total.hp;
+    player.currentHp = hpBefore > 0 && hpAfter > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter;
+    if (player.currentHp > hpAfter) player.currentHp = hpAfter;
 
-    if (!player || !player.equipment[slot]) return;
-
-    const hpBefore = player.stats.total.hp;
-
-    handleItemStacking(player, player.equipment[slot]);
-
-    player.equipment[slot] = null;
-
-    calculateTotalStats(player);
-
-    const hpAfter = player.stats.total.hp;
-
-    player.currentHp = hpBefore > 0 && hpAfter > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter;
-
-    if (player.currentHp > hpAfter) player.currentHp = hpAfter;
-
+    sendPlayerState(player);
+    sendInventoryUpdate(player);
 }
 
-function sellItem(player, uid, sellAll) { if (!player) return; const itemIndex = player.inventory.findIndex(i => i.uid === uid); if (itemIndex === -1) { pushLog(player, '[판매] 인벤토리에서 아이템을 찾을 수 없습니다.'); return; } const item = player.inventory[itemIndex]; if (item.type !== 'weapon' && item.type !== 'armor') { pushLog(player, '[판매] 해당 아이템은 상점에 판매할 수 없습니다.'); return; } const basePrice = SELL_PRICES[item.grade] || 0; if (item.enhancement > 0 || !sellAll) { let finalPrice = basePrice; if (item.enhancement > 0) { const enhancementCost = getEnhancementCost(item.enhancement); const priceWithEnhancement = basePrice + enhancementCost; if (item.enhancement <= 8) { finalPrice = priceWithEnhancement; } else if (item.enhancement <= 10) { finalPrice = priceWithEnhancement + 10000; } else { finalPrice = Math.floor(priceWithEnhancement * 1.5); } } if (item.quantity > 1) { item.quantity--; } else { player.inventory.splice(itemIndex, 1); } player.gold += finalPrice; const itemName = item.enhancement > 0 ? `+${item.enhancement} ${item.name}` : item.name; pushLog(player, `[판매] ${itemName} 1개를 ${finalPrice.toLocaleString()} G에 판매했습니다.`); } else { const quantityToSell = item.quantity; const totalPrice = basePrice * quantityToSell; player.inventory.splice(itemIndex, 1); player.gold += totalPrice; pushLog(player, `[판매] ${item.name} ${quantityToSell}개를 ${totalPrice.toLocaleString()} G에 판매했습니다.`); } }
+function sellItem(player, uid, sellAll) {
+    if (!player) return;
+    const itemIndex = player.inventory.findIndex(i => i.uid === uid);
+    if (itemIndex === -1) {
+        pushLog(player, '[판매] 인벤토리에서 아이템을 찾을 수 없습니다.');
+        return;
+    }
+    const item = player.inventory[itemIndex];
+    
+    if (item.tradable === false) { 
+        pushLog(player, '[판매] 해당 아이템은 상점에 판매할 수 없습니다.');
+        return;
+    }
+
+    const basePrice = SELL_PRICES[item.grade] || 0;
+    if (item.enhancement > 0 || !sellAll) {
+        let finalPrice = basePrice;
+        if (item.enhancement > 0) {
+            const enhancementCost = getEnhancementCost(item.enhancement);
+            const priceWithEnhancement = basePrice + enhancementCost;
+            if (item.enhancement <= 8) {
+                finalPrice = priceWithEnhancement;
+            } else if (item.enhancement <= 10) {
+                finalPrice = priceWithEnhancement + 10000;
+            } else {
+                finalPrice = Math.floor(priceWithEnhancement * 1.5);
+            }
+        }
+        if (item.quantity > 1) {
+            item.quantity--;
+        } else {
+            player.inventory.splice(itemIndex, 1);
+        }
+        player.gold += finalPrice;
+        const itemName = item.enhancement > 0 ? `+${item.enhancement} ${item.name}` : item.name;
+        pushLog(player, `[판매] ${itemName} 1개를 ${finalPrice.toLocaleString()} G에 판매했습니다.`);
+    } else {
+        const quantityToSell = item.quantity;
+        const totalPrice = basePrice * quantityToSell;
+        player.inventory.splice(itemIndex, 1);
+        player.gold += totalPrice;
+        pushLog(player, `[판매] ${item.name} ${quantityToSell}개를 ${totalPrice.toLocaleString()} G에 판매했습니다.`);
+    }
+
+    sendState(player.socket, player, calcMonsterStats(player));
+    sendInventoryUpdate(player);
+}
 
 function getEnhancementCost(level) { let totalCost = 0; for (let i = 0; i < level; i++) { totalCost += Math.floor(1000 * Math.pow(2.1, i)); } return totalCost; }
 
@@ -3180,21 +3168,39 @@ function getFameTier(score) {
 async function savePlayerData(userId) { const p = onlinePlayers[userId]; if (!p) return; try { const { socket: _, attackTarget: __, ...playerDataToSave } = p; await GameData.updateOne({ user: userId }, { $set: playerDataToSave }); } catch (error) { console.error(`[저장 실패] 유저: ${p.username} 데이터 저장 중 오류 발생:`, error); } }
 
 async function sendState(socket, player, monsterStats) {
+    if (!socket || !player) return;
 
-    if (!socket || !player) return;
+    const unreadMailCount = await Mail.countDocuments({ recipientId: player.user, isRead: false });
+    player.hasUnreadMail = unreadMailCount > 0;
+    const playerStateForClient = {
+        gold: player.gold,
+        level: player.level,
+        maxLevel: player.maxLevel,
+        stats: player.stats,
+        currentHp: player.currentHp,
+        isExploring: player.isExploring,
+        fameScore: player.fameScore,
+        hasUnreadMail: player.hasUnreadMail,
+        buffs: player.buffs || [],
+        equipment: player.equipment,
+        equippedPet: player.equippedPet,
+        unlockedArtifacts: player.unlockedArtifacts,
 
+    };
 
+    const monsterStateForClient = {
+        ...monsterStats,
+        currentHp: player.monster.currentHp
+    };
 
-    const unreadMailCount = await Mail.countDocuments({ recipientId: player.user, isRead: false });
+    socket.emit('stateUpdate', { player: playerStateForClient, monster: monsterStateForClient });
+}
 
-    player.hasUnreadMail = unreadMailCount > 0;
+function sendPlayerState(player) {
+    if (!player || !player.socket) return;
 
-
-
-    const { socket: _, ...playerStateForClient } = player;
-
-    socket.emit('gameState', { player: playerStateForClient, monster: { ...monsterStats, currentHp: player.monster.currentHp } });
-
+    const monsterStats = calcMonsterStats(player); 
+    sendState(player.socket, player, monsterStats);
 }
 
 function runExploration(player) {
@@ -3228,293 +3234,204 @@ function runExploration(player) {
 }
 
 
-
 function useItem(player, uid, useAll = false) {
-
-    if (!player) return;
-
-    const itemIndex = player.inventory.findIndex(i => i.uid === uid);
-
-    if (itemIndex === -1) return;
-
-    const item = player.inventory[itemIndex];
-
-    const quantityToUse = useAll ? item.quantity : 1;
-
-    let messages = [];
-
-
-
-    switch (item.id) {
-
-
-
-case 'boss_participation_box':
-
-    const goldGained = 3000000;
-
-    player.gold += goldGained;
-
-    messages.push(`[참여 상자] 상자에서 ${goldGained.toLocaleString()} G를 획득했습니다!`);
-
-    const bonusItems = [
-
-        { id: 'hammer_hephaestus', chance: 0.01 },
-
-        { id: 'prevention_ticket', chance: 0.01 },
-
-        { id: 'return_scroll', chance: 0.01 },
-
-        { id: 'pet_egg_ancient', chance: 0.01 },
-
-        { id: 'acc_necklace_01', chance: 0.005 },
-
-        { id: 'acc_earring_01', chance: 0.005 },
-
-        { id: 'acc_wristwatch_01', chance: 0.005 }
-
-    ];
-
-
-
-    bonusItems.forEach(itemInfo => {
-
-        if (Math.random() < itemInfo.chance) {
-
-            const wonItem = createItemInstance(itemInfo.id);
-
-            if (wonItem) {
-
-                handleItemStacking(player, wonItem);
-
-                messages.push(`[참여 상자] ✨ 상자에서 추가 아이템이 나왔습니다!!! 인벤토리를 확인하세요`);
-
-            }
-
-        }
-
-    });
-
-
-
-    break;
-
- case 'return_scroll':
-
-    if (player.isExploring) {
-
-        messages.push('[복귀 스크롤] 탐험 중에는 사용할 수 없습니다.');
-
-        if (player.socket) player.socket.emit('useItemResult', { messages });
-
-        return;
-
-    }
-
-    if (player.level >= player.maxLevel) {
-
-        messages.push('[복귀 스크롤] 이미 최고 등반 층에 있거나 더 높은 곳에 있어 사용할 수 없습니다.');
-
-        if (player.socket) player.socket.emit('useItemResult', { messages });
-
-        return;
-
-    }
-
-    player.level = player.maxLevel;
-
-    
-
-    player.buffs = player.buffs || [];
-
-    player.buffs = player.buffs.filter(b => b.id !== 'return_scroll_awakening'); 
-
-    player.buffs.push({
-
-        id: 'return_scroll_awakening',
-
-        name: '각성',
-
-        endTime: Date.now() + 10000, 
-
-        effects: {
-
-            attackMultiplier: 10,
-
-            defenseMultiplier: 10,
-
-            hpMultiplier: 10
-
-        }
-
-    });
-
-    
-
-    calculateTotalStats(player); 
-
-    player.currentHp = player.stats.total.hp; 
-
-    player.monster.currentHp = calcMonsterStats(player).hp;
-
-    
-
-    messages.push(`[복귀 스크롤] 스크롤의 힘으로 ${player.level}층으로 이동하며 10초간 각성합니다!`);
-
-    break;
-
-
-
-        case 'gold_pouch':
-
-            let totalGoldGained = 0;
-
-            for (let i = 0; i < quantityToUse; i++) {
-
-              
-
-                const rand = Math.random(); 
-
-                let cumulativeChance = 0;
-
-                for (const reward of goldPouchRewardTable) {
-
-                    cumulativeChance += reward.chance;
-
-                    if (rand < cumulativeChance) {
-
-                        const goldGained = Math.floor(Math.random() * (reward.range[1] - reward.range[0] + 1)) + reward.range[0];
-
-                        totalGoldGained += goldGained;
-
-                        break;
-
-                    }
-
-                }
-
-            }
-
-            player.gold += totalGoldGained;
-
-            messages.push(`[수수께끼 골드 주머니] ${quantityToUse}개를 사용하여 ${totalGoldGained.toLocaleString()} G를 획득했습니다!`);
-
-            break;
-
-        case 'hammer_hephaestus':
-
-            messages.push('이 아이템은 강화 시 체크하여 사용합니다.');
-
-            return;
-
-        case 'prevention_ticket':
-
-             messages.push('이 아이템은 강화 시 체크하여 사용합니다.');
-
-            return;
-
-        case 'tome_socket1':
-
-        case 'tome_socket2':
-
-        case 'tome_socket3':
-
-            const socketIndex = parseInt(item.id.slice(-1)) - 1;
-
-            if (player.unlockedArtifacts[socketIndex]) {
-
-                messages.push('이미 해금된 유물 소켓입니다.');
-
-                return;
-
-            } else {
-
-                player.unlockedArtifacts[socketIndex] = artifactData[item.id];
-
-                messages.push(`[${artifactData[item.id].name}]의 지혜를 흡수하여 유물 소켓을 영구히 해금했습니다!`);
-
-updatePlayerFame(player);
-
-            }
-
-            break;
-
-        default:
-
-            messages.push('사용할 수 없는 아이템입니다.');
-
-            return;
-
-    }
-
-    
-
-    item.quantity -= quantityToUse;
-
-    if (item.quantity <= 0) {
-
-        player.inventory.splice(itemIndex, 1);
-
-    }
-
-    if (player.socket) {
-
-        player.socket.emit('useItemResult', { messages });
-
-    }
-
+    if (!player) return;
+    const itemIndex = player.inventory.findIndex(i => i.uid === uid);
+    if (itemIndex === -1) return;
+
+    const item = player.inventory[itemIndex];
+    const quantityToUse = useAll ? item.quantity : 1;
+    let messages = [];
+
+    switch (item.id) {
+        case 'boss_participation_box':
+            const goldGained = 3000000;
+            player.gold += goldGained;
+            messages.push(`[참여 상자] 상자에서 ${goldGained.toLocaleString()} G를 획득했습니다!`);
+            const bonusItems = [
+                { id: 'hammer_hephaestus', chance: 0.01 },
+                { id: 'prevention_ticket', chance: 0.01 },
+                { id: 'return_scroll', chance: 0.01 },
+                { id: 'pet_egg_ancient', chance: 0.01 },
+                { id: 'acc_necklace_01', chance: 0.005 },
+                { id: 'acc_earring_01', chance: 0.005 },
+                { id: 'acc_wristwatch_01', chance: 0.005 }
+            ];
+            bonusItems.forEach(itemInfo => {
+                if (Math.random() < itemInfo.chance) {
+                    const wonItem = createItemInstance(itemInfo.id);
+                    if (wonItem) {
+                        handleItemStacking(player, wonItem);
+                        messages.push(`[참여 상자] ✨ 상자에서 추가 아이템이 나왔습니다!!! 인벤토리를 확인하세요`);
+                    }
+                }
+            });
+            break;
+
+        case 'return_scroll':
+            if (player.isExploring) {
+                messages.push('[복귀 스크롤] 탐험 중에는 사용할 수 없습니다.');
+                if (player.socket) player.socket.emit('useItemResult', { messages });
+                return;
+            }
+            if (player.level >= player.maxLevel) {
+                messages.push('[복귀 스크롤] 이미 최고 등반 층에 있거나 더 높은 곳에 있어 사용할 수 없습니다.');
+                if (player.socket) player.socket.emit('useItemResult', { messages });
+                return;
+            }
+            player.level = player.maxLevel;
+            player.buffs = player.buffs || [];
+            player.buffs = player.buffs.filter(b => b.id !== 'return_scroll_awakening');
+            player.buffs.push({
+                id: 'return_scroll_awakening',
+                name: '각성',
+                endTime: Date.now() + 10000,
+                effects: { attackMultiplier: 10, defenseMultiplier: 10, hpMultiplier: 10 }
+            });
+            calculateTotalStats(player);
+            player.currentHp = player.stats.total.hp;
+            player.monster.currentHp = calcMonsterStats(player).hp;
+            messages.push(`[복귀 스크롤] 스크롤의 힘으로 ${player.level}층으로 이동하며 10초간 각성합니다!`);
+            break;
+
+        case 'gold_pouch':
+            let totalGoldGained = 0;
+            for (let i = 0; i < quantityToUse; i++) {
+                const rand = Math.random();
+                let cumulativeChance = 0;
+                for (const reward of goldPouchRewardTable) {
+                    cumulativeChance += reward.chance;
+                    if (rand < cumulativeChance) {
+                        const goldGained = Math.floor(Math.random() * (reward.range[1] - reward.range[0] + 1)) + reward.range[0];
+                        totalGoldGained += goldGained;
+                        break;
+                    }
+                }
+            }
+            player.gold += totalGoldGained;
+            messages.push(`[수수께끼 골드 주머니] ${quantityToUse}개를 사용하여 ${totalGoldGained.toLocaleString()} G를 획득했습니다!`);
+            break;
+
+        case 'hammer_hephaestus':
+            messages.push('이 아이템은 강화 시 체크하여 사용합니다.');
+            if (player.socket) player.socket.emit('useItemResult', { messages });
+            return; 
+
+        case 'prevention_ticket':
+            messages.push('이 아이템은 강화 시 체크하여 사용합니다.');
+            if (player.socket) player.socket.emit('useItemResult', { messages });
+            return; 
+
+        case 'tome_socket1':
+        case 'tome_socket2':
+        case 'tome_socket3':
+            const socketIndex = parseInt(item.id.slice(-1)) - 1;
+            if (player.unlockedArtifacts[socketIndex]) {
+                messages.push('이미 해금된 유물 소켓입니다.');
+                if (player.socket) player.socket.emit('useItemResult', { messages });
+                return; 
+            } else {
+                player.unlockedArtifacts[socketIndex] = artifactData[item.id];
+                messages.push(`[${artifactData[item.id].name}]의 지혜를 흡수하여 유물 소켓을 영구히 해금했습니다!`);
+                updatePlayerFame(player);
+            }
+            break;
+
+        default:
+            messages.push('사용할 수 없는 아이템입니다.');
+            if (player.socket) player.socket.emit('useItemResult', { messages });
+            return; 
+    }
+    
+
+    item.quantity -= quantityToUse;
+    if (item.quantity <= 0) {
+        player.inventory.splice(itemIndex, 1);
+    }
+
+    if (player.socket) {
+        player.socket.emit('useItemResult', { messages });
+    }
+
+    sendState(player.socket, player, calcMonsterStats(player));
+    sendInventoryUpdate(player);
 }
+function placeEggInIncubator(player, uid) {
+    if (!player) return;
 
-function placeEggInIncubator(player, uid) { if (!player || player.incubator.egg) { pushLog(player, '[부화기] 이미 다른 알을 품고 있습니다.'); return; } const itemIndex = player.inventory.findIndex(i => i.uid === uid && (i.category === 'Egg' || i.type === 'egg')); if (itemIndex === -1) return; const egg = player.inventory[itemIndex]; if (egg.quantity > 1) { egg.quantity--; } else { player.inventory.splice(itemIndex, 1); } player.incubator.egg = { ...egg, quantity: 1 }; pushLog(player, `[부화기] ${egg.name}을(를) 부화기에 넣었습니다.`); }
+    if (player.incubator.hatchCompleteTime) {
+        pushLog(player, '[부화기] 현재 다른 알이 부화 중이라 교체할 수 없습니다.');
+        sendInventoryUpdate(player); // 클라이언트에 현재 상태를 다시 알려줌
+        return;
+    }
 
-function startHatching(player) { if (!player || !player.incubator.egg || player.incubator.hatchCompleteTime) return; const eggId = player.incubator.egg.id; const hatchDuration = itemData[eggId]?.hatchDuration; if (!hatchDuration) return; player.incubator.hatchDuration = hatchDuration; player.incubator.hatchCompleteTime = new Date(Date.now() + hatchDuration); pushLog(player, `[부화기] ${player.incubator.egg.name} 부화를 시작합니다!`); }
+    const itemIndex = player.inventory.findIndex(i => i.uid === uid && (i.category === 'Egg' || i.type === 'egg'));
+    if (itemIndex === -1) {
+        pushLog(player, '[부화기] 인벤토리에서 해당 알을 찾을 수 없습니다.');
+        return;
+    }
+    
+    if (player.incubator.egg) {
+        const oldEgg = player.incubator.egg;
+        handleItemStacking(player, oldEgg);
+        pushLog(player, `[부화기] ${oldEgg.name}을(를) 인벤토리로 돌려보냈습니다.`);
+    }
+
+    const newEgg = player.inventory[itemIndex];
+
+    if (newEgg.quantity > 1) {
+        newEgg.quantity--; // 원래 아이템 스택에서 1개 차감
+        player.incubator.egg = { ...newEgg, quantity: 1 }; // 1개짜리 복사본을 부화기에 넣음
+    } else {
+
+        player.incubator.egg = player.inventory.splice(itemIndex, 1)[0];
+    }
+
+    pushLog(player, `[부화기] ${player.incubator.egg.name}을(를) 부화기에 넣었습니다.`);
+    
+
+    sendInventoryUpdate(player);
+}
 
 function onHatchComplete(player) {
-
-    if (!player || !player.incubator.egg) return;
-
-    
-
-    const eggName = player.incubator.egg.name;
-
-    const eggGrade = player.incubator.egg.grade;
-
-    pushLog(player, `[부화기] ${eggName}에서 생명의 기운이 느껴집니다!`);
-
-    const possiblePets = Object.keys(petData).filter(id => petData[id].grade === eggGrade && !petData[id].fused);
-
-    
-
-    if (possiblePets.length > 0) {
-
-        const randomPetId = possiblePets[Math.floor(Math.random() * possiblePets.length)];
-
-        const newPet = createPetInstance(randomPetId);
-
-        if(newPet) {
-
-            player.petInventory.push(newPet);
-
-            pushLog(player, `[펫] <span class="${newPet.grade}">${newPet.name}</span>이(가) 태어났습니다!`);
-
-        }
-
-    }
-
-    
-
-    player.incubator = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
-
-    updatePlayerFame(player);
-
+    if (!player || !player.incubator.egg) return;
+    const eggName = player.incubator.egg.name;
+    const eggGrade = player.incubator.egg.grade;
+    pushLog(player, `[부화기] ${eggName}에서 생명의 기운이 느껴집니다!`);
+    const possiblePets = Object.keys(petData).filter(id => petData[id].grade === eggGrade && !petData[id].fused);
+    if (possiblePets.length > 0) {
+        const randomPetId = possiblePets[Math.floor(Math.random() * possiblePets.length)];
+        const newPet = createPetInstance(randomPetId);
+        if(newPet) {
+            player.petInventory.push(newPet);
+            pushLog(player, `[펫] <span class="${newPet.grade}">${newPet.name}</span>이(가) 태어났습니다!`);
+        }
+    }
+    player.incubator = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
+    updatePlayerFame(player);
+    sendInventoryUpdate(player);
 }
 
-function equipPet(player, uid) { if (!player) return; const petIndex = player.petInventory.findIndex(p => p.uid === uid); if (petIndex === -1) return; if (player.equippedPet) { player.petInventory.push(player.equippedPet); } player.equippedPet = player.petInventory.splice(petIndex, 1)[0]; calculateTotalStats(player); }
-
-function unequipPet(player) { if (!player || !player.equippedPet) return; player.petInventory.push(player.equippedPet); player.equippedPet = null; calculateTotalStats(player); }
-
-async function spawnWorldBoss() { if (worldBossState && worldBossState.isActive) return; const newBossId = new mongoose.Types.ObjectId().toString(); const newBossData = { uniqueId: 'singleton', bossId: newBossId, name: "영원한 흉몽", maxHp: WORLD_BOSS_CONFIG.HP, currentHp: WORLD_BOSS_CONFIG.HP, attack: WORLD_BOSS_CONFIG.ATTACK, defense: WORLD_BOSS_CONFIG.DEFENSE, isActive: true, participants: new Map(), spawnedAt: new Date() }; const savedState = await WorldBossState.findOneAndUpdate({ uniqueId: 'singleton' }, newBossData, { upsert: true, new: true }); worldBossState = savedState.toObject(); worldBossState.participants = new Map(); console.log(`[월드보스] ${worldBossState.name}가 출현했습니다! (ID: ${worldBossState.bossId})`); const serializableState = { ...worldBossState, participants: {} }; io.emit('worldBossSpawned', serializableState); io.emit('chatMessage', { isSystem: true, message: `[월드보스] 거대한 악의 기운과 함께 파멸의 군주가 모습을 드러냈습니다!` }); io.emit('globalAnnouncement', `[월드보스] ${worldBossState.name}가 출현했습니다!`); }
-
+function equipPet(player, uid) {
+    if (!player) return;
+    const petIndex = player.petInventory.findIndex(p => p.uid === uid);
+    if (petIndex === -1) return;
+    if (player.equippedPet) {
+        player.petInventory.push(player.equippedPet);
+    }
+    player.equippedPet = player.petInventory.splice(petIndex, 1)[0];
+    calculateTotalStats(player);
+    sendState(player.socket, player, calcMonsterStats(player));
+    sendInventoryUpdate(player);
+}
+function unequipPet(player) {
+    if (!player || !player.equippedPet) return;
+    player.petInventory.push(player.equippedPet);
+    player.equippedPet = null;
+    calculateTotalStats(player);
+    sendState(player.socket, player, calcMonsterStats(player));
+    sendInventoryUpdate(player);
+}
 
 
 
@@ -3850,7 +3767,69 @@ async function onWorldBossDefeated() {
 
 
 
-async function listOnAuction(player, { uid, price, quantity }) { if (!player || !uid || !price || !quantity) return; const nPrice = parseInt(price, 10); const nQuantity = parseInt(quantity, 10); if (isNaN(nPrice) || nPrice <= 0 || isNaN(nQuantity) || nQuantity <= 0) { pushLog(player, '[거래소] 올바른 가격과 수량을 입력하세요.'); return; } const itemIndex = player.inventory.findIndex(i => i.uid === uid); if (itemIndex === -1) { pushLog(player, '[거래소] 인벤토리에 없는 아이템입니다.'); return; } const itemInInventory = player.inventory[itemIndex]; if (itemInInventory.quantity < nQuantity) { pushLog(player, '[거래소] 보유한 수량보다 많이 등록할 수 없습니다.'); return; } try { let itemForAuction; if (itemInInventory.quantity === nQuantity) { itemForAuction = player.inventory.splice(itemIndex, 1)[0]; } else { itemInInventory.quantity -= nQuantity; itemForAuction = { ...itemInInventory, quantity: nQuantity, uid: Date.now() + Math.random().toString(36).slice(2, 11) }; } const auctionItem = new AuctionItem({ sellerId: player.user, sellerUsername: player.username, item: itemForAuction, price: nPrice }); await auctionItem.save(); pushLog(player, `[거래소] ${itemForAuction.name} (${nQuantity}개) 을(를) 개당 ${nPrice.toLocaleString()} G에 등록했습니다.`); const itemNameHTML = `<span class="${itemForAuction.grade}">${itemForAuction.name}</span>`; const announcementMessage = `[거래소] ${player.username}님이 ${itemNameHTML} 아이템을 등록했습니다.`; io.emit('chatMessage', { isSystem: true, message: announcementMessage }); io.emit('auctionUpdate'); } catch (e) { console.error('거래소 등록 오류:', e); pushLog(player, '[거래소] 아이템 등록에 실패했습니다.'); } }
+async function listOnAuction(player, { uid, price, quantity }) {
+    if (!player || !uid || !price || !quantity) return;
+
+    const nPrice = parseInt(price, 10);
+    const nQuantity = parseInt(quantity, 10);
+
+    if (isNaN(nPrice) || nPrice <= 0 || isNaN(nQuantity) || nQuantity <= 0) {
+        pushLog(player, '[거래소] 올바른 가격과 수량을 입력하세요.');
+        return;
+    }
+
+    const itemIndex = player.inventory.findIndex(i => i.uid === uid);
+    if (itemIndex === -1) {
+        pushLog(player, '[거래소] 인벤토리에 없는 아이템입니다.');
+        return;
+    }
+
+    const itemInInventory = player.inventory[itemIndex];
+    if (itemInInventory.tradable === false) {
+        pushLog(player, '[거래소] 해당 아이템은 거래소에 등록할 수 없습니다.');
+        return;
+    }
+    if (itemInInventory.quantity < nQuantity) {
+        pushLog(player, '[거래소] 보유한 수량보다 많이 등록할 수 없습니다.');
+        return;
+    }
+
+    try {
+        const itemForAuction = { ...itemInInventory, quantity: nQuantity };
+        
+        const auctionItem = new AuctionItem({
+            sellerId: player.user,
+            sellerUsername: player.username,
+            item: itemForAuction,
+            price: nPrice
+        });
+        
+
+        await auctionItem.save();
+
+
+        if (itemInInventory.quantity === nQuantity) {
+            player.inventory.splice(itemIndex, 1);
+        } else {
+            itemInInventory.quantity -= nQuantity;
+        }
+
+        pushLog(player, `[거래소] ${itemForAuction.name} (${nQuantity}개) 을(를) 개당 ${nPrice.toLocaleString()} G에 등록했습니다.`);
+        
+        const itemNameHTML = `<span class="${itemForAuction.grade}">${itemForAuction.name}</span>`;
+        const announcementMessage = `[거래소] ${player.username}님이 ${itemNameHTML} 아이템을 등록했습니다.`;
+        io.emit('chatMessage', { isSystem: true, message: announcementMessage });
+        io.emit('auctionUpdate');
+
+        sendInventoryUpdate(player);
+
+    } catch (e) {
+        console.error('거래소 등록 오류:', e);
+        pushLog(player, '[거래소] 아이템 등록에 실패했습니다. 아이템이 인벤토리로 반환됩니다.');
+  sendInventoryUpdate(player);
+    }
+}
+
 
 async function buyFromAuction(player, { listingId, quantity }) {
     if (!player || !listingId || !quantity) return;
@@ -3905,6 +3884,7 @@ async function buyFromAuction(player, { listingId, quantity }) {
         const announcementMessage = `[거래소] ${listing.sellerUsername}님이 등록한 ${itemNameHTML} 아이템을 ${player.username}님이 구매했습니다.`;
         io.emit('chatMessage', { isSystem: true, message: announcementMessage });
         pushLog(player, `[거래소] ${listing.item.name} ${amountToBuy}개를 ${totalPrice.toLocaleString()} G에 구매하여 우편으로 받았습니다.`);
+sendState(player.socket, player, calcMonsterStats(player));
         io.emit('auctionUpdate');
 
     } catch (e) {
@@ -4014,92 +3994,19 @@ function runExploration(player) {
 
 
 
-function placeEggInIncubator(player, uid) {
-
-    if (!player || player.incubator.egg) {
-
-        pushLog(player, '[부화기] 이미 다른 알을 품고 있습니다.');
-
-        return;
-
-    }
-
-    const itemIndex = player.inventory.findIndex(i => i.uid === uid && (i.category === 'Egg' || i.type === 'egg'));
-
-    if (itemIndex === -1) return;
-
-    const egg = player.inventory[itemIndex];
-
-    if (egg.quantity > 1) {
-
-        egg.quantity--;
-
-    } else {
-
-        player.inventory.splice(itemIndex, 1);
-
-    }
-
-    player.incubator.egg = { ...egg, quantity: 1 };
-
-    pushLog(player, `[부화기] ${egg.name}을(를) 부화기에 넣었습니다.`);
-
-}
-
 
 
 function startHatching(player) {
-
-    if (!player || !player.incubator.egg || player.incubator.hatchCompleteTime) return;
-
-    const eggId = player.incubator.egg.id;
-
-    const hatchDuration = itemData[eggId]?.hatchDuration;
-
-    if (!hatchDuration) return;
-
-    player.incubator.hatchDuration = hatchDuration;
-
-    player.incubator.hatchCompleteTime = new Date(Date.now() + hatchDuration);
-
-    pushLog(player, `[부화기] ${player.incubator.egg.name} 부화를 시작합니다!`);
-
-}
-
-
-
-function equipPet(player, uid) {
-
-    if (!player) return;
-
-    const petIndex = player.petInventory.findIndex(p => p.uid === uid);
-
-    if (petIndex === -1) return;
-
-    if (player.equippedPet) {
-
-        player.petInventory.push(player.equippedPet);
-
-    }
-
-    player.equippedPet = player.petInventory.splice(petIndex, 1)[0];
-
-    calculateTotalStats(player);
-
-}
-
-
-
-function unequipPet(player) {
-
-    if (!player || !player.equippedPet) return;
-
-    player.petInventory.push(player.equippedPet);
-
-    player.equippedPet = null;
-
-    calculateTotalStats(player);
-
+    if (!player || !player.incubator.egg || player.incubator.hatchCompleteTime) return;
+    
+    const eggId = player.incubator.egg.id;
+    const hatchDuration = itemData[eggId]?.hatchDuration;
+    if (!hatchDuration) return;
+    player.incubator.hatchDuration = hatchDuration;
+    player.incubator.hatchCompleteTime = new Date(Date.now() + hatchDuration);
+    
+    pushLog(player, `[부화기] ${player.incubator.egg.name} 부화를 시작합니다!`);
+    sendInventoryUpdate(player); 
 }
 
 
@@ -4468,94 +4375,6 @@ async function onWorldBossDefeated() {
     if (worldBossTimer) clearTimeout(worldBossTimer);
 
     worldBossTimer = setTimeout(spawnWorldBoss, WORLD_BOSS_CONFIG.SPAWN_INTERVAL);
-
-}
-
-
-
-async function listOnAuction(player, { uid, price, quantity }) {
-
-    if (!player || !uid || !price || !quantity) return;
-
-    const nPrice = parseInt(price, 10);
-
-    const nQuantity = parseInt(quantity, 10);
-
-    if (isNaN(nPrice) || nPrice <= 0 || isNaN(nQuantity) || nQuantity <= 0) {
-
-        pushLog(player, '[거래소] 올바른 가격과 수량을 입력하세요.');
-
-        return;
-
-    }
-
-    const itemIndex = player.inventory.findIndex(i => i.uid === uid);
-
-    if (itemIndex === -1) {
-
-        pushLog(player, '[거래소] 인벤토리에 없는 아이템입니다.');
-
-        return;
-
-    }
-
-    const itemInInventory = player.inventory[itemIndex];
-
-    if (itemInInventory.quantity < nQuantity) {
-
-        pushLog(player, '[거래소] 보유한 수량보다 많이 등록할 수 없습니다.');
-
-        return;
-
-    }
-
-    try {
-
-        let itemForAuction;
-
-        if (itemInInventory.quantity === nQuantity) {
-
-            itemForAuction = player.inventory.splice(itemIndex, 1)[0];
-
-        } else {
-
-            itemInInventory.quantity -= nQuantity;
-
-            itemForAuction = { ...itemInInventory, quantity: nQuantity, uid: Date.now() + Math.random().toString(36).slice(2, 11) };
-
-        }
-
-        const auctionItem = new AuctionItem({
-
-            sellerId: player.user,
-
-            sellerUsername: player.username,
-
-            item: itemForAuction,
-
-            price: nPrice
-
-        });
-
-        await auctionItem.save();
-
-        pushLog(player, `[거래소] ${itemForAuction.name} (${nQuantity}개) 을(를) 개당 ${nPrice.toLocaleString()} G에 등록했습니다.`);
-
-        const itemNameHTML = `<span class="${itemForAuction.grade}">${itemForAuction.name}</span>`;
-
-        const announcementMessage = `[거래소] ${player.username}님이 ${itemNameHTML} 아이템을 등록했습니다.`;
-
-        io.emit('chatMessage', { isSystem: true, message: announcementMessage });
-
-        io.emit('auctionUpdate');
-
-    } catch (e) {
-
-        console.error('거래소 등록 오류:', e);
-
-        pushLog(player, '[거래소] 아이템 등록에 실패했습니다.');
-
-    }
 
 }
 
