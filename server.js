@@ -44,6 +44,7 @@ const sanitizeOptions = {
 };
 
 const express = require('express');
+const compression = require('compression');
 
 const http = require('http');
 
@@ -64,7 +65,8 @@ const server = http.createServer(app);
 const io = new Server(server, {
     transports: ['websocket'],   
     pingInterval: 25000,       
-    pingTimeout : 70000         
+    pingTimeout : 70000,
+    perMessageDeflate: true
 });
 
 const PORT = 3000;
@@ -332,10 +334,14 @@ mongoose.connect(MONGO_URI).then(() => {
 }).catch(err => console.error('MongoDB 연결 오류:', err));
 
 
-
+app.use(compression());
 app.use(express.json());
 
-app.use(express.static('public'));
+app.use(express.static('public', {
+  maxAge: '30d', 
+  etag: false   
+}));
+app.use('/image', express.static('image', { maxAge: '30d', etag: false }));
 
 app.use('/image', express.static('image'));
 
