@@ -1995,4 +1995,17 @@ function renderMailbox(mails) {
             socket.emit('client-heartbeat');
         }
     }, 45000);
+
 }
+
+const token = localStorage.getItem('jwt_token');
+if (token) {
+    startApp(token);
+} else {
+    document.body.classList.add('auth-view');
+    authContainer.style.display = 'flex';
+}
+
+
+
+}); 
