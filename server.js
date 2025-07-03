@@ -3831,7 +3831,7 @@ async function listOnAuction(player, { uid, price, quantity }) {
     player.fameScore = currentFameScore;
 
     if (currentFameScore < 2500) {
-        const message = `[거래소] 명성이 부족합니다. (현재 ${currentFameScore}점 / 1,000점 필요)`;
+        const message = `[거래소] 명성이 부족합니다. (현재 ${currentFameScore}점 / 2,500점 필요)`;
         pushLog(player, message);
         return { success: false, message: message };
     }
