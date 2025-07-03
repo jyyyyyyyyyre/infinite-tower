@@ -201,7 +201,8 @@ equipment: { 
 
     petReviveCooldown: { type: Date, default: null },
 
-
+discoveredItems: { type: [String], default: [] },
+codexBonusActive: { type: Boolean, default: false },
 
   stats: {
 
@@ -423,6 +424,7 @@ app.get('/', (req, res) => {
 
 
 
+
 const adminItemAlias = {
 
     '무기1': 'w001', '무기2': 'w002', '무기3': 'w003', '무기4': 'w004', '무기5': 'w005',
@@ -461,6 +463,12 @@ const adminItemAlias = {
 
     '바람2': 'griffin', 
 
+    '신화1': 'bahamut',
+
+    '융합1': 'ignis_aqua',   // 이그니스 아쿠아 (불/물)
+    '융합2': 'tempest',      // 템페스트 (물/바람)
+    '융합3': 'thunderbird',  // 썬더버드 (불/바람)
+
 '참여상자': 'boss_participation_box',
 
 '권능상자': 'box_power',
@@ -469,11 +477,10 @@ const adminItemAlias = {
 
 '악세2': 'acc_earring_01',
 
-'악세3': 'acc_wristwatch_01',
-
-    '신화1': 'bahamut'
+'악세3': 'acc_wristwatch_01'
 
 };
+
 
 
 
@@ -623,15 +630,18 @@ const powerBoxLootTable = [
     { id: 'return_scroll', quantity: 1, chance: 0.19 }
 ];
 
+
 const artifactData = {
 
-    tome_socket1: { id: 'tome_socket1', name: "가속의 모래시계", description: "10층마다 1층 추가 등반", image: "tome_socket1.png" },
+    tome_socket1: { id: 'tome_socket1', name: "가속의 모래시계", description: "10층마다 추가등반", image: "tome_socket1.png" },
 
-    tome_socket2: { id: 'tome_socket2', name: "거인 학살자의 룬", description: "보스 층에서 공격력/방어력 +50%", image: "tome_socket2.png" },
+    tome_socket2: { id: 'tome_socket2', name: "거인 학살자의 룬", description: "보스층 공/방 +50%", image: "tome_socket2.png" },
 
     tome_socket3: { id: 'tome_socket3', name: "황금 나침반", description: "골드 획득량 +25%", image: "tome_socket3.png" },
 
 };
+
+
 
 
 
@@ -1014,6 +1024,27 @@ async function sendMail(recipientId, sender, { item = null, gold = 0, descriptio
     }
 }
 
+const getTotalCodexItemCount = () => {
+    // itemData에 포함된 유물 아이템 3개를 총 카운트에서 제외
+    return (Object.keys(itemData).length - 3) + Object.keys(petData).length + Object.keys(artifactData).length;
+};
+
+function addDiscoveredItem(player, itemId) {
+    if (player && itemId && !player.discoveredItems.includes(itemId)) {
+        player.discoveredItems.push(itemId);
+        
+        // 100% 달성 체크
+        const totalCount = getTotalCodexItemCount();
+        if (!player.codexBonusActive && player.discoveredItems.length >= totalCount) {
+            player.codexBonusActive = true;
+            const message = `[도감] 모든 아이템을 수집하여 마스터 보너스가 활성화되었습니다! (체/공/방/골드/치명타 +5%)`;
+            pushLog(player, message);
+            io.emit('chatMessage', { isSystem: true, message: `🎉 ${player.username}님이 아이템 도감을 100% 완성했습니다! 🎉` });
+            calculateTotalStats(player); // 보너스 적용을 위해 스탯 즉시 재계산
+        }
+    }
+}
+
 
 
 function handleItemStacking(player, item) {
@@ -1021,7 +1052,7 @@ function handleItemStacking(player, item) {
         console.error("handleItemStacking 함수에 비정상적인 null 아이템이 전달되었습니다.");
         return;
     }
-
+addDiscoveredItem(player, item.id);
     if (item.type === 'pet') {
         player.petInventory.push(item);
         return;
@@ -1043,103 +1074,72 @@ function handleItemStacking(player, item) {
 
 
 function calculateTotalStats(player) {
-
     if (!player || !player.stats) return;
 
-
-
     const base = player.stats.base;
-
     let weaponBonus = 0;
-
     let armorBonus = 0;
-
     let buffAttackMultiplier = 1;
-
     let buffDefenseMultiplier = 1;
-
     let buffHpMultiplier = 1;
-
     let artifactAttackMultiplier = 1;
-
     let artifactDefenseMultiplier = 1;
+    let petDefPenetration = 0;
 
+    // 1. 모든 스탯을 0에서부터 새로 계산하도록 초기화
+    player.stats.critChance = 0; 
+    player.stats.critResistance = 0;
 
-
-player.stats.critChance = 0; 
-
-player.stats.critResistance = 0;
-
-let petDefPenetration = 0;
-
-
-
+    // 2. 펫과 장비로 인한 보너스 합산
     if (player.equippedPet && player.equippedPet.effects) {
-
         const effects = player.equippedPet.effects;
-
-        player.stats.critChance = effects.critChance || 0;
-
-        player.stats.critResistance = effects.critResistance || 0;
-
+        // 기존의 '='를 '+='로 수정하여 덮어쓰기 버그를 막습니다.
+        player.stats.critChance += effects.critChance || 0;
+        player.stats.critResistance += effects.critResistance || 0;
         petDefPenetration = effects.defPenetration || 0;
-
     }
 
-
-
-if (player.equipment.wristwatch && player.equipment.wristwatch.id === 'acc_wristwatch_01') {
-
-    player.stats.critChance += 0.20;
-
-}
-
-
-
+    if (player.equipment.wristwatch && player.equipment.wristwatch.id === 'acc_wristwatch_01') {
+        player.stats.critChance += 0.20;
+    }
+    
+    // 3. 버프와 유물로 인한 보너스 합산
     if (player.buffs && player.buffs.length > 0) {
-
         player.buffs.forEach(buff => {
-
             if (buff.effects.attackMultiplier) buffAttackMultiplier *= buff.effects.attackMultiplier;
-
             if (buff.effects.defenseMultiplier) buffDefenseMultiplier *= buff.effects.defenseMultiplier;
-
             if (buff.effects.hpMultiplier) buffHpMultiplier *= buff.effects.hpMultiplier;
-
         });
-
     }
 
-
-
-    if (player.equipment.weapon) weaponBonus = computeEnhanceBonus(player.equipment.weapon);
-
+    if (player.equipment.weapon) weaponBonus = computeEnhanceBonus(player.equipment.weapon);
     if (player.equipment.armor) armorBonus = computeEnhanceBonus(player.equipment.armor);
 
-
-
     if (player.unlockedArtifacts[1] && isBossFloor(player.level)) {
-
         artifactAttackMultiplier += 0.50;
-
         artifactDefenseMultiplier += 0.50;
-
     }
 
+    // 4. 기본 스탯에 모든 보너스를 곱하여 최종 스탯 계산
+    let totalHp = (base.hp * (1 + armorBonus)) * buffHpMultiplier;
+    let totalAttack = (base.attack * (1 + weaponBonus)) * artifactAttackMultiplier * buffAttackMultiplier;
+    let totalDefense = (base.defense * (1 + armorBonus)) * artifactDefenseMultiplier * buffDefenseMultiplier;
 
+    // 5. 도감 마스터 보너스를 최종 스탯에 적용
+    if (player.codexBonusActive) {
+        totalHp *= 1.05;
+        totalAttack *= 1.05;
+        totalDefense *= 1.05;
+        player.stats.critChance += 0.05; // 치명타 확률은 곱연산이 아닌 합연산
+    }
 
+    // 6. 계산된 최종 스탯을 플레이어 정보에 저장
     player.stats.total = {
-
-        hp: (base.hp * (1 + armorBonus)) * buffHpMultiplier,
-
-        attack: (base.attack * (1 + weaponBonus)) * artifactAttackMultiplier * buffAttackMultiplier,
-
-        defense: (base.defense * (1 + armorBonus)) * artifactDefenseMultiplier * buffDefenseMultiplier,
-
+        hp: totalHp,
+        attack: totalAttack,
+        defense: totalDefense,
         defPenetration: petDefPenetration
-
     };
-
 }
 
 
@@ -1240,6 +1240,36 @@ io.on('connection', async (socket) => {
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
  const user = await User.findById(socket.userId).select('kakaoId').lean(); 
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
+
+ if (gameData) {
+        const foundItemIds = new Set(gameData.discoveredItems || []);
+
+        // 1. 인벤토리 스캔
+        (gameData.inventory || []).forEach(item => foundItemIds.add(item.id));
+        
+        // 2. 장비 스캔
+        Object.values(gameData.equipment || {}).forEach(item => {
+            if (item) foundItemIds.add(item.id);
+        });
+
+        // 3. 펫 인벤토리 및 장착 펫 스캔
+        (gameData.petInventory || []).forEach(pet => foundItemIds.add(pet.id));
+        if (gameData.equippedPet) {
+            foundItemIds.add(gameData.equippedPet.id);
+        }
+
+        // 4. 부화기 알 스캔
+        if (gameData.incubator && gameData.incubator.egg) {
+            foundItemIds.add(gameData.incubator.egg.id);
+        }
+        
+        // 5. 해금된 유물 스캔
+        (gameData.unlockedArtifacts || []).forEach(artifact => {
+            if (artifact) foundItemIds.add(artifact.id);
+        });
+
+        gameData.discoveredItems = Array.from(foundItemIds);
+    }
 
     if (!gameData) { 
 
@@ -2312,7 +2342,40 @@ const bannerAnnounceMsg = `[관리자] ${targetName}에게 ${givenItemName} 아�
 
 .on('cancelAuctionListing', async (listingId) => cancelAuctionListing(onlinePlayers[socket.userId], listingId))
 
-        .on('disconnect', () => {
+  .on('codex:getData', (callback) => {
+    try {
+        const player = onlinePlayers[socket.userId];
+        if (!player) return callback(null);
+
+     const allItems = {
+            weapons: Object.entries(itemData).filter(([, d]) => d.type === 'weapon').map(([id, data]) => ({ id, ...data })),
+            armors: Object.entries(itemData).filter(([, d]) => d.type === 'armor').map(([id, data]) => ({ id, ...data })),
+            accessories: Object.entries(itemData).filter(([, d]) => d.type === 'accessory').map(([id, data]) => ({ id, ...data })),
+            etc: Object.entries(itemData).filter(([id, d]) => d.type !== 'weapon' && d.type !== 'armor' && d.type !== 'accessory' && !id.startsWith('tome_socket')).map(([id, data]) => ({ id, ...data })),
+            pets: Object.entries(petData).map(([id, data]) => ({ id, ...data })),
+            artifacts: Object.values(artifactData)
+        };
+
+        const totalItemCount = getTotalCodexItemCount();
+        const discoveredCount = (player.discoveredItems || []).length;
+        const completionPercentage = totalItemCount > 0 ? (discoveredCount / totalItemCount) * 100 : 0;
+
+        callback({
+            allItems,
+            discovered: player.discoveredItems || [],
+            totalItemCount,
+            discoveredCount,
+            completionPercentage
+        });
+
+    } catch (e) {
+        console.error('도감 데이터 전송 오류:', e);
+        callback(null);
+    }
+})
+
+
+  .on('disconnect', () => {
 
             console.log(`[연결 해제] 유저: ${socket.username}`);
 
@@ -2642,6 +2705,9 @@ function onClearFloor(p) {
         goldEarned = Math.floor(goldEarned * 1.25);
 
     }
+if (p.codexBonusActive) { // 추가된 코드
+        goldEarned = Math.floor(goldEarned * 1.05);
+    }
 
 
 
@@ -2676,6 +2742,10 @@ function onClearFloor(p) {
             skippedGold = Math.floor(skippedGold * 1.25);
 
         }
+
+ if (p.codexBonusActive) { // 추가된 코드
+            skippedGold = Math.floor(skippedGold * 1.05);
+        }
 
         p.gold += skippedGold;
 
@@ -3490,6 +3560,7 @@ function useItem(player, uid, useAll = false) {
                 return; 
             } else {
                 player.unlockedArtifacts[socketIndex] = artifactData[item.id];
+addDiscoveredItem(player, item.id);
                 messages.push(`[${artifactData[item.id].name}]의 지혜를 흡수하여 유물 소켓을 영구히 해금했습니다!`);
                 updateFameScore(player.socket, player);
             }

@@ -3199,3 +3199,43 @@ body > * {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
+
+
+.codex-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 15px;
+    padding: 15px 0;
+}
+
+#codex-content h3 {
+    font-size: 1.6em;
+    color: var(--secondary-color);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 10px;
+    margin-top: 20px;
+}
+
+#codex-content h3:first-child {
+    margin-top: 0;
+}
+
+/* 중요: 미발견 아이템 스타일 */
+.item-image.undiscovered img {
+    opacity: 0.3;
+    filter: grayscale(90%);
+}
+
+
+.codex-completion-full {
+   color: #ffd700; /* 금색 계열 */
+   font-weight: bold;
+   /* 추가적으로 반짝이는 효과를 위한 애니메이션 */
+   animation: blink 1.5s infinite alternate;
+   text-shadow: 0 0 5px #ffeb3b;
+}
+
+@keyframes blink {
+   from { opacity: 1; }
+   to { opacity: 0.8; }
+}

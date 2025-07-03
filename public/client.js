@@ -473,6 +473,14 @@ fameScoreDisplay: document.getElementById('fame-score-display')
             inBtn: document.getElementById('zoom-in-btn'), 
             outBtn: document.getElementById('zoom-out-btn'), 
         },
+
+codex: {
+            button: document.getElementById('codex-button'),
+            overlay: document.getElementById('codex-modal'),
+            content: document.getElementById('codex-content')
+        },
+
+
         petChoice: {
             overlay: document.getElementById('pet-choice-modal'),
             title: document.getElementById('pet-choice-title'),
@@ -572,7 +580,20 @@ function updatePlayerFameDisplay(score, username) {
     elements.modals.loot.button.addEventListener('click', () => { elements.modals.loot.overlay.style.display = 'flex'; });
     elements.modals.enhancement.button.addEventListener('click', () => { elements.modals.enhancement.overlay.style.display = 'flex'; });
     elements.modals.online.button.addEventListener('click', () => { socket.emit('requestOnlineUsers'); elements.modals.online.overlay.style.display = 'flex'; });
-    
+    elements.modals.online.button.addEventListener('click', () => { socket.emit('requestOnlineUsers'); elements.modals.online.overlay.style.display = 'flex'; });
+
+    elements.codex.button.addEventListener('click', () => {
+        socket.emit('codex:getData', (data) => {
+            if (data) {
+                renderCodex(data);
+                elements.codex.overlay.style.display = 'flex';
+            } else {
+                alert('도감 정보를 불러오는 데 실패했습니다.');
+            }
+        });
+    }); 
+
+   
     const setupFusionSlot = (slotElement) => {
         slotElement.addEventListener('dblclick', () => {
             const slotIndex = slotElement.dataset.slotIndex;
@@ -2095,4 +2116,91 @@ function renderMailbox(mails) {
             socket.emit('client-heartbeat');
         }
     }, 45000);
+}
+
+
+
+function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, completionPercentage }) {
+    const modal = document.getElementById('codex-modal');
+    if (!modal) return; // 모달이 없으면 중단
+
+    const title = modal.querySelector('h2');
+    const content = modal.querySelector('#codex-content');
+    const footer = modal.querySelector('#codex-footer');
+
+    if (!title || !content || !footer) return; // 필수 요소가 없으면 중단
+
+    // 제목에 완성도(%) 표시
+   const completionText = `📖 아이템 도감 (${completionPercentage.toFixed(1)}%)`;
+title.textContent = completionText;
+
+if (completionPercentage === 100) {
+   title.classList.add('codex-completion-full');
+} else {
+   title.classList.remove('codex-completion-full');
+}
+    content.innerHTML = '';
+
+    const categoryTitles = {
+        weapons: '⚔️ 무기',
+        armors: '🛡️ 방어구',
+        accessories: '💍 액세서리',
+        etc: '✨ 기타 아이템',
+        pets: '🐾 펫',
+        artifacts: '📜 유물'
+    };
+
+    for (const category in allItems) {
+        const items = allItems[category];
+        if (items.length === 0) continue;
+
+        const categoryTitle = document.createElement('h3');
+        categoryTitle.textContent = categoryTitles[category] || category;
+        content.appendChild(categoryTitle);
+
+        const grid = document.createElement('div');
+        grid.className = 'codex-grid inventory-grid';
+
+        items.forEach(item => {
+            const isDiscovered = discovered.includes(item.id);
+
+            let effectText = '';
+            if (item.type === 'weapon' || item.type === 'armor') {
+                const typeText = item.type === 'weapon' ? '⚔️공격력' : '❤️🛡️체/방';
+                effectText = `${typeText} +${(item.baseEffect * 100).toFixed(1)}%`;
+            } else {
+                effectText = item.description || '';
+            }
+
+            const itemHTML = `
+                <div class="item-image ${isDiscovered ? '' : 'undiscovered'}">
+                    <img src="/image/${item.image}" alt="${item.name}" draggable="false">
+                </div>
+                <div class="item-info">
+                    <div class="item-name ${item.grade || 'Common'}">${item.name}</div>
+                    <div class="item-effect" style="font-size: 0.9em;">${effectText}</div>
+                </div>`;
+            
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'inventory-item';
+            itemDiv.innerHTML = itemHTML;
+            grid.appendChild(itemDiv);
+        });
+        content.appendChild(grid);
+    }
+
+    // 하단 보너스 정보 표시
+    footer.innerHTML = `
+        <p style="font-size: 1.1em;"><strong>도감 수집률:</strong> ${discoveredCount} / ${totalItemCount}</p>
+        <p style="margin-top: 10px; font-size: 1.2em; color: var(--gold-color);">
+            <strong>✨ 100% 달성 보상 ✨</strong>
+        </p>
+        <div style="margin-top: 8px; font-size: 1.1em; display: flex; justify-content: center; flex-wrap: wrap; gap: 15px;">
+            <span>❤️ 체력 +5%</span>
+            <span>⚔️ 공격력 +5%</span>
+            <span>🛡️ 방어력 +5%</span>
+            <span>💰 골드 획득 +5%</span>
+            <span>💥 치명타 확률 +5%   (최종 기준 5% 복리적용)</span>
+        </div>
+    `;
 }
