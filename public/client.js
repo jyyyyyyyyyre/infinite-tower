@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+
     const authContainer = document.getElementById('auth-container');
     const gameAppContainer = document.getElementById('game-app-container');
     const authForm = document.getElementById('auth-form');
@@ -10,43 +11,191 @@ document.addEventListener('DOMContentLoaded', () => {
     const authMessage = document.getElementById('auth-message');
     const logoutButton = document.getElementById('logout-button');
 
-    let isLogin = true;
+    const kakaoRegisterContainer = document.getElementById('kakao-register-container');
+    const kakaoRegisterForm = document.getElementById('kakao-register-form');
+    const kakaoRegUsername = document.getElementById('kakao-reg-username');
+    const kakaoRegPassword = document.getElementById('kakao-reg-password');
+    const kakaoRegMessage = document.getElementById('kakao-reg-message');
+    const kakaoLinkContainer = document.getElementById('kakao-link-container');
+    const kakaoLinkForm = document.getElementById('kakao-link-form');
+    const kakaoLinkUsername = document.getElementById('kakao-link-username');
+    const kakaoLinkMessage = document.getElementById('kakao-link-message');
 
-    function addToggleListener() {
-        const toggleLink = document.getElementById('toggle-link');
-        if (toggleLink) {
-            toggleLink.addEventListener('click', () => {
-                isLogin = !isLogin;
-                authTitle.textContent = isLogin ? '로그인' : '회원가입';
-                submitButton.textContent = isLogin ? '로그인' : '회원가입';
-                toggleAuth.innerHTML = isLogin ? '계정이 없으신가요? <span id="toggle-link">회원가입</span>' : '이미 계정이 있으신가요? <span id="toggle-link">로그인</span>';
-                addToggleListener();
-                authMessage.textContent = '';
-            });
-        }
+    let isLogin = true;
+    let linkTokenForKakao = null; // 기존 유저 연동을 위한 토큰 저장
+
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const error = urlParams.get('error');
+    const action = urlParams.get('action');
+    const tempToken = urlParams.get('token');
+
+
+    if (error) {
+        authMessage.textContent = decodeURIComponent(error);
+window.history.replaceState({}, document.title, "/"); 
     }
-    addToggleListener();
+    
+
+
+    if (action === 'kakao_finalize' && tempToken) {
+
+        authContainer.style.display = 'none';
+        const decoded = decodeJwtPayload(tempToken);
+        
+
+        sessionStorage.setItem('kakao_temp_token', tempToken);
+        
+        linkTokenForKakao = localStorage.getItem('link_token_for_kakao');
+
+        if (linkTokenForKakao) {
+
+            kakaoLinkContainer.style.display = 'flex';
+        } else {
+
+            kakaoRegisterContainer.style.display = 'flex';
+        }
+
+        window.history.replaceState({}, document.title, "/");
+    }
+
+ function toggleAuthView(showLogin = true) {
+    isLogin = showLogin;
+    
+
+    const authForm = document.getElementById('auth-form');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+
+    authTitle.textContent = isLogin ? '로그인' : '회원가입';
+
+    if (isLogin) {
+        authForm.style.display = 'block';
+        toggleAuth.innerHTML = '계정이 없으신가요? <span id="toggle-link">회원가입</span>';
+    } else {
+        authForm.style.display = 'none';
+        toggleAuth.innerHTML = `<button type="button" id="kakao-register-button" style="width:100%; padding: 15px; border:none; border-radius:6px; background-color:#FEE500; color:#000; font-size:1.2em; font-weight:700; cursor:pointer;">카카오로 시작하기</button><p style="margin-top:15px;">이미 계정이 있으신가요? <span id="toggle-link">로그인</span></p>`;
+        
+        document.getElementById('kakao-register-button').addEventListener('click', () => {
+            localStorage.removeItem('link_token_for_kakao');
+            window.location.href = '/api/kakao/login';
+        });
+    }
+    
+    document.getElementById('toggle-link').addEventListener('click', () => {
+        authMessage.textContent = ''; 
+        toggleAuthView(!isLogin);
+    });
+}
+
+    toggleAuthView(true);
+
 
     authForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const username = usernameInput.value;
         const password = passwordInput.value;
-        const url = isLogin ? '/api/login' : '/api/register';
+        
         try {
-            const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+            const response = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
             const data = await response.json();
-            if (!response.ok) { authMessage.textContent = data.message; return; }
-            if (isLogin) { localStorage.setItem('jwt_token', data.token); startApp(data.token); }
-            else { authMessage.textContent = '회원가입 성공! 이제 로그인해주세요.'; isLogin = true; authTitle.textContent = '로그인'; submitButton.textContent = '로그인'; toggleAuth.innerHTML = '계정이 없으신가요? <span id="toggle-link">회원가입</span>'; addToggleListener(); usernameInput.value = username; passwordInput.value = ''; passwordInput.focus(); }
-        } catch (error) { authMessage.textContent = '서버와 통신할 수 없습니다.'; }
+            
+            if (!response.ok) {
+                authMessage.textContent = data.message;
+                return;
+            }
+
+            if (data.needsKakaoLink) {
+
+                authMessage.textContent = '기존 계정은 카카오 연동이 필요합니다. 카카오로 로그인해주세요.';
+                localStorage.setItem('link_token_for_kakao', data.linkToken);
+                setTimeout(() => {
+                    window.location.href = '/api/kakao/login';
+                }, 1500);
+            } else if (data.token) {
+
+                localStorage.setItem('jwt_token', data.token);
+                startApp(data.token);
+            }
+        } catch (error) {
+            authMessage.textContent = '서버와 통신할 수 없습니다.';
+        }
     });
 
-    logoutButton.addEventListener('click', () => { localStorage.removeItem('jwt_token'); location.reload(); });
+
+    kakaoRegisterForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const kakaoTempToken = sessionStorage.getItem('kakao_temp_token');
+        if (!kakaoTempToken) {
+            kakaoRegMessage.textContent = '인증 정보가 만료되었습니다. 처음부터 다시 시도해주세요.';
+            return;
+        }
+
+        const response = await fetch('/api/finalize-registration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tempToken: kakaoTempToken,
+                username: kakaoRegUsername.value,
+                password: kakaoRegPassword.value
+            })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            kakaoRegMessage.textContent = data.message;
+        } else {
+            alert(data.message);
+            sessionStorage.removeItem('kakao_temp_token');
+            location.reload(); 
+        }
+    });
+    
+
+    kakaoLinkForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const linkToken = localStorage.getItem('link_token_for_kakao');
+        const kakaoTempToken = sessionStorage.getItem('kakao_temp_token');
+        if (!linkToken || !kakaoTempToken) {
+            kakaoLinkMessage.textContent = '인증 정보가 만료되었습니다. 처음부터 다시 시도해주세요.';
+            return;
+        }
+
+        const response = await fetch('/api/finalize-linking', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                linkToken,
+                kakaoTempToken,
+                newUsername: kakaoLinkUsername.value
+            })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            kakaoLinkMessage.textContent = data.message;
+        } else {
+            alert(data.message);
+            localStorage.removeItem('link_token_for_kakao');
+            sessionStorage.removeItem('kakao_temp_token');
+            localStorage.setItem('jwt_token', data.token);
+            startApp(data.token);
+        }
+    });
+
+
+    logoutButton.addEventListener('click', () => {
+        localStorage.removeItem('jwt_token');
+        localStorage.removeItem('link_token_for_kakao');
+        sessionStorage.removeItem('kakao_temp_token');
+        location.reload();
+    });
 
     function startApp(token) {
         document.body.classList.remove('auth-view');
         authContainer.style.display = 'none';
+        kakaoRegisterContainer.style.display = 'none';
+        kakaoLinkContainer.style.display = 'none';
         gameAppContainer.style.display = 'flex';
+        
         const decodedToken = decodeJwtPayload(token);
         if (!decodedToken) {
             console.error("Invalid Token: Decoding failed.");
@@ -55,17 +204,20 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        
         window.myUsername = decodedToken.username;
         window.myUserId = decodedToken.userId;
-        
-const socket = io({ auth: { token }, transports: ['websocket'] });
+
+        const socket = io({ auth: { token }, transports: ['websocket'] });
         socket.on('connect_error', (err) => { alert(err.message); localStorage.removeItem('jwt_token'); location.reload(); });
         initializeGame(socket);
     }
 
     const token = localStorage.getItem('jwt_token');
-    if (token) { startApp(token); } else { document.body.classList.add('auth-view'); }
+    if (token && !action) {
+        startApp(token);
+    } else if (!action) {
+        document.body.classList.add('auth-view');
+    }
 });
 
 function decodeJwtPayload(token) {
@@ -143,10 +295,10 @@ function createPlayerPanelHTML(player) {
         : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`
     ).join('');
     
-    return `
+   return `
         <div class="character-panel player-panel" style="background: none; box-shadow: none;">
             <div class="character-header">
-                <h2>${createFameUserHtml(player.username, player.fameScore || 0)}</h2>
+                <h2>${createFameUserHtml(player.username, player.fameScore || 0)} <span style="font-size: 0.8em; color: var(--text-muted);">(최대 ${player.maxLevel}층)</span></h2>
                 <div class="resource-display">💰 <span>${(player.gold || 0).toLocaleString()}</span></div>
             </div>
             <div class="stat-info-combined">
@@ -276,7 +428,8 @@ let quillEditor = null;
         userInfo: {
             container: document.getElementById('user-info'),
             username: document.getElementById('welcome-username'),
-            icon: document.getElementById('fame-icon')
+            icon: document.getElementById('fame-icon'),
+fameScoreDisplay: document.getElementById('fame-score-display')
         },
         incubator: {
             content: document.getElementById('incubator-content'),
@@ -301,7 +454,7 @@ let quillEditor = null;
             ranking: { button: document.getElementById('ranking-button'), overlay: document.getElementById('ranking-modal'), list: document.getElementById('ranking-list'), },
             loot: { button: document.getElementById('loot-record-button'), overlay: document.getElementById('loot-record-modal'), display: document.getElementById('loot-record-display'), },
             enhancement: { button: document.getElementById('enhancement-record-button'), overlay: document.getElementById('enhancement-record-modal'), display: document.getElementById('enhancement-record-display'), },
-            online: { button: document.getElementById('online-users-button'), overlay: document.getElementById('online-users-modal'), list: document.getElementById('online-users-list'), },
+            online: { button: document.getElementById('online-users-button'), overlay: document.getElementById('online-users-modal'), list: document.getElementById('online-users-list'), title: document.getElementById('online-users-title'), },
             mailbox: { 
                 button: document.getElementById('mailbox-button'), 
                 overlay: document.getElementById('mailbox-modal'), 
@@ -340,6 +493,38 @@ let quillEditor = null;
         init() { elements.zoom.inBtn.addEventListener('click', () => this.applyZoom(this.currentScale + 0.1)); elements.zoom.outBtn.addEventListener('click', () => this.applyZoom(this.currentScale - 0.1)); this.applyZoom(1.0); }
     };
     zoomLogic.init();
+
+
+function updatePlayerFameDisplay(score, username) {
+    const fameDetails = getFameDetails(score);
+    const scoreText = `(${(score || 0).toLocaleString()})`;
+
+
+    elements.userInfo.icon.textContent = fameDetails.icon;
+    elements.userInfo.fameScoreDisplay.textContent = scoreText;
+
+    const usernameEl = elements.userInfo.username;
+    usernameEl.className = ''; 
+    if (fameDetails.className) {
+        usernameEl.classList.add(fameDetails.className);
+    }
+    usernameEl.textContent = username; // 닉네임 설정
+
+    // 2. 채팅창에 있는 내 모든 메시지의 명성 실시간 업데이트
+    if (username === window.myUsername) {
+        const myMessagesInChat = document.querySelectorAll(`#chat-messages .username[data-username="${username}"]`);
+        myMessagesInChat.forEach(usernameSpan => {
+            const userHtml = createFameUserHtml(username, score);
+            
+
+            const prefix = usernameSpan.innerHTML.startsWith('👑') ? '👑 ' : '';
+
+
+            usernameSpan.innerHTML = `${prefix}${userHtml}:`;
+        });
+    }
+}
+
 
  document.querySelectorAll('.modal-overlay').forEach(modal => { 
         const closeBtn = modal.querySelector('.close-button');
@@ -495,163 +680,7 @@ elements.board.postForm.addEventListener('submit', (e) => {
     });
 });
 
-    elements.modals.board.button.addEventListener('click', () => {
-        elements.modals.board.overlay.style.display = 'flex';
-        fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
-    });
-
-    elements.board.tabs.addEventListener('click', (e) => {
-        if (e.target.tagName === 'BUTTON') {
-            currentBoardCategory = e.target.dataset.category;
-            currentBoardPage = 1;
-            elements.board.tabs.querySelector('.active').classList.remove('active');
-            e.target.classList.add('active');
-            fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
-        }
-    });
-
-    elements.board.postList.addEventListener('click', (e) => {
-        const row = e.target.closest('tr');
-        if (row && row.dataset.postId) {
-            fetchAndRenderPostDetail(row.dataset.postId);
-        }
-    });
-
-    elements.board.pagination.addEventListener('click', (e) => {
-        if (e.target.tagName === 'BUTTON' && !e.target.disabled) {
-            currentBoardPage = parseInt(e.target.dataset.page, 10);
-            fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
-        }
-    });
-    
-    const backToListButtons = document.querySelectorAll('.js-board-back-to-list');
-    
-backToListButtons.forEach(button => {
-    button.addEventListener('click', () => {
-        showBoardView('list');
-    });
-});
-
-const backArrowBtn = document.getElementById('board-back-arrow-btn');
-backArrowBtn.addEventListener('click', () => showBoardView('list'));
-
- elements.board.writePostBtn.addEventListener('click', () => {
-    const postCategorySelect = elements.board.postCategory;
-
-    postCategorySelect.innerHTML = '<option value="자유">자유</option><option value="공략">공략</option>';
-
-    const token = localStorage.getItem('jwt_token');
-    if (token) {
-        const decoded = decodeJwtPayload(token);
-        if (decoded && decoded.role === 'admin') {
- 
-            postCategorySelect.insertAdjacentHTML('afterbegin', '<option value="공지">공지</option>');
-        }
-    }
-
-    if (!quillEditor) {
-        quillEditor = new Quill('#editor-container', {
-            theme: 'snow',
-            modules: {
-                toolbar: [
-                    [{ 'header': [1, 2, 3, false] }],
-                    ['bold', 'italic', 'underline', 'strike'],
-                    [{ 'color': [] }, { 'background': [] }],
-                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                    ['link'] 
-                ]
-            }
-        });
-    }
-
-
-    elements.board.postForm.reset();
-    elements.board.postEditId.value = '';
-    quillEditor.root.innerHTML = '';
-    elements.board.postSubmitBtn.textContent = '등록하기';
-    showBoardView('write');
-});
-    
-    elements.board.cancelBtn.addEventListener('click', () => showBoardView('list'));
-
-    elements.board.postContentArea.addEventListener('click', (e) => {
-        const action = e.target.id;
-
- if (action === 'post-edit-btn') {
-        socket.emit('board:getPost', { postId: currentPostId }, (post) => {
-            if (!post) return;
-            showBoardView('write');
-            elements.board.postEditId.value = post._id;
-            elements.board.postCategory.value = post.category;
-            elements.board.postTitle.value = post.title;
-            elements.board.postSubmitBtn.textContent = '수정하기';
-            if (!quillEditor) {
-                quillEditor = new Quill('#editor-container', {
-                    theme: 'snow',
-                    modules: {
-                        toolbar: [
-                            [{ 'header': [1, 2, 3, false] }],
-                            ['bold', 'italic', 'underline', 'strike'],
-                            [{ 'color': [] }, { 'background': [] }],
-                            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                            ['link', 'image']
-                        ]
-                    }
-                });
-            }
-            quillEditor.root.innerHTML = post.content;
-        });
-    } 
-         else if (action === 'post-delete-btn') {
-            if (confirm('정말로 이 게시글을 삭제하시겠습니까?')) {
-                socket.emit('board:deletePost', { postId: currentPostId }, (success) => {
-                    if (success) fetchAndRenderPosts(currentBoardCategory, currentBoardPage);
-                    else alert('삭제에 실패했습니다.');
-                });
-            }
-        } else if (action === 'post-like-btn') {
-            socket.emit('board:likePost', { postId: currentPostId }, ({ likesCount }) => {
-                if (likesCount !== null) e.target.textContent = `👍 추천 ${likesCount}`;
-            });
-        }
-    });
-    
-    elements.board.commentForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const content = elements.board.commentInput.value.trim();
-        if (content && currentPostId) {
-            socket.emit('board:createComment', { postId: currentPostId, content }, (success) => {
-                if (success) {
-                    elements.board.commentInput.value = '';
-                    fetchAndRenderPostDetail(currentPostId);
-                } else {
-                    alert('댓글 작성에 실패했습니다.');
-                }
-            });
-        }
-    });
-    
-    elements.board.commentList.addEventListener('click', (e) => {
-        const action = e.target.dataset.action;
-        if (!action) return;
-        
-        const commentItem = e.target.closest('.comment-item');
-        const commentId = commentItem.dataset.commentId;
-
-        if (action === 'delete-comment') {
-            if (confirm('정말로 이 댓글을 삭제하시겠습니까?')) {
-                socket.emit('board:deleteComment', { postId: currentPostId, commentId }, (success) => {
-                    if (success) fetchAndRenderPostDetail(currentPostId);
-                    else alert('댓글 삭제에 실패했습니다.');
-                });
-            }
-        } else if (action === 'like-comment') {
-            socket.emit('board:likeComment', { postId: currentPostId, commentId }, ({ likesCount }) => {
-                 if (likesCount !== null) e.target.textContent = `👍 ${likesCount}`;
-            });
-        }
-    });
-
+  
 
 
 let auctionDataCache = { groupedList: [], allListings: [] };
@@ -663,7 +692,6 @@ elements.modals.auction.button.addEventListener('click', () => {
 });
 
 elements.modals.auction.refreshBtn.addEventListener('click', fetchAuctionListings);
-
 function renderAuctionGroupedList() {
     const grid = document.getElementById('auction-grouped-grid');
     const searchKeyword = document.getElementById('auction-search-input').value.toLowerCase();
@@ -682,8 +710,23 @@ function renderAuctionGroupedList() {
     
     grid.innerHTML = filteredList.map(group => {
         const item = group.item;
+
+        let effectText = '';
+        if (item.type === 'weapon') {
+            let bonus = item.baseEffect || 0; 
+            for (let i = 1; i <= (item.enhancement || 0); i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
+            effectText = `⚔️공격력 +${(bonus * 100).toFixed(1)}%`;
+        } else if (item.type === 'armor') {
+            let bonus = item.baseEffect || 0; 
+            for (let i = 1; i <= (item.enhancement || 0); i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
+            effectText = `❤️🛡️체/방 +${(bonus * 100).toFixed(1)}%`;
+        } else if (item.type === 'accessory') {
+            effectText = item.description || '';
+        }
+
         const infoHTML = `
             <div class="item-name ${item.grade}">${item.enhancement > 0 ? `+${item.enhancement} ` : ''}${item.name}</div>
+            ${effectText ? `<div class="item-effect" style="font-size: 0.9em; color: var(--success-color); padding: 2px 0;">${effectText}</div>` : ''}
             <div class="item-effect" style="font-size: 0.9em;">
                 최저가: <span class="gold-text">${group.lowestPrice.toLocaleString()} G</span><br>
                 총 수량: ${group.totalQuantity.toLocaleString()} 개
@@ -879,13 +922,34 @@ function renderGlobalRecords(records) {
 }
     socket.on('initialGlobalRecords', renderGlobalRecords);
     socket.on('globalRecordsUpdate', renderGlobalRecords);
-socket.on('onlineUsersData', (players) => {
-    const list = elements.modals.online.list; 
-    if (!players || !players.length) {
+
+
+socket.on('fameScoreUpdated', (newFameScore) => {
+    if (!currentPlayerState) return;
+
+    updatePlayerFameDisplay(newFameScore, currentPlayerState.username);
+    
+    currentPlayerState.fameScore = newFameScore;
+});
+
+
+socket.on('onlineUsersData', ({ playersList, totalUsers, subAccountCount }) => {
+    const list = elements.modals.online.list;
+    const title = elements.modals.online.title;
+
+    if (totalUsers > 0) {
+        const subAccountText = subAccountCount > 0 ? ` 중 ${subAccountCount}명 부캐` : '';
+        title.textContent = `👥 실시간 접속 유저 (${totalUsers}명${subAccountText})`;
+    } else {
+        title.textContent = '👥 실시간 접속 유저 (0명)';
+    }
+
+    if (!playersList || playersList.length === 0) {
         list.innerHTML = '<li>현재 접속 중인 유저가 없습니다.</li>';
         return;
     }
-    list.innerHTML = players.map(p => {
+    
+    list.innerHTML = playersList.map(p => {
         const userHTML = createFameUserHtml(p.username, p.fameScore);
         const weapon = p.weapon ? `<span class="user-item-name ${p.weapon.grade}">${p.weapon.name}</span>` : `<span class="user-item-none">맨손</span>`;
         const armor = p.armor ? `<span class="user-item-name ${p.armor.grade}">${p.armor.name}</span>` : `<span class="user-item-none">맨몸</span>`;
@@ -954,11 +1018,34 @@ const renderItemInSlot = (slotElement, item, defaultText, type) => {
 
     const updateUI = ({ player, monster }) => {
 
+ const playerHeader = document.querySelector('.character-panel .character-header h2');
+
+    if (playerHeader) {
+
+        let maxLevelSpan = document.getElementById('player-max-level-display');
+
+        if (!maxLevelSpan) {
+            maxLevelSpan = document.createElement('span');
+            maxLevelSpan.id = 'player-max-level-display';
+
+            maxLevelSpan.style.fontSize = '0.8em';
+            maxLevelSpan.style.fontWeight = 'normal';
+            maxLevelSpan.style.marginLeft = '8px';  
+            maxLevelSpan.style.color = 'var(--text-muted)'; 
+            
+            playerHeader.appendChild(maxLevelSpan);
+        }
+        
+        maxLevelSpan.textContent = `(최대 ${player.maxLevel}층)`;
+    }
+
+
+document.getElementById('player-max-level-display').textContent = `(최대 ${player.maxLevel}층)`;
         currentPlayerState = player;
-        const fameDetails = getFameDetails(player.fameScore);
-elements.userInfo.icon.textContent = fameDetails.icon;
-elements.userInfo.username.textContent = player.username;
-elements.userInfo.username.className = fameDetails.className;
+        renderAllInventories(player);
+        renderFusionPanel(player);
+currentPlayerState = player; 
+updatePlayerFameDisplay(player.fameScore, player.username); 
         if (elements.gold.textContent !== formatInt(player.gold)) { elements.gold.textContent = formatInt(player.gold); }
         elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
         elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
@@ -1436,6 +1523,7 @@ socket.on('stateUpdate', (data) => {
     updateEquipmentAndArtifacts(player);
     elements.modals.mailbox.button.classList.toggle('new-mail', player.hasUnreadMail);
 updateAffordableButtons(); 
+renderFusionPanel(currentPlayerState);
 });
 
 
@@ -1711,7 +1799,23 @@ alert(`등록 실패!: ${response.message}`);
     });
 
     elements.incubator.hatchButton.addEventListener('click', () => { if (currentPlayerState && currentPlayerState.incubator.egg) { socket.emit('startHatching'); } });
-    elements.explorationButton.addEventListener('click', () => socket.emit('toggleExploration'));
+elements.explorationButton.addEventListener('click', () => {
+
+    const isClimbing = elements.explorationButton.className === 'climb';
+
+    if (isClimbing) {
+
+        elements.explorationButton.textContent = '탐험하기';
+        elements.explorationButton.className = 'explore';
+    } else {
+
+        elements.explorationButton.textContent = '등반하기';
+        elements.explorationButton.className = 'climb';
+    }
+
+
+    socket.emit('toggleExploration');
+});
     
     document.getElementById('game-app-container').addEventListener('dragstart', e => {
         const card = e.target.closest('.inventory-item');
