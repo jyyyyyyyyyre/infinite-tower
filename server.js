@@ -3489,7 +3489,7 @@ function useItem(player, uid, useAll = false) {
             } else {
                 player.unlockedArtifacts[socketIndex] = artifactData[item.id];
                 messages.push(`[${artifactData[item.id].name}]의 지혜를 흡수하여 유물 소켓을 영구히 해금했습니다!`);
-                updatePlayerFame(player);
+                updateFameScore(player.socket, player);
             }
             break;
 
@@ -3564,7 +3564,7 @@ function onHatchComplete(player) {
         }
     }
     player.incubator = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
-    updatePlayerFame(player);
+    updateFameScore(player.socket, player); 
     sendInventoryUpdate(player);
 }
 
