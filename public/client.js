@@ -43,35 +43,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     logoutButton.addEventListener('click', () => { localStorage.removeItem('jwt_token'); location.reload(); });
 
-    function startApp(token) {
-    const SERVER_URL = "https://climbtower-server.onrender.com";
+ function startApp(token) {
+    const SERVER_URL = "https://climbtower-server.onrender.com"; 
     const socket = io(SERVER_URL, {
         auth: { token }, 
         transports: ['websocket'] 
     });
-        document.body.classList.remove('auth-view');
-        authContainer.style.display = 'none';
-        gameAppContainer.style.display = 'flex';
-        const decodedToken = decodeJwtPayload(token);
-        if (!decodedToken) {
-            console.error("Invalid Token: Decoding failed.");
-            localStorage.removeItem('jwt_token');
-            location.reload();
-            return;
-        }
 
-        
-        window.myUsername = decodedToken.username;
-        window.myUserId = decodedToken.userId;
-        
-const socket = io({ auth: { token }, transports: ['websocket'] });
-        socket.on('connect_error', (err) => { alert(err.message); localStorage.removeItem('jwt_token'); location.reload(); });
-        initializeGame(socket);
+    document.body.classList.remove('auth-view');
+    authContainer.style.display = 'none';
+    gameAppContainer.style.display = 'flex';
+    
+    const decodedToken = decodeJwtPayload(token);
+    if (!decodedToken) {
+        console.error("Invalid Token: Decoding failed.");
+        localStorage.removeItem('jwt_token');
+        location.reload();
+        return;
     }
-
-    const token = localStorage.getItem('jwt_token');
-    if (token) { startApp(token); } else { document.body.classList.add('auth-view'); }
-});
+    window.myUsername = decodedToken.username;
+    window.myUserId = decodedToken.userId;
+    
+    socket.on('connect_error', (err) => { 
+        alert(err.message); 
+        localStorage.removeItem('jwt_token'); 
+        location.reload(); 
+    });
+    initializeGame(socket);
+}
 
 function decodeJwtPayload(token) {
     try {
