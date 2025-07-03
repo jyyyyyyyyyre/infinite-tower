@@ -1587,26 +1587,33 @@ function handleItemSelection(e) {
             }
             break;
 
-        case 'list-auction':
-            let quantity = 1;
-            if (item.quantity > 1) {
-                const inputQty = prompt(`등록할 수량을 입력하세요. (최대 ${item.quantity}개)`, item.quantity);
-                if (inputQty === null) return;
-                quantity = parseInt(inputQty, 10);
-                if (isNaN(quantity) || quantity <= 0 || quantity > item.quantity) {
-                    return alert("올바른 수량을 입력해주세요.");
-                }
-            }
-            const price = prompt("개당 판매할 가격(골드)을 숫자로만 입력하세요:");
-            if (price && !isNaN(price) && parseInt(price, 10) > 0) {
-                socket.emit('listOnAuction', { uid: selectedInventoryItemUid, price: parseInt(price, 10), quantity });
+     case 'list-auction':
+    let quantity = 1;
+    if (item.quantity > 1) {
+        const inputQty = prompt(`등록할 수량을 입력하세요. (최대 ${item.quantity}개)`, item.quantity);
+        if (inputQty === null) return;
+        quantity = parseInt(inputQty, 10);
+        if (isNaN(quantity) || quantity <= 0 || quantity > item.quantity) {
+            return alert("올바른 수량을 입력해주세요.");
+        }
+    }
+    const price = prompt("개당 판매할 가격(골드)을 숫자로만 입력하세요:");
+
+    if (price && !isNaN(price) && parseInt(price, 10) > 0) {
+        socket.emit('listOnAuction', { uid: selectedInventoryItemUid, price: parseInt(price, 10), quantity }, (response) => {
+            if (response.success) {
                 alert('거래소에 아이템을 등록했습니다.');
                 selectedInventoryItemUid = null;
-                updateInteractionPanel(); 
-            } else if (price !== null) {
-                alert("올바른 가격을 입력해주세요.");
+                updateInteractionPanel();
+            } else {
+alert(`등록 실패!: ${response.message}`);
             }
-            break;
+        });
+    } else if (price !== null) {
+        alert("올바른 가격을 입력해주세요.");
+    }
+    break;
+
          case 'use':
     { 
         const itemToUse = findItemInState(selectedInventoryItemUid);

@@ -789,48 +789,31 @@ function getNormalizedIp(socket) {
 
 
 async function sendMail(recipientId, sender, { item = null, gold = 0, description = '' }) {
-
-    if (!recipientId || !description) {
-
-        console.error('[sendMail] 오류: 필수 정보 누락', { recipientId, description });
-
-        return;
-
-    }
-
-    try {
-
-        const mail = new Mail({
-
-            recipientId: recipientId,
-
-            senderUsername: sender,
-
-            item: item,
-
-            gold: gold,
-
-            description: description
-
-        });
-
-        await mail.save();
-
-
-        const onlineRecipient = Object.values(onlinePlayers).find(p => p.user && p.user.toString() === recipientId.toString());
-
-        if (onlineRecipient && onlineRecipient.socket) {
-
-            onlineRecipient.socket.emit('newMailNotification');
-
-        }
-
-    } catch (error) {
-
-        console.error(`[sendMail] 심각한 오류: 메일 저장 실패. 받는사람ID: ${recipientId}`, error);
-
-    }
-
+    if (!recipientId || !description) {
+        console.error('[sendMail] 오류: 필수 정보 누락', { recipientId, description });
+        return;
+    }
+    try {
+        const mail = new Mail({
+            recipientId: recipientId,
+            senderUsername: sender,
+            item: item,
+            gold: gold,
+            description: description
+        });
+        await mail.save();
+    
+        const onlineRecipient = Object.values(onlinePlayers).find(p => p.user && p.user.toString() === recipientId.toString());
+        if (onlineRecipient) {
+            onlineRecipient.hasUnreadMail = true; 
+            
+            if (onlineRecipient.socket) {
+                onlineRecipient.socket.emit('newMailNotification');
+            }
+        }
+    } catch (error) {
+        console.error(`[sendMail] 심각한 오류: 메일 저장 실패. 받는사람ID: ${recipientId}`, error);
+    }
 }
 
 
@@ -1133,6 +1116,8 @@ onlinePlayers[socket.userId] = { ...gameData, monster: { currentHp: 1 }, socket:
 
 updatePlayerFame(onlinePlayers[socket.userId]);
 const player = onlinePlayers[socket.userId];
+    const unreadMailCount = await Mail.countDocuments({ recipientId: player.user, isRead: false });
+    player.hasUnreadMail = unreadMailCount > 0;
 const { socket: _, ...playerForClient } = player;
 socket.emit('initialState', {
     player: playerForClient, 
@@ -1497,7 +1482,15 @@ const bannerAnnounceMsg = `[관리자] ${targetName}에게 ${givenItemName} 아�
 
 })
 
-        .on('listOnAuction', async ({ uid, price, quantity }) => listOnAuction(onlinePlayers[socket.userId], { uid, price, quantity }))
+.on('listOnAuction', async ({ uid, price, quantity }, callback) => { 
+    if (!onlinePlayers[socket.userId]) return;
+
+    const result = await listOnAuction(onlinePlayers[socket.userId], { uid, price, quantity });
+    
+    if (callback) { 
+        callback(result);
+    }
+})
 
         .on('buyFromAuction', async ({ listingId, quantity }) => buyFromAuction(onlinePlayers[socket.userId], { listingId, quantity }))
 
@@ -2086,13 +2079,18 @@ const bannerAnnounceMsg = `[관리자] ${targetName}에게 ${givenItemName} 아�
     }
 })
 
+
 .on('mailbox:claimAll', async (callback) => {
     try {
         const player = onlinePlayers[socket.userId];
         if (!player) return callback({ success: false, message: '플레이어 정보를 찾을 수 없습니다.' });
 
         const mails = await Mail.find({ recipientId: socket.userId });
-        if (mails.length === 0) return callback({ success: true });
+        if (mails.length === 0) {
+            player.hasUnreadMail = false;
+            sendPlayerState(player);
+            return callback({ success: true });
+        }
 
         let totalGold = 0;
         for (const mail of mails) {
@@ -2102,6 +2100,7 @@ const bannerAnnounceMsg = `[관리자] ${targetName}에게 ${givenItemName} 아�
         player.gold += totalGold;
 
         await Mail.deleteMany({ recipientId: socket.userId });
+        player.hasUnreadMail = false;
 
         pushLog(player, `[우편] ${mails.length}개의 우편을 모두 수령했습니다.`);
         
@@ -3200,8 +3199,6 @@ async function savePlayerData(userId) { const p = onlinePlayers[userId]; if (!p)
 async function sendState(socket, player, monsterStats) {
     if (!socket || !player) return;
 
-    const unreadMailCount = await Mail.countDocuments({ recipientId: player.user, isRead: false });
-    player.hasUnreadMail = unreadMailCount > 0;
     const playerStateForClient = {
         gold: player.gold,
         level: player.level,
@@ -3423,7 +3420,7 @@ function placeEggInIncubator(player, uid) {
 
     if (player.incubator.hatchCompleteTime) {
         pushLog(player, '[부화기] 현재 다른 알이 부화 중이라 교체할 수 없습니다.');
-        sendInventoryUpdate(player); // 클라이언트에 현재 상태를 다시 알려줌
+        sendInventoryUpdate(player); 
         return;
     }
 
@@ -3442,8 +3439,8 @@ function placeEggInIncubator(player, uid) {
     const newEgg = player.inventory[itemIndex];
 
     if (newEgg.quantity > 1) {
-        newEgg.quantity--; // 원래 아이템 스택에서 1개 차감
-        player.incubator.egg = { ...newEgg, quantity: 1 }; // 1개짜리 복사본을 부화기에 넣음
+        newEgg.quantity--; 
+        player.incubator.egg = { ...newEgg, quantity: 1 }; 
     } else {
 
         player.incubator.egg = player.inventory.splice(itemIndex, 1)[0];
@@ -3830,30 +3827,50 @@ async function onWorldBossDefeated() {
 
 
 async function listOnAuction(player, { uid, price, quantity }) {
-    if (!player || !uid || !price || !quantity) return;
+    const currentFameScore = calculateFameScore(player);
+    player.fameScore = currentFameScore;
+
+    if (currentFameScore < 2500) {
+        const message = `[거래소] 명성이 부족합니다. (현재 ${currentFameScore}점 / 1,000점 필요)`;
+        pushLog(player, message);
+        return { success: false, message: message };
+    }
+
+
+    if (!player || !uid || !price || !quantity) {
+        return { success: false, message: '잘못된 요청입니다.' };
+    }
 
     const nPrice = parseInt(price, 10);
     const nQuantity = parseInt(quantity, 10);
 
+
     if (isNaN(nPrice) || nPrice <= 0 || isNaN(nQuantity) || nQuantity <= 0) {
-        pushLog(player, '[거래소] 올바른 가격과 수량을 입력하세요.');
-        return;
+        const message = '[거래소] 올바른 가격과 수량을 입력하세요.';
+        pushLog(player, message);
+        return { success: false, message: message };
     }
+
 
     const itemIndex = player.inventory.findIndex(i => i.uid === uid);
     if (itemIndex === -1) {
-        pushLog(player, '[거래소] 인벤토리에 없는 아이템입니다.');
-        return;
+        const message = '[거래소] 인벤토리에 없는 아이템입니다.';
+        pushLog(player, message);
+        return { success: false, message: message };
     }
 
     const itemInInventory = player.inventory[itemIndex];
+
     if (itemInInventory.tradable === false) {
-        pushLog(player, '[거래소] 해당 아이템은 거래소에 등록할 수 없습니다.');
-        return;
+        const message = '[거래소] 해당 아이템은 거래소에 등록할 수 없습니다.';
+        pushLog(player, message);
+        return { success: false, message: message };
     }
+
     if (itemInInventory.quantity < nQuantity) {
-        pushLog(player, '[거래소] 보유한 수량보다 많이 등록할 수 없습니다.');
-        return;
+        const message = '[거래소] 보유한 수량보다 많이 등록할 수 없습니다.';
+        pushLog(player, message);
+        return { success: false, message: message };
     }
 
     try {
@@ -3866,9 +3883,7 @@ async function listOnAuction(player, { uid, price, quantity }) {
             price: nPrice
         });
         
-
         await auctionItem.save();
-
 
         if (itemInInventory.quantity === nQuantity) {
             player.inventory.splice(itemIndex, 1);
@@ -3877,18 +3892,19 @@ async function listOnAuction(player, { uid, price, quantity }) {
         }
 
         pushLog(player, `[거래소] ${itemForAuction.name} (${nQuantity}개) 을(를) 개당 ${nPrice.toLocaleString()} G에 등록했습니다.`);
-        
         const itemNameHTML = `<span class="${itemForAuction.grade}">${itemForAuction.name}</span>`;
         const announcementMessage = `[거래소] ${player.username}님이 ${itemNameHTML} 아이템을 등록했습니다.`;
         io.emit('chatMessage', { isSystem: true, message: announcementMessage });
         io.emit('auctionUpdate');
 
         sendInventoryUpdate(player);
-
+        return { success: true, message: '등록에 성공했습니다.' };
     } catch (e) {
         console.error('거래소 등록 오류:', e);
-        pushLog(player, '[거래소] 아이템 등록에 실패했습니다. 아이템이 인벤토리로 반환됩니다.');
-  sendInventoryUpdate(player);
+        const message = '[거래소] 아이템 등록에 실패했습니다. 아이템이 인벤토리로 반환됩니다.';
+        pushLog(player, message);
+        sendInventoryUpdate(player);
+        return { success: false, message: '서버 오류로 등록에 실패했습니다.' };
     }
 }
 
