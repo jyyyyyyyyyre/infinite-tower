@@ -3179,3 +3179,23 @@ body > * {
 .mail-item-info h4 .gold-text {
     font-weight: bold;
 }
+
+.top-buttons #discord-button {
+    background: #5865F2; /* 디스코드 브랜드 색상 */
+    color: #fff;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+    transition: all .2s;
+    text-decoration: none; /* 링크 밑줄 제거 */
+    display: inline-flex;
+    align-items: center;
+    font-size: 14px; /* 다른 버튼과 폰트 크기 일치 */
+}
+
+.top-buttons #discord-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}

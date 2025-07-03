@@ -2733,7 +2733,9 @@ function onClearFloor(p) {
 
                     handleItemStacking(p, droppedItem);
 
-                    pushLog(p, `[${clearedFloor}층]에서 ${itemData[id].name} 획득!`);
+                     if (['Epic', 'Mystic'].includes(droppedItem.grade)) {
+                            pushLog(p, `[${clearedFloor}층]에서 ${itemData[id].name} 획득!`);
+                    }
 sendInventoryUpdate(p); 
 
 
