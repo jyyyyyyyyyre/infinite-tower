@@ -44,6 +44,11 @@ document.addEventListener('DOMContentLoaded', () => {
     logoutButton.addEventListener('click', () => { localStorage.removeItem('jwt_token'); location.reload(); });
 
     function startApp(token) {
+    const SERVER_URL = "https://climbtower-server.onrender.com";
+    const socket = io(SERVER_URL, {
+        auth: { token }, 
+        transports: ['websocket'] 
+    });
         document.body.classList.remove('auth-view');
         authContainer.style.display = 'none';
         gameAppContainer.style.display = 'flex';
