@@ -63,14 +63,10 @@ const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-    transports: ['websocket'],
-    pingInterval: 25000,
-    pingTimeout: 70000,
-    perMessageDeflate: true, // 웹소켓 압축 설정
-    cors: { 
-      origin: process.env.CORS_ORIGIN, 
-      methods: ["GET", "POST"]
-    }
+    transports: ['websocket'],   
+    pingInterval: 25000,       
+    pingTimeout : 70000,
+    perMessageDeflate: true
 });
 
 const PORT = 3000;

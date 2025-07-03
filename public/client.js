@@ -43,34 +43,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     logoutButton.addEventListener('click', () => { localStorage.removeItem('jwt_token'); location.reload(); });
 
- function startApp(token) {
-    const SERVER_URL = "https://climbtower-server.onrender.com"; 
-    const socket = io(SERVER_URL, {
-        auth: { token }, 
-        transports: ['websocket'] 
-    });
+    function startApp(token) {
+        document.body.classList.remove('auth-view');
+        authContainer.style.display = 'none';
+        gameAppContainer.style.display = 'flex';
+        const decodedToken = decodeJwtPayload(token);
+        if (!decodedToken) {
+            console.error("Invalid Token: Decoding failed.");
+            localStorage.removeItem('jwt_token');
+            location.reload();
+            return;
+        }
 
-    document.body.classList.remove('auth-view');
-    authContainer.style.display = 'none';
-    gameAppContainer.style.display = 'flex';
-    
-    const decodedToken = decodeJwtPayload(token);
-    if (!decodedToken) {
-        console.error("Invalid Token: Decoding failed.");
-        localStorage.removeItem('jwt_token');
-        location.reload();
-        return;
+        
+        window.myUsername = decodedToken.username;
+        window.myUserId = decodedToken.userId;
+        
+const socket = io({ auth: { token }, transports: ['websocket'] });
+        socket.on('connect_error', (err) => { alert(err.message); localStorage.removeItem('jwt_token'); location.reload(); });
+        initializeGame(socket);
     }
-    window.myUsername = decodedToken.username;
-    window.myUserId = decodedToken.userId;
-    
-    socket.on('connect_error', (err) => { 
-        alert(err.message); 
-        localStorage.removeItem('jwt_token'); 
-        location.reload(); 
-    });
-    initializeGame(socket);
-}
+
+    const token = localStorage.getItem('jwt_token');
+    if (token) { startApp(token); } else { document.body.classList.add('auth-view'); }
+});
 
 function decodeJwtPayload(token) {
     try {
@@ -1995,17 +1991,4 @@ function renderMailbox(mails) {
             socket.emit('client-heartbeat');
         }
     }, 45000);
-
 }
-
-const token = localStorage.getItem('jwt_token');
-if (token) {
-    startApp(token);
-} else {
-    document.body.classList.add('auth-view');
-    authContainer.style.display = 'flex';
-}
-
-
-
-}); 
