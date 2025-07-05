@@ -965,7 +965,7 @@ function initializeGame(socket) {
 socket.on('fameScoreUpdated', (newFameScore) => {
     if (!currentPlayerState) return;
     currentPlayerState.fameScore = newFameScore;
-    updateUsernameDisplays(currentPlayerState); 
+    updateTopBarInfo(currentPlayerState);
 });
 
     socket.on('onlineUsersData', ({ playersList, totalUsers, subAccountCount }) => {
@@ -1056,7 +1056,7 @@ socket.on('fameScoreUpdated', (newFameScore) => {
 
 const updateUI = ({ player, monster }) => {
     currentPlayerState = player; 
-updateUsernameDisplays(player);
+updateTopBarInfo(player);
 
     if (elements.gold.textContent !== formatInt(player.gold)) { 
         elements.gold.textContent = formatInt(player.gold); 
@@ -2515,11 +2515,11 @@ function getGradeByTitle(titleName) {
     return grades[titleName] || 'Rare'; 
 }
 
-function updateUsernameDisplays(player) {
+function updateTopBarInfo(player) {
     if (!player) return;
 
     const { username, fameScore, equippedTitle } = player;
-
+    
     const fameDetails = getFameDetails(fameScore);
     const scoreText = `(${(fameScore || 0).toLocaleString()})`;
     const titleHtml = equippedTitle ? `<span class="title ${getGradeByTitle(equippedTitle)}">${equippedTitle}</span>` : '';
@@ -2540,11 +2540,4 @@ function updateUsernameDisplays(player) {
             usernameEl.innerHTML = `${titleHtml}${username}`;
         }
     }
-
-    const myMessagesInChat = document.querySelectorAll(`#chat-messages .username[data-username="${username}"]`);
-    myMessagesInChat.forEach(usernameSpan => {
-        const userHtml = createFameUserHtml(username, fameScore);
-        const prefix = usernameSpan.innerHTML.includes('👑') ? '👑 ' : '';
-        usernameSpan.innerHTML = `${prefix}${titleHtml}${userHtml}:`;
-    });
 }

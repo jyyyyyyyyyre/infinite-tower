@@ -174,6 +174,7 @@ const ChatMessageSchema = new mongoose.Schema({
     fameScore: { type: Number, default: 0 },
     message: { type: String, required: true },
     itemData: { type: Object, default: null },
+title: { type: String, default: null },
     timestamp: { type: Date, default: Date.now }
 });
 const AuctionItemSchema = new mongoose.Schema({ sellerId: { type: mongoose.Schema.Types.ObjectId, required: true }, sellerUsername: { type: String, required: true }, item: { type: Object, required: true }, price: { type: Number, required: true }, listedAt: { type: Date, default: Date.now } });
@@ -1212,8 +1213,14 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
                 }
 
                 const player = onlinePlayers[socket.userId];
-                const newChatMessage = new ChatMessage({ username: socket.username, role: socket.role, fameScore: player ? player.fameScore : 0, message: trimmedMsg });
-                await newChatMessage.save();
+               const newChatMessage = new ChatMessage({ 
+            username: socket.username, 
+            role: socket.role, 
+            fameScore: player ? player.fameScore : 0, 
+            message: trimmedMsg,
+            title: player ? player.equippedTitle : null 
+        }); 
+await newChatMessage.save();
 const payload = {
                 ...newChatMessage.toObject(),
                 title: player ? player.equippedTitle : null
@@ -1255,7 +1262,8 @@ const payload = {
             role: player.role,
             fameScore: player.fameScore,
             message: `[${itemToShow.name}] 아이템을 자랑합니다!`,
-            itemData: itemToShow
+            itemData: itemToShow,
+title: player.equippedTitle
         };
         io.emit('chatMessage', chatMessage);
     }
