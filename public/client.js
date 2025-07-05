@@ -1825,13 +1825,14 @@ if (item.type === 'weapon' || item.type === 'armor') {
                 socket.emit('equipItem', item.uid);
             }
             break;
-        case 'unequip':
-            if (item.type === 'pet') {
-                socket.emit('unequipPet');
-            } else {
-                socket.emit('unequipItem', item.type);
-            }
-            break;
+      case 'unequip':
+    if (item.type === 'pet') {
+        socket.emit('unequipPet');
+    } else {
+        const slotToUnequip = item.type === 'accessory' ? item.accessoryType : item.type;
+        socket.emit('unequipItem', slotToUnequip);
+    }
+    break;
         case 'go-enhance':
             document.querySelector('.tab-button[data-tab="enhancement-tab"]').click();
             setTimeout(() => updateEnhancementPanel(item), 50);
