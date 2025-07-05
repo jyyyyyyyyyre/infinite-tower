@@ -1680,7 +1680,14 @@ body.auth-view {
     .modal-content h2 { font-size:1.5em }
     #ranking-list li, .feed-list li { font-size:1em; flex-wrap:wrap }
     .top-bar { flex-wrap:wrap; justify-content:center; gap:10px }
-    .top-buttons { order:1; width:100%; justify-content:center }
+.top-buttons {
+    order: 1;
+    width: 100%;
+    justify-content: flex-start; 
+    overflow-x: auto;           
+    flex-wrap: nowrap;        
+    padding-bottom: 10px;       
+}
     .top-bar-right { order:2 }
     #auction-container { flex-direction:column }
     .inventory-container { flex-direction: column; }
