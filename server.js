@@ -363,10 +363,10 @@ const artifactData = {
 };
 
 const dropTable = {
-    1: { itemsByGrade: { Common: ['w001', 'a001'] }, rates: { Common: 0.979, Rare: 0.02 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
-    2: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'] }, rates: { Common: 0.899, Rare: 0.09, Legendary: 0.01 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
-    3: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'] }, rates: { Common: 0.779, Rare: 0.16, Legendary: 0.055, Epic: 0.005 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
-    4: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'] }, rates: { Common: 0.649, Rare: 0.25, Legendary: 0.09, Epic: 0.0098, Mystic: 0.0002 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
+    1: { itemsByGrade: { Common: ['w001', 'a001'] }, rates: { Common: 0.979, Rare: 0.02 }, specialDrops: { 'rift_shard': { chance: 0.0005 } } },
+    2: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'] }, rates: { Common: 0.899, Rare: 0.09, Legendary: 0.01 }, specialDrops: { 'rift_shard': { chance: 0.0005 } } },
+    3: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'] }, rates: { Common: 0.779, Rare: 0.16, Legendary: 0.055, Epic: 0.005 }, specialDrops: { 'rift_shard': { chance: 0.0005 } } },
+    4: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'] }, rates: { Common: 0.649, Rare: 0.25, Legendary: 0.09, Epic: 0.0098, Mystic: 0.0002 }, specialDrops: { 'rift_shard': { chance: 0.0005 } } },
     5: {
         itemsByGrade: {
             Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'],
@@ -375,7 +375,7 @@ const dropTable = {
         },
         rates: { Common: 0.599497, Rare: 0.28, Legendary: 0.11, Epic: 0.0098, Mystic: 0.0002, Primal: 0.000003 },
         specialDrops: {
-            'rift_shard': { chance: 0.001 },
+            'rift_shard': { chance: 0.0005 },
             'form_locking_stone': { chance: 0.0005 }
         }
     },

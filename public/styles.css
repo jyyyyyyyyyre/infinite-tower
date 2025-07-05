@@ -1518,10 +1518,36 @@ body.auth-view {
 .pagination button.active { background: var(--primary-color); border-color: var(--primary-color); font-weight: bold; }
 .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
 #board-detail-view, #board-write-view { display: none; flex-direction: column; height: 100%; }
-#post-content-area { padding: 0; margin: 0; background: none; overflow-y: auto; flex-grow: 1; }
-.post-view-header { padding: 20px; border-bottom: 1px solid var(--border-color); }
-.post-view-header h3 { font-size: 2em; margin-bottom: 15px; }
-.post-view-header .post-meta { display: flex; align-items: center; gap: 15px; color: var(--text-muted); }
+#post-content-area { padding: 20px; background-color: rgba(0,0,0,0.1); border-radius: 8px; margin-bottom: 20px; flex-grow: 1; overflow-y: auto; min-height: 0; }
+#post-content-area .post-header h3 { font-size: 1.8em; margin-bottom: 10px; }
+#post-content-area .post-meta { color: var(--text-muted); margin-bottom: 20px; }
+#post-content-area .post-body { font-size: 1.1em; line-height: 1.8; white-space: pre-wrap; word-break: break-word; }
+#post-content-area .post-actions { margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end; }
+#post-like-btn { background: var(--success-color); }
+#post-comment-area { margin-top: auto; flex-shrink: 0; max-height: 35%; display: flex; flex-direction: column; }
+#comment-list { overflow-y: auto; flex-grow: 1; margin-bottom: 10px; }
+.comment-item { display: flex; flex-direction: column; padding: 10px; border-bottom: 1px solid var(--bg-color-dark); }
+.comment-author { font-weight: bold; margin-bottom: 5px; }
+.comment-content { flex-grow: 1; }
+.comment-actions { display: flex; align-items: center; gap: 15px; margin-top: 5px; font-size: 0.9em; }
+.comment-actions .like-btn { cursor: pointer; }
+.comment-actions .delete-btn { color: var(--fail-color); cursor: pointer; margin-left: auto; }
+#comment-form { flex-shrink: 0; }
+#comment-form textarea { flex-grow: 1; height: 80px; background-color: #2c2f3b; border: 1px solid var(--border-color); color: var(--text-color); padding: 10px; border-radius: 4px; resize: vertical; font-size: 1em; line-height: 1.5; }
+#comment-form textarea:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 5px var(--primary-color); }
+#comment-form button { flex-shrink: 0; width: 100px; font-weight: bold; background-color: var(--primary-color); border: none; border-radius: 4px; color: white; cursor: pointer; transition: background-color 0.2s; }
+#comment-form button:hover { background-color: #0056b3; }
+#board-write-view h3 { text-align: center; margin-bottom: 20px; }
+#post-form { display: flex; flex-direction: column; gap: 15px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group label { font-weight: bold; }
+.form-group input, .form-group select, .form-group textarea { padding: 10px; border: 1px solid var(--border-color); background: var(--bg-color-dark); color: var(--text-color); border-radius: 4px; font-size: 1em; }
+.form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+#comment-form { display: flex; align-items: stretch; gap: 10px; }
+#comment-form textarea { flex-grow: 1; resize: none; padding: 10px; height: 60px; line-height: 1.5; }
+#comment-form button { flex-shrink: 0; padding: 0 25px; font-weight: bold; background-color: var(--success-color); transition: background-color 0.2s; }
+#comment-form button:hover { background-color: #2ca04c; }
+.main-content-wrapper { display: flex; flex-direction: row; gap: 15px; flex-grow: 1; min-height: 0; }
 .post-view-body { padding: 25px 20px; font-size: 1.1em; line-height: 1.8; min-height: 200px; border-bottom: 1px solid var(--border-color); background-color: var(--bg-color-dark); }
 .post-comments-section { padding: 20px; overflow-y: auto; flex-shrink: 0; min-height: 100px; }
 .post-view-actions { padding: 15px 20px; display: flex; gap: 10px; justify-content: center; background-color: var(--bg-color-dark); }
@@ -1589,31 +1615,11 @@ body.auth-view {
 .item-image.undiscovered img { opacity: 0.3; filter: grayscale(90%); }
 .codex-completion-full { color: #ffd700; font-weight: bold; animation: blink 1.5s infinite alternate; text-shadow: 0 0 5px #ffeb3b; }
 @keyframes blink { from { opacity: 1; } to { opacity: 0.8; } }
-
-#item-action-modal .modal-content, #primal-choice-modal .modal-content {
-    max-width: 450px;
-    text-align: center;
-}
-#item-action-title, #primal-choice-modal h2 {
-    margin-bottom: 30px;
-    font-size: 1.8em;
-}
-#item-action-buttons, #primal-choice-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-    flex-wrap: wrap;
-}
-#item-action-buttons .action-btn, #primal-choice-buttons .action-btn {
-    padding: 15px 30px;
-    font-size: 1.2em;
-}
-
-#chat-messages .item-link {
-    cursor: pointer;
-    text-decoration: underline;
-    font-weight: bold;
-}
+#item-action-modal .modal-content, #primal-choice-modal .modal-content { max-width: 450px; text-align: center; }
+#item-action-title, #primal-choice-modal h2 { margin-bottom: 30px; font-size: 1.8em; }
+#item-action-buttons, #primal-choice-buttons { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
+#item-action-buttons .action-btn, #primal-choice-buttons .action-btn { padding: 15px 30px; font-size: 1.2em; }
+#chat-messages .item-link { cursor: pointer; text-decoration: underline; font-weight: bold; }
 
 @media (min-width: 900px){ 
     .main-content-wrapper{ flex-direction:row; } 
@@ -1622,6 +1628,10 @@ body.auth-view {
 }
 
 @media (max-width: 820px) {
+    body {
+        height: auto;
+        overflow: auto; /* 모바일에서 body 스크롤 허용 */
+    }
     #game-app-container {
         height: auto;
         min-height: 100vh;
@@ -1632,6 +1642,9 @@ body.auth-view {
     }
     .main-content-wrapper {
         flex-direction: column;
+    }
+    .left-sector, .right-sector {
+        overflow-y: visible; /* 모바일에서 각 섹션의 스크롤을 제거 */
     }
     .character-panel { padding:15px; gap:10px }
     .character-header h2 { font-size:1.5em }
@@ -1690,4 +1703,4 @@ body.auth-view {
     margin-top:5px;                   
 }
 
-.player-panel{ gap:10px; }           
+.player-panel{ gap:10px; }
