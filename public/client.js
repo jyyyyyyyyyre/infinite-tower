@@ -2292,13 +2292,20 @@ function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, co
         grid.className = 'codex-grid inventory-grid';
         items.forEach(item => {
             const isDiscovered = discovered.includes(item.id);
+            
             let effectText = '';
-            if (item.type === 'weapon' || item.type === 'armor') {
+            if (item.grade === 'Primal' && item.randomStat) {
+                const typeText = item.type === 'weapon' ? '⚔️공격력' : '❤️🛡️체/방';
+                const minBonus = (item.baseEffect + (item.randomStat.min / 100)) * 100;
+                const maxBonus = (item.baseEffect + (item.randomStat.max / 100)) * 100;
+                effectText = `${typeText} +${minBonus.toLocaleString()}% ~ ${maxBonus.toLocaleString()}%`;
+            } else if (item.type === 'weapon' || item.type === 'armor') {
                 const typeText = item.type === 'weapon' ? '⚔️공격력' : '❤️🛡️체/방';
                 effectText = `${typeText} +${(item.baseEffect * 100).toFixed(1)}%`;
             } else {
                 effectText = item.description || '';
             }
+
             const itemHTML = `
                 <div class="item-image ${isDiscovered ? '' : 'undiscovered'}">
                     <img src="/image/${item.image}" alt="${item.name}" draggable="false">

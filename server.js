@@ -1090,21 +1090,22 @@ io.on('connection', async (socket) => {
     if (!player || !uid) return;
 
     let itemToShow = null;
+    // 장비창 전체 검색 (무기, 방어구, 악세)
     for (const slot in player.equipment) {
         if (player.equipment[slot] && player.equipment[slot].uid === uid) {
             itemToShow = player.equipment[slot];
             break;
         }
     }
-
+    // 장착 펫 검색
     if (!itemToShow && player.equippedPet && player.equippedPet.uid === uid) {
         itemToShow = player.equippedPet;
     }
-
+    // 일반 인벤토리 검색
     if (!itemToShow) {
         itemToShow = player.inventory.find(i => i.uid === uid);
     }
-
+    // 펫 인벤토리 검색
     if (!itemToShow) {
         itemToShow = player.petInventory.find(i => i.uid === uid);
     }
@@ -1819,6 +1820,8 @@ function onClearFloor(p) {
     const isBoss = isBossFloor(p.level - 1);
     const clearedFloor = p.level - 1;
     let goldEarned = isBoss ? clearedFloor * 10 : clearedFloor;
+
+    // 마법부여 옵션 계산
     let goldBonusPercent = 1;
     let extraClimbChanceFromEnchant = 0;
     for (const slot of ['weapon', 'armor']) {
@@ -1834,8 +1837,11 @@ function onClearFloor(p) {
         }
     }
 
+    // 기존 유물, 도감 보너스 적용
     if (p.unlockedArtifacts[2]) goldEarned = Math.floor(goldEarned * 1.25);
     if (p.codexBonusActive) goldEarned = Math.floor(goldEarned * 1.05);
+
+    // 마법부여 골드 보너스 적용
     goldEarned = Math.floor(goldEarned * goldBonusPercent);
 
     p.gold += goldEarned;
@@ -1843,10 +1849,11 @@ function onClearFloor(p) {
         pushLog(p, `[${clearedFloor}층 보스] 클리어! (+${goldEarned.toLocaleString()} G)`); 
     }
 
+    // 펫과 마법부여의 추가 등반 확률 합산
     let totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + extraClimbChanceFromEnchant;
 
     if (p.unlockedArtifacts[0] && clearedFloor > 0 && clearedFloor % 10 === 0) {
-
+        // 유물 효과는 우선 적용
     } else if (Math.random() < totalExtraClimbChance) {
         const skippedFloor = p.level;
         p.level++;
@@ -2333,6 +2340,7 @@ async function savePlayerData(userId) { const p = onlinePlayers[userId]; if (!p)
 async function sendState(socket, player, monsterStats) {
     if (!socket || !player) return;
     const playerStateForClient = {
+username: player.username,
         gold: player.gold,
         level: player.level,
         maxLevel: player.maxLevel,
