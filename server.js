@@ -65,8 +65,8 @@ const RIFT_ENCHANT_COST = {
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 1500000000, ATTACK: 0, DEFENSE: 0,
-    REWARDS: { GOLD: 200000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.79, Mystic: 0.001 } }
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 495000000000, ATTACK: 0, DEFENSE: 0,
+    REWARDS: { GOLD: 800000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
 const MailSchema = new mongoose.Schema({
