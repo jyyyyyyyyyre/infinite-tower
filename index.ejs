@@ -57,10 +57,10 @@
 
         <div class="top-bar">
            <div id="user-info">
-    <span id="fame-icon"></span>
-    <span id="fame-score-display" style="margin-left: 2px;"></span>
-    <span id="welcome-username" style="margin-left: 8px;"></span>님 환영합니다!
-</div>
+                <span id="fame-icon"></span>
+                <span id="fame-score-display" style="margin-left: 2px;"></span>
+                <span id="welcome-username" style="margin-left: 8px;"></span>님 환영합니다!
+            </div>
             <div class="top-buttons">
                 <button id="auction-button">⚖️ 거래소</button>
                 <button id="ranking-button">🏆 랭킹</button>
@@ -68,8 +68,8 @@
                 <button id="enhancement-record-button">✨ 강화</button>
                 <button id="online-users-button">👥 접속자</button>
                 <button id="mailbox-button">📬 우편함</button>
- <a href="https://discord.gg/3ZezZ3PN" target="_blank" id="discord-button">💬 디스코드</a>
-<button id="codex-button">📖 도감</button>
+                <a href="https://discord.gg/3ZezZ3PN" target="_blank" id="discord-button">💬 디스코드</a>
+                <button id="codex-button">� 도감</button>
             </div>
             <div class="top-bar-right">
                 <div id="zoom-controls">
@@ -96,8 +96,12 @@
                 <div class="left-sector">
                     <div class="character-panel player-panel">
                         <div class="character-header">
-                            <h2>플레이어</h2>
-                            <div class="resource-display">💰 <span id="gold">0</span></div>
+                           <h2>
+    플레이어
+    <div id="artifact-sockets-header"></div>
+    <span id="player-max-level-display" style="font-size: 0.8em; color: var(--text-muted); font-weight: normal;"></span>
+</h2>
+ <div class="resource-display">💰 <span id="gold">0</span></div>
                         </div>
                         <div class="hp-bar">
                             <div class="hp-bar-inner" id="player-hp-bar"></div>
@@ -107,8 +111,9 @@
                             <div class="stat-row" data-stat-row="hp"><span class="stat-name">❤️ 총 체력</span><span class="stat-value" id="total-hp"></span><div class="button-group"><button class="upgrade-btn" data-stat="hp" data-amount="1">+1</button><button class="upgrade-btn" data-stat="hp" data-amount="10">+10</button><button class="upgrade-btn" data-stat="hp" data-amount="100">+100</button><button class="upgrade-btn" data-stat="hp" data-amount="MAX">MAX</button></div></div>
                             <div class="stat-row" data-stat-row="attack"><span class="stat-name">⚔️ 총 공격력</span><span class="stat-value" id="total-attack"></span><div class="button-group"><button class="upgrade-btn" data-stat="attack" data-amount="1">+1</button><button class="upgrade-btn" data-stat="attack" data-amount="10">+10</button><button class="upgrade-btn" data-stat="attack" data-amount="100">+100</button><button class="upgrade-btn" data-stat="attack" data-amount="MAX">MAX</button></div></div>
                             <div class="stat-row" data-stat-row="defense"><span class="stat-name">🛡️ 총 방어력</span><span class="stat-value" id="total-defense"></span><div class="button-group"><button class="upgrade-btn" data-stat="defense" data-amount="1">+1</button><button class="upgrade-btn" data-stat="defense" data-amount="10">+10</button><button class="upgrade-btn" data-stat="defense" data-amount="100">+100</button><button class="upgrade-btn" data-stat="defense" data-amount="MAX">MAX</button></div></div>
-                            <div class="stat-row-monster"><span class="stat-name">💥 치명타 확률</span><span class="stat-value" id="crit-chance"></span></div>
-                            <div class="stat-row-monster"><span class="stat-name">🔰 치명타 저항</span><span class="stat-value" id="crit-resistance"></span></div>
+                            <hr style="grid-column: 1 / -1; border-color: var(--border-color); margin: 5px 0;">
+                            <div id="special-stats-grid" class="stat-info-monster" style="grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 15px;">
+                            </div>
                         </div>
                         <div id="player-buffs-container"></div>
                         <div class="equipment-section">
@@ -120,7 +125,7 @@
                                 <div class="slot" id="earring-slot" data-slot="earring"></div>
                                 <div class="slot" id="wristwatch-slot" data-slot="wristwatch"></div>
                             </div>
-                            <div class="artifact-sockets" id="artifact-sockets"></div>
+
                         </div>
                     </div>
                     
@@ -129,16 +134,26 @@
                             <div class="monster-header-controls">
                                 <h2><span id="monster-level"></span></h2>
                                 <button id="exploration-button" class="explore">탐험하기</button>
+                                <div id="floor-controls" style="display: none;">
+                                    <button id="safe-zone-btn" class="action-btn sell-btn">안전지대 복귀</button>
+                                    <button id="frontline-btn" class="action-btn list-auction-btn">최전선 복귀</button>
+                                </div>
                             </div>
                         </div>
                         <div class="hp-bar">
                             <div class="hp-bar-inner" id="monster-hp-bar"></div>
                             <div class="hp-bar-text" id="monster-hp-text"></div>
                         </div>
+                        <div class="hp-bar" id="monster-barrier-container" style="display: none; margin-top: 5px;">
+                            <div class="hp-bar-inner" id="monster-barrier-bar" style="background: linear-gradient(to right, #af52de, #c774e8);"></div>
+                            <div class="hp-bar-text" id="monster-barrier-text"></div>
+                        </div>
                         <div class="stat-info-monster">
                             <div class="stat-row-monster"><span>❤️ 총 체력</span><span id="monster-hp-total"></span></div>
                             <div class="stat-row-monster"><span>⚔️ 공격력</span><span id="monster-attack"></span></div>
                             <div class="stat-row-monster"><span>🛡️ 방어력</span><span id="monster-defense"></span></div>
+                        </div>
+                        <div id="monster-ability-icons" style="display: none; justify-content: center; gap: 15px; font-size: 1.5em; margin-top: 10px;">
                         </div>
                     </div>
                 </div>
@@ -152,6 +167,7 @@
                         <button class="tab-button" data-tab="pet-inventory-tab">펫</button>
                         <button class="tab-button" data-tab="incubator-tab">부화기</button>
                         <button class="tab-button" data-tab="enhancement-tab">대장간</button>
+                        <button class="tab-button" data-tab="rift-enchant-tab">균열 마법부여</button>
                         <button class="tab-button" data-tab="fusion-tab">융합</button>
                         <button class="tab-button" data-tab="log-tab">로그</button>
                         <button class="tab-button" data-tab="chat-tab">채팅</button>
@@ -224,6 +240,18 @@
                         </div>
                     </div>
 
+                    <div class="tab-content" id="rift-enchant-tab">
+                        <div class="enhancement-anvil">
+                            <div class="enhancement-slot-wrapper">
+                                <div class="enhancement-slot" id="rift-enchant-slot">마법을 부여할 장비를 선택하세요 (무기/방어구)</div>
+                            </div>
+                            <div id="rift-enchant-options" class="rift-options-container">
+                            </div>
+                            <div id="rift-enchant-cost" class="enhancement-info"></div>
+                            <button class="enhance-execute-btn" id="rift-enchant-execute-btn" disabled>마 법 부 여</button>
+                        </div>
+                    </div>
+
                     <div class="tab-content" id="fusion-tab">
                         <div id="fusion-container">
                             <div id="fusion-process-ui">
@@ -286,6 +314,7 @@
                     <option value="Legendary">Legendary</option>
                     <option value="Epic">Epic</option>
                     <option value="Mystic">Mystic</option>
+                    <option value="Primal">Primal</option>
                 </select>
                 <button id="auction-refresh-btn" class="action-btn">새로고침</button>
             </div>
@@ -444,16 +473,49 @@
         </div>
     </div>
 
-<div id="codex-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-content" style="max-width: 1400px; height: 90vh;">
-        <span class="close-button">&times;</span>
-        <h2>📖 아이템 도감</h2>
-        <div id="codex-content" style="overflow-y: auto; flex-grow: 1; padding: 10px;">
+    <div id="primal-choice-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <span class="close-button">&times;</span>
+            <h2 style="margin-bottom: 30px;">태초 장비</h2>
+            <p style="margin-bottom: 20px;">어디로 이동하시겠습니까?</p>
+            <div id="primal-choice-buttons" style="display: flex; justify-content: center; gap: 20px;">
+                <button id="primal-choice-enhance-btn" class="action-btn equip-btn" style="padding: 15px 30px; font-size: 1.2em;">⚔️ 대장간</button>
+                <button id="primal-choice-enchant-btn" class="action-btn list-auction-btn" style="padding: 15px 30px; font-size: 1.2em;">✨ 균열 마법부여</button>
             </div>
-<div id="codex-footer" style="text-align: center; padding-top: 15px; border-top: 1px solid var(--border-color); margin-top: auto; flex-shrink: 0;">
-            </div>
+        </div>
     </div>
-</div>
+
+    <div id="codex-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 1400px; height: 90vh;">
+            <span class="close-button">&times;</span>
+            <h2>📖 아이템 도감</h2>
+            <div id="codex-content" style="overflow-y: auto; flex-grow: 1; padding: 10px;">
+            </div>
+            <div id="codex-footer" style="text-align: center; padding-top: 15px; border-top: 1px solid var(--border-color); margin-top: auto; flex-shrink: 0;">
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 요청사항 6번 관련 신규 모달 추가 ================= -->
+    <div id="item-action-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2 id="item-action-title"></h2>
+            <div id="item-action-buttons">
+                <!-- Buttons are dynamically inserted here by client.js -->
+            </div>
+        </div>
+    </div>
+
+    <div id="item-info-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 350px;">
+            <span class="close-button">&times;</span>
+            <div id="item-info-modal-content">
+                <!-- Item HTML is dynamically inserted here by client.js -->
+            </div>
+        </div>
+    </div>
+    <!-- ======================================================================= -->
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js?v=<%= version %>"></script>
