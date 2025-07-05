@@ -1680,11 +1680,25 @@ body.auth-view {
     .modal-content h2 { font-size:1.5em }
     #ranking-list li, .feed-list li { font-size:1em; flex-wrap:wrap }
     .top-bar { flex-wrap:wrap; justify-content:center; gap:10px }
-    .top-buttons { order:1; width:100%; justify-content:center }
+.top-buttons {
+    order: 1;
+    width: 100%;
+    justify-content: flex-start; 
+    overflow-x: auto;      
+    flex-wrap: nowrap;      
+    padding-bottom: 10px;   
+}
     .top-bar-right { order:2 }
     #auction-container { flex-direction:column }
     .inventory-container { flex-direction: column; }
     .interaction-panel { flex-basis: auto; width: 100%; }
+}
+
+.auction-list-panel,
+.auction-detail-panel {
+    flex: none;       /* 높이 자동 조정을 위해 flex 비율 해제 */
+    height: auto;     /* 컨텐츠 높이에 맞게 자동으로 높이 조절 */
+    min-height: 300px; /* 내용이 적어도 최소 높이를 확보 */
 }
 
 @media (max-width:480px) {
@@ -1703,6 +1717,13 @@ body.auth-view {
     min-height:0;
     flex-grow:1;
     overflow-y:auto
+}
+
+.auction-list-panel,
+.auction-detail-panel {
+    flex: none;       /* 높이 자동 조정을 위해 flex 비율 해제 */
+    height: auto;     /* 컨텐츠 높이에 맞게 자동으로 높이 조절 */
+    min-height: 300px; /* 내용이 적어도 최소 높이를 확보 */
 }
 
 #special-stats-grid{
