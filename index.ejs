@@ -69,7 +69,8 @@
                 <button id="online-users-button">👥 접속자</button>
                 <button id="mailbox-button">📬 우편함</button>
                 <a href="https://discord.gg/3ZezZ3PN" target="_blank" id="discord-button">💬 디스코드</a>
-                <button id="codex-button">� 도감</button>
+                <button id="codex-button">📖 도감</button>
+<button id="title-codex-button">📜 칭호</button>
             </div>
             <div class="top-bar-right">
                 <div id="zoom-controls">
@@ -133,7 +134,7 @@
                         <div class="character-header">
                             <div class="monster-header-controls">
                                 <h2><span id="monster-level"></span></h2>
-                                <button id="exploration-button" class="explore">탐험하기</button>
+<button id="exploration-button" class="explore" style="display: none;">탐험하기</button>
                                 <div id="floor-controls" style="display: none;">
                                     <button id="safe-zone-btn" class="action-btn sell-btn">안전지대 복귀</button>
                                     <button id="frontline-btn" class="action-btn list-auction-btn">최전선 복귀</button>
@@ -496,7 +497,6 @@
         </div>
     </div>
 
-    <!-- ================= 요청사항 6번 관련 신규 모달 추가 ================= -->
     <div id="item-action-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <span class="close-button">&times;</span>
@@ -515,7 +515,18 @@
             </div>
         </div>
     </div>
-    <!-- ======================================================================= -->
+
+  <div id="title-codex-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 1400px; height: 90vh;">
+            <span class="close-button">&times;</span>
+            <h2 id="title-codex-header">📜 칭호 도감</h2>
+            <div id="title-codex-content" style="overflow-y: auto; flex-grow: 1; padding: 10px;">
+                </div>
+            <div id="title-codex-footer" style="text-align: center; padding-top: 15px; border-top: 1px solid var(--border-color); margin-top: auto; flex-shrink: 0;">
+                </div>
+        </div>
+    </div>
+
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js?v=<%= version %>"></script>

@@ -190,6 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.myUserId = decodedToken.userId;
 
         const socket = io({ auth: { token }, transports: ['websocket'] });
+window.socket = socket;
         socket.on('connect_error', (err) => { alert(err.message); localStorage.removeItem('jwt_token'); location.reload(); });
         initializeGame(socket);
     }
@@ -519,6 +520,15 @@ function initializeGame(socket) {
             overlay: document.getElementById('codex-modal'),
             content: document.getElementById('codex-content')
         },
+
+ titleCodex: { 
+            button: document.getElementById('title-codex-button'),
+            overlay: document.getElementById('title-codex-modal'),
+            content: document.getElementById('title-codex-content'),
+            footer: document.getElementById('title-codex-footer'),
+            closeButton: document.getElementById('title-codex-modal').querySelector('.close-button')
+        }, 
+
         petChoice: {
             overlay: document.getElementById('pet-choice-modal'),
             title: document.getElementById('pet-choice-title'),
@@ -532,7 +542,7 @@ function initializeGame(socket) {
             frontlineBtn: document.getElementById('frontline-btn')
         }
     };
-    
+    elements.explorationButton.style.display = 'none';
     if (elements.floorControls.safeZoneBtn) {
         elements.floorControls.safeZoneBtn.addEventListener('click', () => {
             if (confirm('50만 층 안전지대로 이동하시겠습니까?\n이동 시 30분간 최전선 복귀가 불가능합니다.')) {
@@ -561,26 +571,34 @@ function initializeGame(socket) {
     };
     zoomLogic.init();
 
-    function updatePlayerFameDisplay(score, username) {
-        const fameDetails = getFameDetails(score);
-        const scoreText = `(${(score || 0).toLocaleString()})`;
-        elements.userInfo.icon.textContent = fameDetails.icon;
-        elements.userInfo.fameScoreDisplay.textContent = scoreText;
-        const usernameEl = elements.userInfo.username;
+ function updatePlayerFameDisplay(score, username, title) {
+    const fameDetails = getFameDetails(score);
+    const scoreText = `(${(score || 0).toLocaleString()})`;
+    
+    const userInfoEl = elements.userInfo;
+    if (userInfoEl) {
+        userInfoEl.icon.textContent = fameDetails.icon;
+        userInfoEl.fameScoreDisplay.textContent = scoreText;
+        const usernameEl = userInfoEl.username;
         usernameEl.className = ''; 
         if (fameDetails.className) {
             usernameEl.classList.add(fameDetails.className);
         }
-        usernameEl.textContent = username;
-        if (username === window.myUsername) {
-            const myMessagesInChat = document.querySelectorAll(`#chat-messages .username[data-username="${username}"]`);
-            myMessagesInChat.forEach(usernameSpan => {
-                const userHtml = createFameUserHtml(username, score);
-                const prefix = usernameSpan.innerHTML.startsWith('👑') ? '👑 ' : '';
-                usernameSpan.innerHTML = `${prefix}${userHtml}:`;
-            });
-        }
+
+        const titleHtml = title ? `<span class="title ${getGradeByTitle(title)}">${title}</span>` : '';
+        usernameEl.innerHTML = `${titleHtml}${username}`; 
     }
+
+    if (username === window.myUsername) {
+        const myMessagesInChat = document.querySelectorAll(`#chat-messages .username[data-username="${username}"]`);
+        myMessagesInChat.forEach(usernameSpan => {
+            const userHtml = createFameUserHtml(username, score);
+            const prefix = usernameSpan.innerHTML.startsWith('👑') ? '👑 ' : '';
+            const titleHtml = title ? `<span class="title ${getGradeByTitle(title)}">${title}</span>` : '';
+            usernameSpan.innerHTML = `${prefix}${titleHtml}${userHtml}:`;
+        });
+    }
+}
 
     document.querySelectorAll('.modal-overlay').forEach(modal => { 
         const closeBtn = modal.querySelector('.close-button');
@@ -633,6 +651,23 @@ function initializeGame(socket) {
             }
         });
     }); 
+
+
+
+ elements.titleCodex.button.addEventListener('click', () => {
+        socket.emit('titles:getData', (data) => {
+            if (data) {
+                renderTitleCodex(data);
+                elements.titleCodex.overlay.style.display = 'flex';
+            } else {
+                alert('칭호 정보를 불러오는 데 실패했습니다.');
+            }
+        });
+    });
+
+    elements.titleCodex.closeButton.addEventListener('click', () => {
+        elements.titleCodex.overlay.style.display = 'none';
+    });
 
     const setupFusionSlot = (slotElement) => {
         slotElement.addEventListener('dblclick', () => {
@@ -927,11 +962,11 @@ function initializeGame(socket) {
     socket.on('initialGlobalRecords', renderGlobalRecords);
     socket.on('globalRecordsUpdate', renderGlobalRecords);
 
-    socket.on('fameScoreUpdated', (newFameScore) => {
-        if (!currentPlayerState) return;
-        updatePlayerFameDisplay(newFameScore, currentPlayerState.username);
-        currentPlayerState.fameScore = newFameScore;
-    });
+socket.on('fameScoreUpdated', (newFameScore) => {
+    if (!currentPlayerState) return;
+    currentPlayerState.fameScore = newFameScore;
+    updateUsernameDisplays(currentPlayerState); 
+});
 
     socket.on('onlineUsersData', ({ playersList, totalUsers, subAccountCount }) => {
         const list = elements.modals.online.list;
@@ -1019,138 +1054,131 @@ function initializeGame(socket) {
         }
     };
 
-    const updateUI = ({ player, monster }) => {
-        currentPlayerState = player; 
-        updatePlayerFameDisplay(player.fameScore, player.username); 
+const updateUI = ({ player, monster }) => {
+    currentPlayerState = player; 
+updateUsernameDisplays(player);
 
-        if (elements.gold.textContent !== formatInt(player.gold)) { 
-            elements.gold.textContent = formatInt(player.gold); 
-        }
+    if (elements.gold.textContent !== formatInt(player.gold)) { 
+        elements.gold.textContent = formatInt(player.gold); 
+    }
 
-        elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
-        elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
-        elements.player.totalHp.textContent = formatFloat(player.stats.total.hp);
-        elements.player.totalAttack.textContent = formatFloat(player.stats.total.attack);
-        elements.player.totalDefense.textContent = formatFloat(player.stats.total.defense);
-        
-        if (elements.player.specialStatsGrid) {
-            elements.player.specialStatsGrid.innerHTML = `
-                <div>💥 치명타: <strong>${(player.stats.critChance * 100).toFixed(2)}%</strong></div>
-                <div>🔰 치명 저항: <strong>${(player.stats.critResistance * 100).toFixed(2)}%</strong></div>
-                <div>🎯 집 중: <strong style="color: var(--primal-color);">${(player.focus || 0).toFixed(2)}%</strong></div>
-                <div>💎 관 통: <strong style="color: var(--primal-color);">${(player.penetration || 0).toFixed(2)}%</strong></div>
-                <div>🛡️ 강 인 함: <strong style="color: var(--primal-color);">${(player.tenacity || 0).toFixed(2)}%</strong></div>
-            `;
-        }
+    elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
+    elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
+    elements.player.totalHp.textContent = formatFloat(player.stats.total.hp);
+    elements.player.totalAttack.textContent = formatFloat(player.stats.total.attack);
+    elements.player.totalDefense.textContent = formatFloat(player.stats.total.defense);
+    
+    if (elements.player.specialStatsGrid) {
+        elements.player.specialStatsGrid.innerHTML = `
+            <div>💥 치명타: <strong>${(player.stats.critChance * 100).toFixed(2)}%</strong></div>
+            <div>🔰 치명 저항: <strong>${(player.stats.critResistance * 100).toFixed(2)}%</strong></div>
+            <div>🎯 집 중: <strong style="color: var(--primal-color);">${(player.focus || 0).toFixed(2)}%</strong></div>
+            <div>💎 관 통: <strong style="color: var(--primal-color);">${(player.penetration || 0).toFixed(2)}%</strong></div>
+            <div>🛡️ 강 인 함: <strong style="color: var(--primal-color);">${(player.tenacity || 0).toFixed(2)}%</strong></div>
+        `;
+    }
 
-      if (player.isExploring) {
-    elements.monster.level.innerHTML = `<span style="color:var(--fail-color); font-weight:bold;">탐험 중</span>`;
-    elements.monster.hpBar.style.width = `100%`;
-    elements.monster.hpText.textContent = `1 / 1`;
-    elements.monster.totalHp.textContent = `1`;
-    elements.monster.attack.textContent = `0`;
-    elements.monster.defense.textContent = `0`;
-    elements.explorationButton.textContent = '등반하기';
-    elements.explorationButton.className = 'climb';
-} else {
     elements.monster.level.innerHTML = monster.isBoss ? `<span style="color:var(--fail-color); font-weight:bold;">${formatInt(monster.level)}층 보스</span>` : `${formatInt(monster.level)}층 몬스터`;
     elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
     elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
     elements.monster.totalHp.textContent = formatFloat(monster.hp);
     elements.monster.attack.textContent = formatFloat(monster.attack);
     elements.monster.defense.textContent = formatFloat(monster.defense);
-    elements.explorationButton.textContent = '탐험하기';
-    elements.explorationButton.className = 'explore';
-}
 
-const showAbilities = !player.isExploring && monster.level >= 1000001;
-elements.monster.abilityIcons.style.display = showAbilities ? 'flex' : 'none';
-elements.monster.barrierBar.parentElement.style.display = showAbilities ? 'block' : 'none';
+    const showAbilities = monster.level >= 1000001;
+    elements.monster.abilityIcons.style.display = showAbilities ? 'flex' : 'none';
+    const barrierContainer = elements.monster.barrierBar.parentElement;
+    if (barrierContainer) {
+        barrierContainer.style.display = showAbilities ? 'block' : 'none';
+    }
 
-if (showAbilities) {
-    const maxBarrier = monster.hp * 5;
-    const currentBarrier = monster.currentBarrier;
-    const barrierPercent = maxBarrier > 0 ? (currentBarrier / maxBarrier) * 100 : 0;
-    elements.monster.barrierBar.style.width = `${barrierPercent}%`;
-    elements.monster.barrierText.textContent = `${formatFloat(currentBarrier)} / ${formatFloat(maxBarrier)}`;
-    elements.monster.abilityIcons.innerHTML = `
-        <span title="보호막: 이 몬스터는 추가 체력을 가지고 있습니다. 보호막을 모두 파괴해야 본체에 피해를 줄 수 있습니다.">🛡️</span>
-        <span title="왜곡: 이 몬스터는 50% 확률로 모든 공격을 회피합니다.">💨</span>
-        <span title="권능 공격: 이 몬스터의 모든 공격은 당신의 최대 체력 10%에 해당하는 추가 피해를 입힙니다.">💀</span>
-    `;
-}
 
-        if (elements.floorControls.container) {
-            const { safeZoneBtn, frontlineBtn } = elements.floorControls;
-            const canUseFrontline = player.maxLevel >= 1000000;
+    if (showAbilities) {
+        const maxBarrier = monster.hp * 5;
+        const currentBarrier = monster.currentBarrier;
+        const barrierPercent = maxBarrier > 0 ? (currentBarrier / maxBarrier) * 100 : 0;
+        elements.monster.barrierBar.style.width = `${barrierPercent}%`;
+        elements.monster.barrierText.textContent = `${formatFloat(currentBarrier)} / ${formatFloat(maxBarrier)}`;
+        elements.monster.abilityIcons.innerHTML = `
+            <span title="보호막: 이 몬스터는 추가 체력을 가지고 있습니다. 보호막을 모두 파괴해야 본체에 피해를 줄 수 있습니다.">🛡️</span>
+            <span title="왜곡: 이 몬스터는 50% 확률로 모든 공격을 회피합니다.">💨</span>
+            <span title="권능 공격: 이 몬스터의 모든 공격은 당신의 최대 체력 10%에 해당하는 추가 피해를 입힙니다.">💀</span>
+        `;
+    }
 
-            elements.floorControls.container.style.display = 'flex';
-            safeZoneBtn.style.display = 'none';
-            frontlineBtn.style.display = 'none';
-            
-            if (canUseFrontline) {
-                if (player.level >= 1000000) {
-                    safeZoneBtn.style.display = 'block';
-                } else {
-                    frontlineBtn.style.display = 'block';
-                    const cooldown = player.safeZoneCooldownUntil ? new Date(player.safeZoneCooldownUntil) : null;
-                    if (cooldown && cooldown > new Date()) {
-                        frontlineBtn.disabled = true;
-                        if (returnCooldownTimer) clearInterval(returnCooldownTimer);
-                        returnCooldownTimer = setInterval(() => {
-                            const now = new Date();
-                            if (cooldown <= now) {
-                                clearInterval(returnCooldownTimer);
-                                frontlineBtn.disabled = false;
-                                frontlineBtn.textContent = '최전선 복귀';
-                            } else {
-                                const remaining = Math.ceil((cooldown - now) / 1000);
-                                frontlineBtn.textContent = `최전선 복귀 (${remaining}초)`;
-                            }
-                        }, 1000);
-                    } else {
-                        if (returnCooldownTimer) clearInterval(returnCooldownTimer);
-                        frontlineBtn.disabled = false;
-                        frontlineBtn.textContent = '최전선 복귀';
-                    }
-                }
+    if (elements.floorControls.container) {
+        const { safeZoneBtn, frontlineBtn } = elements.floorControls;
+        const canUseFrontline = player.maxLevel >= 1000000;
+
+        elements.floorControls.container.style.display = 'flex';
+        safeZoneBtn.style.display = 'none';
+        frontlineBtn.style.display = 'none';
+        
+        if (canUseFrontline) {
+            if (player.level >= 1000000) {
+                safeZoneBtn.style.display = 'block';
             } else {
                 frontlineBtn.style.display = 'block';
-                frontlineBtn.disabled = true;
-                frontlineBtn.title = '최대 등반 층 100만 이상만 사용 가능합니다.';
+                const cooldown = player.safeZoneCooldownUntil ? new Date(player.safeZoneCooldownUntil) : null;
+                if (cooldown && cooldown > new Date()) {
+                    frontlineBtn.disabled = true;
+                    if (returnCooldownTimer) clearInterval(returnCooldownTimer);
+                    returnCooldownTimer = setInterval(() => {
+                        const now = new Date();
+                        if (cooldown <= now) {
+                            clearInterval(returnCooldownTimer);
+                            frontlineBtn.disabled = false;
+                            frontlineBtn.textContent = '최전선 복귀';
+                        } else {
+                            const remaining = Math.ceil((cooldown - now) / 1000);
+                            frontlineBtn.textContent = `최전선 복귀 (${remaining}초)`;
+                        }
+                    }, 1000);
+                } else {
+                    if (returnCooldownTimer) clearInterval(returnCooldownTimer);
+                    frontlineBtn.disabled = false;
+                    frontlineBtn.textContent = '최전선 복귀';
+                }
             }
+        } else {
+            frontlineBtn.style.display = 'block';
+            frontlineBtn.disabled = true;
+            frontlineBtn.title = '최대 등반 층 100만 이상만 사용 가능합니다.';
         }
+    }
 
 
-        const buffsContainer = document.getElementById('player-buffs-container');
-        buffsContainer.innerHTML = ''; 
-        if (player.buffs && player.buffs.length > 0) {
-            player.buffs.forEach(buff => {
-                const remainingTime = Math.max(0, Math.floor((new Date(buff.endTime) - new Date()) / 1000));
-                buffsContainer.innerHTML += `
-                    <div class="buff-icon" title="${buff.name}">
-                        ✨ 각성 (${remainingTime}초)
-                    </div>
-                `;
-            });
-        }
+    const buffsContainer = document.getElementById('player-buffs-container');
+    buffsContainer.innerHTML = ''; 
+    if (player.buffs && player.buffs.length > 0) {
+        player.buffs.forEach(buff => {
+            const remainingTime = Math.max(0, Math.floor((new Date(buff.endTime) - new Date()) / 1000));
+            buffsContainer.innerHTML += `
+                <div class="buff-icon" title="${buff.name}">
+                    ✨ 각성 (${remainingTime}초)
+                </div>
+            `;
+        });
+    }
 
-        renderItemInSlot(elements.equipment.weapon, player.equipment.weapon, '⚔️<br>무기', 'weapon');
-        renderItemInSlot(elements.equipment.armor, player.equipment.armor, '🛡️<br>방어구', 'armor');
-        renderItemInSlot(elements.equipment.pet, player.equippedPet, '🐾<br>펫', 'pet');
-        renderItemInSlot(elements.equipment.necklace, player.equipment.necklace, '💍<br>목걸이', 'necklace');
-        renderItemInSlot(elements.equipment.earring, player.equipment.earring, '👂<br>귀걸이', 'earring');
-        renderItemInSlot(elements.equipment.wristwatch, player.equipment.wristwatch, '⏱️<br>손목시계', 'wristwatch');
-        elements.artifactSockets = document.getElementById('artifact-sockets-header');
-        elements.artifactSockets.innerHTML = player.unlockedArtifacts.map(artifact => artifact ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`).join('');
-        
-        renderAllInventories(player);
-        renderIncubator(player.incubator);
-        renderFusionPanel(player);
-        elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
-        elements.modals.mailbox.button.classList.toggle('new-mail', player.hasUnreadMail);
-        updateAffordableButtons();
-    };
+    renderItemInSlot(elements.equipment.weapon, player.equipment.weapon, '⚔️<br>무기', 'weapon');
+    renderItemInSlot(elements.equipment.armor, player.equipment.armor, '🛡️<br>방어구', 'armor');
+    renderItemInSlot(elements.equipment.pet, player.equippedPet, '🐾<br>펫', 'pet');
+    renderItemInSlot(elements.equipment.necklace, player.equipment.necklace, '💍<br>목걸이', 'necklace');
+    renderItemInSlot(elements.equipment.earring, player.equipment.earring, '👂<br>귀걸이', 'earring');
+    renderItemInSlot(elements.equipment.wristwatch, player.equipment.wristwatch, '⏱️<br>손목시계', 'wristwatch');
+    const artifactSocketsHeader = document.getElementById('artifact-sockets-header');
+    if (artifactSocketsHeader) {
+        artifactSocketsHeader.innerHTML = player.unlockedArtifacts.map(artifact => artifact ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`).join('');
+    }
+    
+    renderAllInventories(player);
+    renderIncubator(player.incubator);
+    renderFusionPanel(player);
+    elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
+    elements.modals.mailbox.button.classList.toggle('new-mail', player.hasUnreadMail);
+    updateAffordableButtons();
+};
 
     const renderIncubator = (incubator) => {
         if (incubator && incubator.egg) {
@@ -1610,13 +1638,13 @@ function updateRiftEnchantPanel(item, previouslyLockedIndices = []) {
         updateUI(data);
     });
 
-    socket.on('stateUpdate', (data) => {
-        if (!currentPlayerState || !data || !data.player) {
-            return;
-        }
-        Object.assign(currentPlayerState, data.player);
-        updateUI(data);
-    });
+socket.on('stateUpdate', (data) => {
+    if (!currentPlayerState || !data || !data.player) {
+        return;
+    }
+    Object.assign(currentPlayerState, data.player);
+    updateUI({ player: currentPlayerState, monster: data.monster });
+});
 
     socket.on('inventoryUpdate', (data) => {
         if (!currentPlayerState || !data) return;
@@ -2004,17 +2032,7 @@ if (item.type === 'weapon' || item.type === 'armor') {
 
     elements.incubator.hatchButton.addEventListener('click', () => { if (currentPlayerState && currentPlayerState.incubator.egg) { socket.emit('startHatching'); } });
     
-    elements.explorationButton.addEventListener('click', () => {
-        const isClimbing = elements.explorationButton.className === 'climb';
-        if (isClimbing) {
-            elements.explorationButton.textContent = '탐험하기';
-            elements.explorationButton.className = 'explore';
-        } else {
-            elements.explorationButton.textContent = '등반하기';
-            elements.explorationButton.className = 'climb';
-        }
-        socket.emit('toggleExploration');
-    });
+  
     
     document.getElementById('game-app-container').addEventListener('dragstart', e => {
         const card = e.target.closest('.inventory-item');
@@ -2101,7 +2119,7 @@ if (item.type === 'weapon' || item.type === 'armor') {
     });
 
     function addChatMessage(data) {
-        const { type, username, role, message, isSystem, fameScore, itemData } = data;
+        const { type, username, role, message, isSystem, fameScore, itemData, title } = data;
         const item = document.createElement('li');
         const isScrolledToBottom = elements.chat.messages.scrollHeight - elements.chat.messages.clientHeight <= elements.chat.messages.scrollTop + 1;
 
@@ -2111,7 +2129,9 @@ if (item.type === 'weapon' || item.type === 'armor') {
         } else if (type === 'item_show_off' && itemData) {
             const userHtml = createFameUserHtml(username, fameScore || 0);
             const itemLink = `<span class="item-link ${itemData.grade}" data-iteminfo='${JSON.stringify(itemData)}'>[${itemData.name}]</span>`;
-            item.innerHTML = `<span class="username" data-username="${username}">${userHtml}:</span>님이 ${itemLink} 아이템을 자랑합니다!`;
+            const titleHtml = title ? `<span class="title ${getGradeByTitle(title)}">${title}</span>` : '';
+            item.innerHTML = `<span class="username" data-username="${username}">${titleHtml}${userHtml}:</span>님이 ${itemLink} 아이템을 자랑합니다!`;
+
         } else {
             item.classList.add(`${type || 'user'}-message`);
             const usernameSpan = document.createElement('span');
@@ -2121,19 +2141,22 @@ if (item.type === 'weapon' || item.type === 'armor') {
             const messageSpan = document.createElement('span');
             messageSpan.classList.add('message');
             const userHtml = createFameUserHtml(username, fameScore || 0);
+
+            const titleHtml = title ? `<span class="title ${getGradeByTitle(title)}">${title}</span>` : '';
+            
             if (role === 'admin') {
                 item.classList.add('admin-message');
-                usernameSpan.innerHTML = `👑 ${userHtml}:`;
+                usernameSpan.innerHTML = `👑 ${titleHtml}${userHtml}:`;
             } else {
-                usernameSpan.innerHTML = `${userHtml}:`;
+                usernameSpan.innerHTML = `${titleHtml}${userHtml}:`;
             }
             if (type === 'announcement') {
                 item.classList.add('announcement-message');
                 messageSpan.innerHTML = `📢 ${message}`;
                 if (role === 'admin') {
-                    usernameSpan.innerHTML = `[공지] 👑 ${userHtml}:`;
+                    usernameSpan.innerHTML = `[공지] 👑 ${titleHtml}${userHtml}:`;
                 } else {
-                    usernameSpan.innerHTML = `[공지] ${userHtml}:`;
+                    usernameSpan.innerHTML = `[공지] ${titleHtml}${userHtml}:`;
                 }
             } else {
                 messageSpan.textContent = message;
@@ -2345,4 +2368,183 @@ function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, co
             <span>💥 치명타 확률 +5%   (최종 기준 5% 복리적용)</span>
         </div>
     `;
+}
+
+function renderTitleCodex(data) {
+    const { allTitles, unlockedTitles, equippedTitle } = data;
+    const contentEl = document.getElementById('title-codex-content');
+    const footerEl = document.getElementById('title-codex-footer');
+    contentEl.innerHTML = '';
+
+    const titleOrder = Object.keys(allTitles);
+
+    titleOrder.forEach(titleName => {
+        const titleInfo = allTitles[titleName];
+        const isUnlocked = unlockedTitles.includes(titleName);
+        const isEquipped = equippedTitle === titleName;
+        const gradeClass = getGradeByTitle(titleName);
+
+        const card = document.createElement('div');
+        card.className = `title-card ${isUnlocked ? 'unlocked' : 'locked'}`;
+        card.dataset.titleName = titleName;
+        
+
+        card.title = isUnlocked ? getTitleCondition(titleName) : titleInfo.hint;
+
+        let actionsHtml = '';
+        if (isUnlocked) {
+            if (isEquipped) {
+                actionsHtml = `<button class="action-btn sell-btn unequip-title-btn">해제하기</button>`;
+            } else {
+                actionsHtml = `<button class="action-btn list-auction-btn equip-title-btn">장착하기</button>`;
+            }
+        }
+        
+        const nameHtml = `<div class="title-card-name ${gradeClass}">${titleName}</div>`;
+        const effectHtml = isUnlocked ? `<div class="title-card-effect">${getEffectDescription(titleInfo.effect)}</div>` : `<div class="title-card-effect" style="color: #555;">(효과 숨김)</div>`;
+        const equippedBadge = isEquipped ? `<div class="title-card-equipped-badge">-- 장착 중 --</div>` : '';
+
+        card.innerHTML = `
+            ${nameHtml}
+            ${effectHtml}
+            <div class="title-card-actions">${actionsHtml}</div>
+            ${equippedBadge}
+        `;
+
+        if (isUnlocked) {
+            const equipBtn = card.querySelector('.equip-title-btn');
+            const unequipBtn = card.querySelector('.unequip-title-btn');
+            const socket = window.socket;
+
+            if (equipBtn) {
+                equipBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    socket.emit('titles:equip', titleName);
+                    document.getElementById('title-codex-modal').style.display = 'none'; 
+                });
+            }
+            if (unequipBtn) {
+                unequipBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    socket.emit('titles:unequip');
+                    document.getElementById('title-codex-modal').style.display = 'none';
+                });
+            }
+        }
+        contentEl.appendChild(card);
+    });
+
+    const totalTitles = titleOrder.length;
+    const collectedTitles = unlockedTitles.length;
+    const isCompleted = collectedTitles >= totalTitles;
+    footerEl.innerHTML = `
+        <p>수집 현황: ${collectedTitles} / ${totalTitles}</p>
+        <p style="margin-top: 10px; color: ${isCompleted ? 'var(--success-color)' : 'var(--text-muted)'}; font-weight: bold;">
+            ${isCompleted ? '모든 칭호를 수집하여 마스터 보너스가 활성화되었습니다!' : '칭호 20개를 모두 수집하면 모든 능력치가 영구적으로 5% 증가합니다.'}
+        </p>
+    `;
+}
+
+function getEffectDescription(effect) {
+    if (!effect) return '효과 없음';
+    const key = Object.keys(effect)[0];
+    const value = effect[key];
+    switch (key) {
+        case 'enhancementSuccessRate': return `강화 성공 확률 +${value * 100}%p`;
+        case 'enhancementCostReduction': return `강화 비용 ${value * 100}% 감소`;
+        case 'enhancementMaintainChance': return `강화 실패 시 '유지'될 확률 +${value * 100}%`;
+        case 'critChance': return `치명타 확률 +${value * 100}%`;
+        case 'enchantCostReduction': return `마법부여 비용(골드) ${value * 100}% 감소`;
+        case 'bossDamage': return `보스 몬스터에게 주는 데미지 +${value * 100}%`;
+        case 'petStatBonus': return `펫의 모든 능력치 효과 +${value * 100}%`;
+        case 'goldGain': return `골드 획득량 +${value * 100}%`;
+        case 'attack': return `공격력 +${value * 100}%`;
+        case 'riftShardDropRate': return `'균열의 파편' 획득 확률 +${value * 100}% (상대값)`;
+        case 'hatchTimeReduction': return `펫 알 부화 시간 ${value * 100}% 감소`;
+        case 'goldPouchMinBonus': return `'골드 주머니' 최소 골드량 +${value * 100}%`;
+        case 'sellPriceBonus': return `상점 판매 가격 +${value * 100}%`;
+        case 'maxHp': return `최대 체력 +${value * 100}%`;
+        case 'scrollBuffDuration': return `'복귀 스크롤' 각성 버프 지속시간 +${value}초`;
+        case 'goldOnDeath': return `사망 시 ${value.toLocaleString()} 골드 지급`;
+        case 'worldBossContribution': return `월드보스 기여도 획득량 +${value * 100}%`;
+        case 'worldBossDamage': return `월드보스에게 주는 데미지 +${value * 100}%`;
+        case 'commonWeaponAttackBonus': return `'Common' 등급 무기 공격력 +${value * 100}%`;
+        default: return '알 수 없는 효과';
+    }
+}
+
+function getTitleCondition(titleName) {
+    const conditions = {
+        '[대체왜?]': "획득: '낡은 단검'(Common) 아이템 +15강 만들기",
+        '[펑..]': "획득: 강화 실패로 아이템 50회 파괴",
+        '[키리]': "획득: 강화 500회 실패 (하락/유지 포함)",
+        '[유리대포]': "획득: 무기는 'Mystic' 등급, 방어구는 'Common' 등급으로 장착",
+        '[마부장인]': "획득: 무기와 방어구 슬롯에 마법부여가 적용된 아이템을 모두 장착",
+        '[로포비아]': "획득: '바하무트' 펫 보유",
+        '[원소술사]': "획득: 불/물/바람 속성 융합 펫 3종 모두 보유",
+        '[전당포]': "획득: 신화 등급 액세서리 3종 모두 보유",
+        '[인과율의 밖]': "획득: 'Primal' 등급 무기와 방어구 모두 장착",
+        '[랭커]': "획득: 'Mystic' 등급 무기와 방어구 모두 장착",
+        '[균열석]': "획득: '균열의 파편' 10,000개 이상 보유",
+        '[생명의 은인]': "획득: 펫 알 30회 부화",
+        '[탐욕]': "획득: '수수께끼 골드 주머니' 100회 사용",
+        '[대장간]': "획득: 상점에 아이템 1,000회 판매",
+        '[큰손]': "획득: 거래소에서 아이템 100회 구매",
+        '[회귀자]': "획득: '복귀 스크롤' 50회 사용",
+        '[오뚝이]': "획득: 사망(1층 귀환) 500회 달성",
+        '[용사]': "획득: 월드보스에게 마지막 일격(Last Hit) 5회 가하기",
+        '[토벌대원]': "획득: 월드보스 토벌 10회 참여",
+        '[날먹최강자]': "획득: '낡은 단검'을 장착한 상태로 월드보스 토벌 성공 (기여도 1 이상)"
+    };
+    return conditions[titleName] || "획득 조건을 알 수 없습니다.";
+}
+
+function getGradeByTitle(titleName) {
+    const grades = {
+        '[인과율의 밖]': 'Primal',
+        '[랭커]': 'Mystic',
+        '[로포비아]': 'Mystic',
+        '[전당포]': 'Mystic',
+        '[키리]': 'Epic',
+        '[용사]': 'Epic',
+        '[날먹최강자]': 'Epic',
+        '[원소술사]': 'Legendary',
+        '[대체왜?]': 'Legendary',
+        '[균열석]': 'Legendary'
+    };
+    return grades[titleName] || 'Rare'; 
+}
+
+function updateUsernameDisplays(player) {
+    if (!player) return;
+
+    const { username, fameScore, equippedTitle } = player;
+
+    const fameDetails = getFameDetails(fameScore);
+    const scoreText = `(${(fameScore || 0).toLocaleString()})`;
+    const titleHtml = equippedTitle ? `<span class="title ${getGradeByTitle(equippedTitle)}">${equippedTitle}</span>` : '';
+
+    const userInfoEl = document.getElementById('user-info');
+    if (userInfoEl) {
+        const iconEl = userInfoEl.querySelector('#fame-icon');
+        const scoreEl = userInfoEl.querySelector('#fame-score-display');
+        const usernameEl = userInfoEl.querySelector('#welcome-username');
+
+        if (iconEl) iconEl.textContent = fameDetails.icon;
+        if (scoreEl) scoreEl.textContent = scoreText;
+        if (usernameEl) {
+            usernameEl.className = '';
+            if (fameDetails.className) {
+                usernameEl.classList.add(fameDetails.className);
+            }
+            usernameEl.innerHTML = `${titleHtml}${username}`;
+        }
+    }
+
+    const myMessagesInChat = document.querySelectorAll(`#chat-messages .username[data-username="${username}"]`);
+    myMessagesInChat.forEach(usernameSpan => {
+        const userHtml = createFameUserHtml(username, fameScore);
+        const prefix = usernameSpan.innerHTML.includes('👑') ? '👑 ' : '';
+        usernameSpan.innerHTML = `${prefix}${titleHtml}${userHtml}:`;
+    });
 }
