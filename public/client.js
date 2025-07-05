@@ -1218,7 +1218,13 @@ updateTopBarInfo(player);
             const base = currentPlayerState.stats.base[stat]; 
             const gold = currentPlayerState.gold; 
             const costN = n => [...Array(n).keys()].reduce((s, i) => s + base + i, 0); 
-            const affordable = { 1: gold >= base, 10: gold >= costN(10), 100: gold >= costN(100), MAX: gold >= base, }; 
+              const affordable = { 
+                1: gold >= base, 
+                10: gold >= costN(10), 
+                100: gold >= costN(100), 
+                1000: gold >= costN(1000), 
+                MAX: gold >= base, 
+            }; 
             document.querySelectorAll(`.stat-row[data-stat-row="${stat}"] .upgrade-btn`).forEach(btn => { 
                 btn.classList.toggle('affordable', affordable[btn.dataset.amount]); 
             }); 
