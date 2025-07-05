@@ -1341,148 +1341,157 @@ if (showAbilities) {
         });
     }
 
-    function updateEnhancementPanel(item) {
-        const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
-        if (!item) {
-            slot.innerHTML = '강화할 아이템을<br>인벤토리/장비창에서 선택하세요';
-            details.style.display = 'none';
-            button.style.display = 'none';
-            checkboxes.style.display = 'none';
-            info.innerHTML = '';
-            return;
-        }
+  function updateEnhancementPanel(item) {
+    const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
 
-        selectedInventoryItemUid = item.uid;
-        document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
-        const visibleCard = document.querySelector(`.inventory-item[data-uid="${item.uid}"]`);
-        if (visibleCard) {
-            visibleCard.classList.add('selected');
-        }
-
-        const isEnhanceable = item.type === 'weapon' || item.type === 'armor';
-        const isPrimal = item.grade === 'Primal';
-
-        details.style.display = isEnhanceable ? 'flex' : 'none';
-        button.style.display = isEnhanceable ? 'block' : 'none';
-        checkboxes.style.display = isEnhanceable ? 'flex' : 'none';
-        slot.innerHTML = createEnhancementItemHTML(item); 
-        
-        let infoContentHTML = '';
-        let buttonsHTML = '<div class="interaction-buttons" style="justify-content: center; width: 100%; flex-wrap: wrap; gap: 10px;">';
-
-        if (isEnhanceable) {
-          let baseBonus = item.baseEffect;
-if (item.grade === 'Primal' && item.randomizedValue) {
-    baseBonus += (item.randomizedValue / 100);
-}
-
-const enhancementBonusArr = Array.from({ length: item.enhancement }, (_, i) => item.baseEffect * (i < 10 ? 0.1 : 0.5));
-const currentEnhancementBonus = enhancementBonusArr.reduce((s, v) => s + v, 0);
-
-const currentTotalBonus = baseBonus + currentEnhancementBonus;
-const nextTotalBonus = currentTotalBonus + item.baseEffect * (item.enhancement < 10 ? 0.1 : 0.5);
-
-before.innerHTML = `<b>+${item.enhancement}</b><br>${(currentTotalBonus * 100).toFixed(1)}%`;
-after.innerHTML = `<b>+${item.enhancement + 1}</b><br>${(nextTotalBonus * 100).toFixed(1)}%`;
-
-            let cost, riftShardCost = 0;
-            let costText = '';
-            const playerShardCount = currentPlayerState.inventory.find(i => i.id === 'rift_shard')?.quantity || 0;
-
-            if (isPrimal) {
-                const nextLevel = item.enhancement + 1;
-                cost = nextLevel * 1000000000;
-                riftShardCost = nextLevel * 10;
-                const hasShards = playerShardCount >= riftShardCost;
-                costText = `강화 비용: ${formatInt(cost)} G + <span class="${hasShards ? 'Legendary' : 'fail-color'}">균열의 파편 ${riftShardCost}개</span>`;
-                button.disabled = currentPlayerState.gold < cost || !hasShards;
-            } else {
-                cost = Math.floor(1000 * Math.pow(2.1, item.enhancement));
-                costText = `강화 비용: ${formatInt(cost)} G`;
-                button.disabled = currentPlayerState.gold < cost;
-            }
-
-            if (enhancementRates) {
-                let rates;
-                if (isPrimal && item.enhancement >= 10) {
-                    rates = { success: 0.10, maintain: 0.00, fail: 0.00, destroy: 0.90 };
-                } else {
-                    rates = enhancementRates.enhancementTable[item.enhancement + 1] || highEnhancementRate;
-                }
-                
-                let displaySuccess = rates.success;
-                let displayMaintain = rates.maintain;
-                let displayFail = rates.fail;
-                let displayDestroy = rates.destroy;
-
-                if (useHammerCheck.checked && !useHammerCheck.disabled) {
-                    let bonusToApply = 0.15;
-                    const fromDestroy = Math.min(bonusToApply, displayDestroy);
-                    displayDestroy -= fromDestroy;
-                    bonusToApply -= fromDestroy;
-                    if (bonusToApply > 0) {
-                        const fromFail = Math.min(bonusToApply, displayFail);
-                        displayFail -= fromFail;
-                        bonusToApply -= fromFail;
-                    }
-                    if (bonusToApply > 0) {
-                        const fromMaintain = Math.min(bonusToApply, displayMaintain);
-                        displayMaintain -= fromMaintain;
-                        bonusToApply -= fromMaintain;
-                    }
-                    displaySuccess += (0.15 - bonusToApply);
-                }
-                const probText = `<span style="color:var(--success-color)">성공: ${(displaySuccess * 100).toFixed(1)}%</span> | <span>유지: ${(displayMaintain * 100).toFixed(1)}%</span> | <span style="color:var(--fail-color)">하락: ${(displayFail * 100).toFixed(1)}%</span> | <span style="color:var(--fail-color); font-weight:bold;">파괴: ${(displayDestroy * 100).toFixed(1)}%</span>`;
-                infoContentHTML += `<div style="text-align: center; margin-bottom: 10px; font-size: 0.9em;">${probText}</div>`;
-            }
-            infoContentHTML += `<div style="width: 100%; text-align: center;">${costText}</div>`;
-         
-            const hasTicket = currentPlayerState.inventory.some(i => i.id === 'prevention_ticket');
-            useTicketCheck.disabled = !(item.enhancement >= 10 && hasTicket);
-            
-            const hasHammer = currentPlayerState.inventory.some(i => i.id === 'hammer_hephaestus');
-            useHammerCheck.disabled = !hasHammer || isPrimal;
-            if (isPrimal) {
-                useHammerCheck.parentElement.title = "태초 장비에는 사용할 수 없습니다.";
-            } else {
-                useHammerCheck.parentElement.title = "";
-            }
-
-            const isEquipped = currentPlayerState.equipment.weapon?.uid === item.uid || currentPlayerState.equipment.armor?.uid === item.uid;
-            if (!isEquipped) {
-                const sellPrice = getSellPrice(item);
-                buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="false">1개 판매 (${sellPrice.toLocaleString()} G)</button>`;
-                if (item.enhancement === 0 && item.quantity > 1) {
-                    buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="true">전체 판매 (${(sellPrice * item.quantity).toLocaleString()} G)</button>`;
-                }
-            }
-            
-            if (item.tradable !== false) {
-                buttonsHTML += `<button class="action-btn list-auction-btn" data-action="list-auction">거래소 등록</button>`;
-            }
-
-        } else {
-             if (item.id === 'hammer_hephaestus' || item.id === 'prevention_ticket') {
-                buttonsHTML += `<div style="text-align:center; color: var(--text-muted);">강화 탭에서 체크하여 사용합니다.</div>`;
-            } else {
-                const isEgg = item.category === 'Egg' || item.type === 'egg';
-                if (isEgg) {
-                    buttonsHTML += `<button class="action-btn use-item-btn" data-action="hatch">부화하기</button>`;
-                } else if (['Tome', 'Consumable'].includes(item.category)){
-                    buttonsHTML += `<button class="action-btn use-item-btn" data-action="use">사용하기</button>`;
-                    if (item.id === 'gold_pouch' && item.quantity > 1) {
-                        buttonsHTML += `<button class="action-btn use-item-btn" data-action="use-all">모두 사용</button>`;
-                    }
-                }
-            }
-            if (item.tradable !== false) {
-                buttonsHTML += `<button class="action-btn list-auction-btn" data-action="list-auction">거래소 등록</button>`;
-            }
-        }
-        
-        buttonsHTML += '</div>';
-        info.innerHTML = infoContentHTML + buttonsHTML;
+    if (!item) {
+        slot.innerHTML = '강화할 아이템을<br>인벤토리/장비창에서 선택하세요';
+        details.style.display = 'none';
+        button.style.display = 'none';
+        checkboxes.style.display = 'none';
+        info.innerHTML = '';
+        selectedInventoryItemUid = null;
+        return;
     }
+
+    selectedInventoryItemUid = item.uid;
+
+    document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
+    const visibleCard = document.querySelector(`.inventory-item[data-uid="${item.uid}"]`);
+    if (visibleCard) {
+        visibleCard.classList.add('selected');
+    }
+
+    const isEnhanceable = item.type === 'weapon' || item.type === 'armor';
+    slot.innerHTML = createEnhancementItemHTML(item);
+    details.style.display = isEnhanceable ? 'flex' : 'none';
+    button.style.display = isEnhanceable ? 'block' : 'none';
+    checkboxes.style.display = isEnhanceable ? 'flex' : 'none';
+
+    let infoContentHTML = '';
+    let buttonsHTML = '<div class="interaction-buttons" style="justify-content: center; width: 100%; flex-wrap: wrap; gap: 10px;">';
+
+    if (isEnhanceable) {
+        const isPrimal = item.grade === 'Primal';
+        let rates = null;
+        if (enhancementRates) {
+            if (isPrimal && item.enhancement >= 10) {
+                rates = { success: 0.10, maintain: 0.00, fail: 0.00, destroy: 0.90 };
+            } else {
+                rates = enhancementRates.enhancementTable[item.enhancement + 1] || enhancementRates.highEnhancementRate;
+            }
+        }
+
+        const hasHammer = currentPlayerState.inventory.some(i => i.id === 'hammer_hephaestus');
+        const hasTicket = currentPlayerState.inventory.some(i => i.id === 'prevention_ticket');
+
+        useHammerCheck.disabled = !hasHammer || isPrimal;
+        if (isPrimal) {
+            useHammerCheck.parentElement.title = "태초 장비에는 사용할 수 없습니다.";
+        } else {
+            useHammerCheck.parentElement.title = "";
+        }
+
+        const canBeDestroyed = rates ? rates.destroy > 0 : false;
+        useTicketCheck.disabled = !(item.enhancement >= 10 && hasTicket && canBeDestroyed);
+        if (item.enhancement >= 10 && !canBeDestroyed) {
+             useTicketCheck.parentElement.title = "이 아이템은 현재 강화 단계에서 파괴되지 않습니다.";
+        } else {
+             useTicketCheck.parentElement.title = "";
+        }
+
+        let baseBonus = item.baseEffect;
+        if (item.grade === 'Primal' && item.randomizedValue) {
+            baseBonus += (item.randomizedValue / 100);
+        }
+        const enhancementBonusArr = Array.from({ length: item.enhancement }, (_, i) => item.baseEffect * (i < 10 ? 0.1 : 0.5));
+        const currentEnhancementBonus = enhancementBonusArr.reduce((s, v) => s + v, 0);
+        const currentTotalBonus = baseBonus + currentEnhancementBonus;
+        const nextTotalBonus = currentTotalBonus + item.baseEffect * (item.enhancement < 10 ? 0.1 : 0.5);
+
+        before.innerHTML = `<b>+${item.enhancement}</b><br>${(currentTotalBonus * 100).toFixed(1)}%`;
+        after.innerHTML = `<b>+${item.enhancement + 1}</b><br>${(nextTotalBonus * 100).toFixed(1)}%`;
+
+        let cost, riftShardCost = 0;
+        let costText = '';
+
+        if (isPrimal) {
+            const nextLevel = item.enhancement + 1;
+            cost = nextLevel * 1000000000;
+            riftShardCost = nextLevel * 10;
+            const playerShardCount = currentPlayerState.inventory.find(i => i.id === 'rift_shard')?.quantity || 0;
+            const hasShards = playerShardCount >= riftShardCost;
+            costText = `강화 비용: ${formatInt(cost)} G + <span class="${hasShards ? 'Legendary' : 'fail-color'}">균열의 파편 ${riftShardCost}개</span>`;
+            button.disabled = currentPlayerState.gold < cost || !hasShards;
+        } else {
+            cost = Math.floor(1000 * Math.pow(2.1, item.enhancement));
+            costText = `강화 비용: ${formatInt(cost)} G`;
+            button.disabled = currentPlayerState.gold < cost;
+        }
+
+        if (rates) {
+            let displaySuccess = rates.success;
+            let displayMaintain = rates.maintain;
+            let displayFail = rates.fail;
+            let displayDestroy = rates.destroy;
+
+            if (useHammerCheck.checked && !useHammerCheck.disabled) {
+                let bonusToApply = 0.15;
+                const fromDestroy = Math.min(bonusToApply, displayDestroy);
+                displayDestroy -= fromDestroy;
+                bonusToApply -= fromDestroy;
+                if (bonusToApply > 0) {
+                    const fromFail = Math.min(bonusToApply, displayFail);
+                    displayFail -= fromFail;
+                    bonusToApply -= fromFail;
+                }
+                if (bonusToApply > 0) {
+                    const fromMaintain = Math.min(bonusToApply, displayMaintain);
+                    displayMaintain -= fromMaintain;
+                    bonusToApply -= fromMaintain;
+                }
+                displaySuccess += (0.15 - bonusToApply);
+            }
+            const probText = `<span style="color:var(--success-color)">성공: ${(displaySuccess * 100).toFixed(1)}%</span> | <span>유지: ${(displayMaintain * 100).toFixed(1)}%</span> | <span style="color:var(--fail-color)">하락: ${(displayFail * 100).toFixed(1)}%</span> | <span style="color:var(--fail-color); font-weight:bold;">파괴: ${(displayDestroy * 100).toFixed(1)}%</span>`;
+            infoContentHTML += `<div style="text-align: center; margin-bottom: 10px; font-size: 0.9em;">${probText}</div>`;
+        }
+        infoContentHTML += `<div style="width: 100%; text-align: center;">${costText}</div>`;
+     
+        const isEquipped = currentPlayerState.equipment.weapon?.uid === item.uid || currentPlayerState.equipment.armor?.uid === item.uid;
+        if (!isEquipped) {
+            const sellPrice = getSellPrice(item);
+            buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="false">1개 판매 (${sellPrice.toLocaleString()} G)</button>`;
+            if (item.enhancement === 0 && item.quantity > 1) {
+                buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="true">전체 판매 (${(sellPrice * item.quantity).toLocaleString()} G)</button>`;
+            }
+        }
+        
+        if (item.tradable !== false) {
+            buttonsHTML += `<button class="action-btn list-auction-btn" data-action="list-auction">거래소 등록</button>`;
+        }
+
+    } else {
+         if (item.id === 'hammer_hephaestus' || item.id === 'prevention_ticket') {
+            buttonsHTML += `<div style="text-align:center; color: var(--text-muted);">강화 탭에서 체크하여 사용합니다.</div>`;
+        } else {
+            const isEgg = item.category === 'Egg' || item.type === 'egg';
+            if (isEgg) {
+                buttonsHTML += `<button class="action-btn use-item-btn" data-action="hatch">부화하기</button>`;
+            } else if (['Tome', 'Consumable'].includes(item.category)){
+                buttonsHTML += `<button class="action-btn use-item-btn" data-action="use">사용하기</button>`;
+                if (item.id === 'gold_pouch' && item.quantity > 1) {
+                    buttonsHTML += `<button class="action-btn use-item-btn" data-action="use-all">모두 사용</button>`;
+                }
+            }
+        }
+        if (item.tradable !== false) {
+            buttonsHTML += `<button class="action-btn list-auction-btn" data-action="list-auction">거래소 등록</button>`;
+        }
+    }
+    
+    buttonsHTML += '</div>';
+    info.innerHTML = infoContentHTML + buttonsHTML;
+}
 
 
 function updateRiftEnchantPanel(item, previouslyLockedIndices = []) {
