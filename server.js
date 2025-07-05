@@ -56,7 +56,7 @@ const PORT = 3000;
 const TICK_RATE = 1000; 
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_OBJECT_ID = '686345677bd3c4d1675438cb';
+const ADMIN_OBJECT_ID = '68617d506c3498183c9b367f';
 const BOSS_INTERVAL = 200;
 
 const RIFT_ENCHANT_COST = {
@@ -1821,7 +1821,6 @@ function onClearFloor(p) {
     const clearedFloor = p.level - 1;
     let goldEarned = isBoss ? clearedFloor * 10 : clearedFloor;
 
-    // 마법부여 옵션 계산
     let goldBonusPercent = 1;
     let extraClimbChanceFromEnchant = 0;
     for (const slot of ['weapon', 'armor']) {
@@ -1837,11 +1836,8 @@ function onClearFloor(p) {
         }
     }
 
-    // 기존 유물, 도감 보너스 적용
     if (p.unlockedArtifacts[2]) goldEarned = Math.floor(goldEarned * 1.25);
     if (p.codexBonusActive) goldEarned = Math.floor(goldEarned * 1.05);
-
-    // 마법부여 골드 보너스 적용
     goldEarned = Math.floor(goldEarned * goldBonusPercent);
 
     p.gold += goldEarned;
@@ -1849,16 +1845,23 @@ function onClearFloor(p) {
         pushLog(p, `[${clearedFloor}층 보스] 클리어! (+${goldEarned.toLocaleString()} G)`); 
     }
 
-    // 펫과 마법부여의 추가 등반 확률 합산
-    let totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + extraClimbChanceFromEnchant;
-
     if (p.unlockedArtifacts[0] && clearedFloor > 0 && clearedFloor % 10 === 0) {
-        // 유물 효과는 우선 적용
-    } else if (Math.random() < totalExtraClimbChance) {
         const skippedFloor = p.level;
         p.level++;
         p.maxLevel = Math.max(p.maxLevel, p.level);
+        
+        let skippedGold = isBossFloor(skippedFloor) ? skippedFloor * 10 : skippedFloor;
+        if (p.unlockedArtifacts[2]) skippedGold = Math.floor(skippedGold * 1.25);
+        if (p.codexBonusActive) skippedGold = Math.floor(skippedGold * 1.05);
+        skippedGold = Math.floor(skippedGold * goldBonusPercent);
+        p.gold += skippedGold;
+    }
 
+    const totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + extraClimbChanceFromEnchant;
+    if (Math.random() < totalExtraClimbChance) {
+        const skippedFloor = p.level;
+        p.level++;
+        p.maxLevel = Math.max(p.maxLevel, p.level);
         let skippedGold = isBossFloor(skippedFloor) ? skippedFloor * 10 : skippedFloor;
         if (p.unlockedArtifacts[2]) skippedGold = Math.floor(skippedGold * 1.25);
         if (p.codexBonusActive) skippedGold = Math.floor(skippedGold * 1.05);
