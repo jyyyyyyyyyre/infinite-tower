@@ -1628,6 +1628,14 @@ body.auth-view {
 }
 
 @media (max-width: 820px) {
+
+.auction-list-panel,
+.auction-detail-panel {
+    flex: none;       /* 높이 자동 조정을 위해 flex 비율 해제 */
+    height: auto;     /* 컨텐츠 높이에 맞게 자동으로 높이 조절 */
+    min-height: 300px; /* 내용이 적어도 최소 높이를 확보 */
+}
+
     body {
         height: auto;
         overflow: auto; /* 모바일에서 body 스크롤 허용 */
@@ -1694,13 +1702,6 @@ body.auth-view {
     .interaction-panel { flex-basis: auto; width: 100%; }
 }
 
-.auction-list-panel,
-.auction-detail-panel {
-    flex: none;       /* 높이 자동 조정을 위해 flex 비율 해제 */
-    height: auto;     /* 컨텐츠 높이에 맞게 자동으로 높이 조절 */
-    min-height: 300px; /* 내용이 적어도 최소 높이를 확보 */
-}
-
 @media (max-width:480px) {
     #user-info { width:100%; text-align:center; order:-1; margin-bottom:5px }
     .top-bar-right { order:3 }
@@ -1717,13 +1718,6 @@ body.auth-view {
     min-height:0;
     flex-grow:1;
     overflow-y:auto
-}
-
-.auction-list-panel,
-.auction-detail-panel {
-    flex: none;       /* 높이 자동 조정을 위해 flex 비율 해제 */
-    height: auto;     /* 컨텐츠 높이에 맞게 자동으로 높이 조절 */
-    min-height: 300px; /* 내용이 적어도 최소 높이를 확보 */
 }
 
 #special-stats-grid{
