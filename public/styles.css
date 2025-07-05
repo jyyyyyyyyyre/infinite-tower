@@ -1581,11 +1581,7 @@ body.auth-view {
 .explore { background-color: var(--success-color); color: #fff; }
 .climb { background-color: var(--secondary-color); color: #fff; }
 .auction-modal-content { max-width: 1600px; width: 95%; height: 95vh; }
- #auction-container {
-        flex-direction: column; 
-        overflow-y: auto;     
-        height: 80vh;      
-    }
+#auction-container { display: flex; flex-direction: row; gap: 20px; flex-grow: 1; min-height: 0; overflow-y: hidden; }
 .auction-list-panel, .auction-detail-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; background: rgba(0, 0, 0, .2); padding: 10px; border-radius: 8px; }
 #auction-grouped-grid, #auction-detail-list { overflow-y: auto; padding-right: 5px; }
 .auction-list-panel .inventory-item:hover { transform: none; background-color: rgba(255, 255, 255, 0.1); }
@@ -1632,6 +1628,14 @@ body.auth-view {
 }
 
 @media (max-width: 820px) {
+
+ #auction-container {
+        flex-direction: column; 
+        overflow-y: auto;     
+        height: 80vh;         
+    }
+
+
     body {
         height: auto;
         overflow: auto; /* 모바일에서 body 스크롤 허용 */
