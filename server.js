@@ -1173,7 +1173,7 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
         })
 
 
-  .on('chatMessage', async (msg) => {
+.on('chatMessage', async (msg) => {
     try {
         if (typeof msg !== 'string' || msg.trim().length === 0) return;
         const trimmedMsg = msg.slice(0, 200);
@@ -1181,20 +1181,39 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
 
         if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
             const args = trimmedMsg.substring(1).split(' ').filter(arg => arg.length > 0);
-            const command = args.shift().toLowerCase();
+            const commandOrTarget = args.shift().toLowerCase();
             const adminUsername = socket.username;
 
-            if (command === '공지' || command === '보스소환') {
-                if (command === '공지') {
+            if (commandOrTarget === '추방') {
+                const targetUsername = args.shift();
+                const reason = args.join(' ') || '특별한 사유 없음';
+                if (!targetUsername) {
+                    return pushLog(player, '[관리자] 추방할 유저의 닉네임을 입력하세요. (예: /추방 유저명 [사유])');
+                }
+                const targetPlayer = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === targetUsername.toLowerCase());
+                if (targetPlayer) {
+                    targetPlayer.socket.emit('forceDisconnect', { message: `관리자에 의해 서버와의 연결이 종료되었습니다. (사유: ${reason})` });
+                    targetPlayer.socket.disconnect(true);
+                    const announcement = `[관리자] ${adminUsername}님이 ${targetUsername}님을 추방했습니다. (사유: ${reason})`;
+                    io.emit('chatMessage', { isSystem: true, message: announcement });
+                    pushLog(player, announcement);
+                } else {
+                    pushLog(player, `[관리자] 현재 접속 중인 유저 중에서 '${targetUsername}'을(를) 찾을 수 없습니다.`);
+                }
+                return;
+            }
+
+            if (commandOrTarget === '공지' || commandOrTarget === '보스소환') {
+                if (commandOrTarget === '공지') {
                     const noticeMessage = args.join(' ');
                     io.emit('globalAnnouncement', noticeMessage);
                     io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: noticeMessage, title: player.equippedTitle });
                 }
-                if (command === '보스소환') spawnWorldBoss();
+                if (commandOrTarget === '보스소환') spawnWorldBoss();
                 return;
             }
 
-            const target = command;
+            const target = commandOrTarget;
             const subject = args.shift();
             const param3 = args.shift();
             const description = args.join(' ') || '관리자가 지급한 선물입니다.';
@@ -1254,7 +1273,7 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
                     if (item) await sendMail(recipientId, sender, { item: item, description });
                 }
             }
-
+            
             const isGold = subject.toLowerCase() === '골드';
             const itemInfo = isGold ? null : (itemData[adminItemAlias[subject]] || petData[adminItemAlias[subject]]);
             const givenItemName = isGold ? `${parseInt(param3 || '0', 10).toLocaleString()} 골드` : itemInfo?.name || subject;
@@ -1280,6 +1299,9 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
         console.error('채팅 메시지 처리 중 오류 발생:', error);
     }
 })
+
+
+  
        .on('showOffItem', ({ uid }) => {
     const player = onlinePlayers[socket.userId];
     if (!player || !uid) return;
