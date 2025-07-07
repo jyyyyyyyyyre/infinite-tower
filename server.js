@@ -668,7 +668,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-function createItemInstance(id, quantity = 1) { 
+function createItemInstance(id, quantity = 1, enhancement = 0) {
     const d = itemData[id]; 
     if (!d) return null;
 
@@ -683,9 +683,14 @@ function createItemInstance(id, quantity = 1) {
         accessoryType: d.accessoryType,
         description: d.description,
         tradable: d.tradable,
-        ...(d.baseEffect && { baseEffect: d.baseEffect, enhancement: 0 }),
         quantity: quantity 
     };
+
+    if (d.type === 'weapon' || d.type === 'armor') {
+        item.baseEffect = d.baseEffect;
+        item.enhancement = enhancement;
+        item.enchantments = [];
+    }
 
     if (d.grade === 'Primal' && d.randomStat) {
         const { min, max } = d.randomStat;
@@ -701,10 +706,6 @@ function createItemInstance(id, quantity = 1) {
         
         item.quality = quality;
         item.name = `[${quality}] ${d.name}`;
-    }
-
-    if (d.type === 'weapon' || d.type === 'armor') {
-        item.enchantments = [];
     }
 
     return item;
@@ -1170,11 +1171,12 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
             
             socket.emit('onlineUsersData', { playersList, totalUsers, subAccountCount });
         })
-       .on('chatMessage', async (msg) => {
+
+
+  .on('chatMessage', async (msg) => {
     try {
         if (typeof msg !== 'string' || msg.trim().length === 0) return;
         const trimmedMsg = msg.slice(0, 200);
-
         const player = onlinePlayers[socket.userId];
 
         if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
@@ -1194,17 +1196,15 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
 
             const target = command;
             const subject = args.shift();
-            const amountStr = args.shift() || '1';
-            const amount = parseInt(amountStr, 10);
+            const param3 = args.shift();
             const description = args.join(' ') || '관리자가 지급한 선물입니다.';
-
-            if (!target || !subject || isNaN(amount) || amount <= 0) {
-                return pushLog(onlinePlayers[socket.userId], `[관리자] 명령어 형식이 잘못되었습니다. (예: /유저명 아이템명 수량)`);
+            
+            if (!target || !subject) {
+                return pushLog(player, `[관리자] 명령어 형식이 잘못되었습니다. (예: /유저명 아이템명 [수량/강화] [내용])`);
             }
 
             let targets = [];
             let targetName = '';
-
             if (target === '온라인') {
                 targetName = '온라인 전체 유저';
                 targets = Object.values(onlinePlayers);
@@ -1214,50 +1214,56 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
             } else {
                 targetName = target;
                 const onlineTarget = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === target.toLowerCase());
-                
                 if (onlineTarget) { 
                     targets.push(onlineTarget); 
                 } else { 
-  
                     const offlineTarget = await GameData.findOne({ username: target }).lean(); 
-                    if (offlineTarget) {
-                        targets.push(offlineTarget);
-                    }
+                    if (offlineTarget) targets.push(offlineTarget);
                 }
             }
 
             if (targets.length === 0) {
-                return pushLog(onlinePlayers[socket.userId], `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
+                return pushLog(player, `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
             }
 
             for (const t of targets) {
-                const recipientId = t.user;
+                const recipientId = t.user; 
                 if (!recipientId) continue;
-
                 const sender = `관리자(${adminUsername})`;
+
                 if (subject.toLowerCase() === '골드') {
-                    await sendMail(recipientId, sender, { gold: amount, description });
+                    await sendMail(recipientId, sender, { gold: parseInt(param3 || '0', 10), description });
                 } else {
                     const id = adminItemAlias[subject];
                     if (!id) {
-                        pushLog(onlinePlayers[socket.userId], `[관리자] 아이템 단축어 '${subject}'를 찾을 수 없습니다.`);
+                        pushLog(player, `[관리자] 아이템 단축어 '${subject}'를 찾을 수 없습니다.`);
                         continue;
                     }
-                    const item = petData[id] ? createPetInstance(id) : createItemInstance(id, amount);
+                    
+                    const d = itemData[id] || petData[id];
+                    let item;
+
+                    if (d.type === 'weapon' || d.type === 'armor') {
+                        const enhancement = parseInt(param3 || '0', 10);
+                        item = createItemInstance(id, 1, enhancement);
+                    } else {
+                        const quantity = parseInt(param3 || '1', 10);
+                        item = petData[id] ? createPetInstance(id) : createItemInstance(id, quantity, 0);
+                    }
+
                     if (item) await sendMail(recipientId, sender, { item: item, description });
                 }
             }
 
             const isGold = subject.toLowerCase() === '골드';
             const itemInfo = isGold ? null : (itemData[adminItemAlias[subject]] || petData[adminItemAlias[subject]]);
-            const givenItemName = isGold ? `${amount.toLocaleString()} 골드` : itemInfo?.name || subject;
+            const givenItemName = isGold ? `${parseInt(param3 || '0', 10).toLocaleString()} 골드` : itemInfo?.name || subject;
             const givenItemGrade = isGold ? 'gold-text' : itemInfo?.grade || 'Common';
             const reasonText = description ? ` (${description})` : '';
             const chatAnnounceMsg = `[관리자] ${targetName}에게 <span class="${givenItemGrade}">${givenItemName}</span> 아이템을 우편으로 발송했습니다.${reasonText}`;
             io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: chatAnnounceMsg, title: player.equippedTitle });
             return;
         }
-
 
         const newChatMessage = new ChatMessage({ 
             username: socket.username, 
