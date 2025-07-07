@@ -148,6 +148,18 @@ const GameDataSchema = new mongoose.Schema({
  unlockedTitles: { type: [String], default: [] },
     equippedTitle: { type: String, default: null },
     titleCodexCompleted: { type: Boolean, default: false },
+
+bloodthirst: { type: Number, default: 0 },
+personalRaid: {
+    entries: { type: Number, default: 2 },
+    lastReset: { type: Date, default: () => new Date(0) }
+},
+
+raidState: {
+    isActive: { type: Boolean, default: false },
+    floor: { type: Number, default: 1 }
+},
+
     titleCounters: {
         destroyCount: { type: Number, default: 0 },
         enhancementFailCount: { type: Number, default: 0 },
@@ -277,6 +289,7 @@ const adminItemAlias = {
     '차원파편': 'rift_shard',
     '고정석': 'form_locking_stone',
     '파방권': 'prevention_ticket',
+'피의결정': 'pure_blood_crystal',
     '망치': 'hammer_hephaestus',
     '알1': 'pet_egg_normal',
     '알2': 'pet_egg_ancient',
@@ -330,7 +343,8 @@ const itemData = {
     pet_egg_mythic: { name: '신화종 알', type: 'Special', category: 'Egg', grade: 'Mystic', description: '부화시키면 신화 등급의 펫을 얻습니다.', image: 'pet_egg_mythic.png', tradable: true, hatchDuration: 24 * 60 * 60 * 1000 },
     prevention_ticket: { name: '파괴 방지권', type: 'Special', category: 'Ticket', grade: 'Epic', description: '10강 이상 강화 시 파괴를 1회 방지합니다.', image: 'ticket.png', tradable: true },
     hammer_hephaestus: { name: '헤파이스토스의 망치', type: 'Special', category: 'Buff', grade: 'Epic', description: '강화 시 체크하여 사용하면 성공 확률이 15%p 증가합니다.', image: 'hammer_hephaestus.png', tradable: true },
-    tome_socket1: { name: '모래시계 소켓', type: 'Special', category: 'Tome', grade: 'Legendary', description: '사용 시 1번 유물 소켓을 영구히 해금합니다.', image: 'tome_socket1.png', tradable: true },
+'pure_blood_crystal': { name: '순수한 피의 결정', type: 'Special', category: 'Material', grade: 'Mystic', description: '흡수 시 20% 확률로 \'피의 갈망\' 스탯을 영구적으로 +0.1%p 증가시킵니다.', image: 'pure_blood_crystal.png', tradable: true },    
+tome_socket1: { name: '모래시계 소켓', type: 'Special', category: 'Tome', grade: 'Legendary', description: '사용 시 1번 유물 소켓을 영구히 해금합니다.', image: 'tome_socket1.png', tradable: true },
     tome_socket2: { name: '거인 학살자 소켓', type: 'Special', category: 'Tome', grade: 'Legendary', description: '사용 시 2번 유물 소켓을 영구히 해금합니다.', image: 'tome_socket2.png', tradable: true },
     tome_socket3: { name: '황금 나침반 소켓', type: 'Special', category: 'Tome', grade: 'Legendary', description: '사용 시 3번 유물 소켓을 영구히 해금합니다.', image: 'tome_socket3.png', tradable: true },
 };
@@ -445,6 +459,10 @@ function checkStateBasedTitles(player) {
 }
 
 const powerBoxLootTable = [
+
+ { id: 'primal_w01', chance: 0.000005 },
+    { id: 'primal_a01', chance: 0.000005 }, 
+
     { id: 'w005', chance: 0.0016 },
     { id: 'a005', chance: 0.0016 },
     { id: 'acc_necklace_01', chance: 0.0016 },
@@ -453,9 +471,9 @@ const powerBoxLootTable = [
     { id: 'pet_egg_mythic', chance: 0.0020 },
     { id: 'hammer_hephaestus', quantity: [1, 5], chance: 0.40 },
     { id: 'prevention_ticket', quantity: [1, 5], chance: 0.40 },
-    { id: 'return_scroll', quantity: 1, chance: 0.19 }
-];
 
+    { id: 'return_scroll', quantity: 1, chance: 0.18999 }
+];
 const artifactData = {
     tome_socket1: { id: 'tome_socket1', name: "가속의 모래시계", description: "10층마다 추가등반", image: "tome_socket1.png" },
     tome_socket2: { id: 'tome_socket2', name: "거인 학살자의 룬", description: "보스층 공/방 +50%", image: "tome_socket2.png" },
@@ -1033,7 +1051,12 @@ gameData.isExploring = false;
   if (!gameData.unlockedTitles) gameData.unlockedTitles = [];
     if (typeof gameData.equippedTitle === 'undefined') gameData.equippedTitle = null;
     if (typeof gameData.titleCodexCompleted === 'undefined') gameData.titleCodexCompleted = false;
-    if (!gameData.titleCounters) {
+if (!gameData.bloodthirst) gameData.bloodthirst = 0;
+if (!gameData.personalRaid) {
+    gameData.personalRaid = { entries: 2, lastReset: new Date(0) };
+}   
+
+ if (!gameData.titleCounters) {
         gameData.titleCounters = {
             destroyCount: 0, enhancementFailCount: 0, enchantCount: 0, hatchCount: 0,
             pouchUseCount: 0, sellCount: 0, ahBuyCount: 0, scrollUseCount: 0,
@@ -1055,6 +1078,19 @@ gameData.isExploring = false;
         socket: socket, 
         buffs: [] 
     };
+
+if (gameData.raidState && gameData.raidState.isActive) {
+    const player = onlinePlayers[socket.userId];
+    const floor = gameData.raidState.floor;
+    player.raidState = {
+        isActive: true,
+        floor: floor,
+        monster: calcPersonalRaidBossStats(floor)
+    };
+    player.raidState.monster.currentHp = player.raidState.monster.hp; 
+    player.raidState.monster.currentBarrier = player.raidState.monster.barrier;
+    console.log(`[레이드 복원] ${player.username}님이 ${floor}층에서 레이드를 재개합니다.`);
+}
     
     await updateFameScore(socket, onlinePlayers[socket.userId]);
     calculateTotalStats(onlinePlayers[socket.userId]);
@@ -1084,6 +1120,8 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
 
     socket
         .on('upgradeStat', data => upgradeStat(onlinePlayers[socket.userId], data))
+.on('personalRaid:start', () => startPersonalRaid(onlinePlayers[socket.userId]))
+.on('personalRaid:leave', () => endPersonalRaid(onlinePlayers[socket.userId], false))
         .on('equipItem', uid => equipItem(onlinePlayers[socket.userId], uid))
         .on('unequipItem', slot => unequipItem(onlinePlayers[socket.userId], slot))
         .on('attemptEnhancement', ({ uid, useTicket, useHammer }) => attemptEnhancement(onlinePlayers[socket.userId], { uid, useTicket, useHammer }, socket))
@@ -1132,105 +1170,110 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
             
             socket.emit('onlineUsersData', { playersList, totalUsers, subAccountCount });
         })
-        .on('chatMessage', async (msg) => {
-            try {
-                if (typeof msg !== 'string' || msg.trim().length === 0) return;
-                const trimmedMsg = msg.slice(0, 200);
+       .on('chatMessage', async (msg) => {
+    try {
+        if (typeof msg !== 'string' || msg.trim().length === 0) return;
+        const trimmedMsg = msg.slice(0, 200);
 
-                if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
-                    const args = trimmedMsg.substring(1).split(' ').filter(arg => arg.length > 0);
-                    const command = args.shift().toLowerCase();
-                    const adminUsername = socket.username;
+        const player = onlinePlayers[socket.userId];
 
-                    if (command === '공지' || command === '보스소환') {
-                        if (command === '공지') {
-                            const noticeMessage = args.join(' ');
-                            io.emit('globalAnnouncement', noticeMessage);
-                            io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: noticeMessage });
-                        }
-                        if (command === '보스소환') spawnWorldBoss();
-                        return;
-                    }
+        if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
+            const args = trimmedMsg.substring(1).split(' ').filter(arg => arg.length > 0);
+            const command = args.shift().toLowerCase();
+            const adminUsername = socket.username;
 
-                    const target = command;
-                    const subject = args.shift();
-                    const amountStr = args.shift() || '1';
-                    const amount = parseInt(amountStr, 10);
-                    const description = args.join(' ') || '관리자가 지급한 선물입니다.';
-
-                    if (!target || !subject || isNaN(amount) || amount <= 0) {
-                        return pushLog(onlinePlayers[socket.userId], `[관리자] 명령어 형식이 잘못되었습니다.`);
-                    }
-
-                    let targets = [];
-                    let targetName = '';
-                    if (target === '온라인') {
-                        targetName = '온라인 전체 유저';
-                        targets = Object.values(onlinePlayers);
-                    } else if (target === '오프라인') {
-                        targetName = '오프라인 전체 유저';
-                        targets = await GameData.find({}).lean();
-                    } else {
-                        targetName = target;
-                        const onlineTarget = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === target.toLowerCase());
-                        if (onlineTarget) { 
-                            targets.push(onlineTarget); 
-                        } else { 
-                            const offlineTarget = await GameData.findOne({ username: target }).lean(); 
-                            if (offlineTarget) targets.push(offlineTarget);
-                        }
-                    }
-
-                    if (targets.length === 0) {
-                        return pushLog(onlinePlayers[socket.userId], `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
-                    }
-
-                    for (const t of targets) {
-                        const recipientId = t.user; 
-                        if (!recipientId) continue;
-
-                        const sender = `관리자(${adminUsername})`;
-                        if (subject.toLowerCase() === '골드') {
-                            await sendMail(recipientId, sender, { gold: amount, description });
-                        } else {
-                            const id = adminItemAlias[subject];
-                            if (!id) continue;
-                            const item = petData[id] ? createPetInstance(id) : createItemInstance(id, amount);
-                            if (item) await sendMail(recipientId, sender, { item: item, description });
-                        }
-                    }
-
-                    const isGold = subject.toLowerCase() === '골드';
-                    const itemInfo = isGold ? null : (itemData[adminItemAlias[subject]] || petData[adminItemAlias[subject]]);
-                    const givenItemName = isGold ? `${amount.toLocaleString()} 골드` : itemInfo?.name || subject;
-                    const givenItemGrade = isGold ? 'gold-text' : itemInfo?.grade || 'Common';
-                    const reasonText = description ? ` (${description})` : '';
-                    const chatAnnounceMsg = `[관리자] ${targetName}에게 <span class="${givenItemGrade}">${givenItemName}</span> 아이템을 우편으로 발송했습니다.${reasonText}`;
-                    const bannerAnnounceMsg = `[관리자] ${targetName}에게 ${givenItemName} 아이템을 우편으로 발송했습니다.${reasonText}`;
-                    io.emit('globalAnnouncement', bannerAnnounceMsg);
-                    io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: chatAnnounceMsg });
-                    return;
+            if (command === '공지' || command === '보스소환') {
+                if (command === '공지') {
+                    const noticeMessage = args.join(' ');
+                    io.emit('globalAnnouncement', noticeMessage);
+                    io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: noticeMessage, title: player.equippedTitle });
                 }
+                if (command === '보스소환') spawnWorldBoss();
+                return;
+            }
 
-                const player = onlinePlayers[socket.userId];
-               const newChatMessage = new ChatMessage({ 
+            const target = command;
+            const subject = args.shift();
+            const amountStr = args.shift() || '1';
+            const amount = parseInt(amountStr, 10);
+            const description = args.join(' ') || '관리자가 지급한 선물입니다.';
+
+            if (!target || !subject || isNaN(amount) || amount <= 0) {
+                return pushLog(onlinePlayers[socket.userId], `[관리자] 명령어 형식이 잘못되었습니다. (예: /유저명 아이템명 수량)`);
+            }
+
+            let targets = [];
+            let targetName = '';
+
+            if (target === '온라인') {
+                targetName = '온라인 전체 유저';
+                targets = Object.values(onlinePlayers);
+            } else if (target === '오프라인') {
+                targetName = '오프라인 전체 유저';
+                targets = await GameData.find({}).lean();
+            } else {
+                targetName = target;
+                const onlineTarget = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === target.toLowerCase());
+                
+                if (onlineTarget) { 
+                    targets.push(onlineTarget); 
+                } else { 
+  
+                    const offlineTarget = await GameData.findOne({ username: target }).lean(); 
+                    if (offlineTarget) {
+                        targets.push(offlineTarget);
+                    }
+                }
+            }
+
+            if (targets.length === 0) {
+                return pushLog(onlinePlayers[socket.userId], `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
+            }
+
+            for (const t of targets) {
+                const recipientId = t.user;
+                if (!recipientId) continue;
+
+                const sender = `관리자(${adminUsername})`;
+                if (subject.toLowerCase() === '골드') {
+                    await sendMail(recipientId, sender, { gold: amount, description });
+                } else {
+                    const id = adminItemAlias[subject];
+                    if (!id) {
+                        pushLog(onlinePlayers[socket.userId], `[관리자] 아이템 단축어 '${subject}'를 찾을 수 없습니다.`);
+                        continue;
+                    }
+                    const item = petData[id] ? createPetInstance(id) : createItemInstance(id, amount);
+                    if (item) await sendMail(recipientId, sender, { item: item, description });
+                }
+            }
+
+            const isGold = subject.toLowerCase() === '골드';
+            const itemInfo = isGold ? null : (itemData[adminItemAlias[subject]] || petData[adminItemAlias[subject]]);
+            const givenItemName = isGold ? `${amount.toLocaleString()} 골드` : itemInfo?.name || subject;
+            const givenItemGrade = isGold ? 'gold-text' : itemInfo?.grade || 'Common';
+            const reasonText = description ? ` (${description})` : '';
+            const chatAnnounceMsg = `[관리자] ${targetName}에게 <span class="${givenItemGrade}">${givenItemName}</span> 아이템을 우편으로 발송했습니다.${reasonText}`;
+            io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: chatAnnounceMsg, title: player.equippedTitle });
+            return;
+        }
+
+
+        const newChatMessage = new ChatMessage({ 
             username: socket.username, 
             role: socket.role, 
             fameScore: player ? player.fameScore : 0, 
             message: trimmedMsg,
             title: player ? player.equippedTitle : null 
-        }); 
-await newChatMessage.save();
-const payload = {
-                ...newChatMessage.toObject(),
-                title: player ? player.equippedTitle : null
-            };
-            io.emit('chatMessage', payload);
+        });
+        await newChatMessage.save();
+        const payload = { ...newChatMessage.toObject(), title: player ? player.equippedTitle : null };
+        io.emit('chatMessage', payload);
 
-            } catch (error) {
-                console.error('채팅 메시지 처리 중 오류 발생:', error);
-            }
-        })
+    } catch (error) {
+        console.error('채팅 메시지 처리 중 오류 발생:', error);
+    }
+})
        .on('showOffItem', ({ uid }) => {
     const player = onlinePlayers[socket.userId];
     if (!player || !uid) return;
@@ -1849,62 +1892,109 @@ function applyAwakeningBuff(player) {
 function gameTick(player) {
     if (!player || !player.socket) return;
 
+
     if (player.buffs && player.buffs.length > 0) {
         const now = Date.now();
         const initialBuffCount = player.buffs.length;
         player.buffs = player.buffs.filter(buff => buff.endTime > now);
-        
         if (player.buffs.length < initialBuffCount) {
             const hpBefore = player.stats.total.hp;
             calculateTotalStats(player); 
             const hpAfter = player.stats.total.hp;
-            
             const currentHpRatio = player.currentHp / hpBefore;
             player.currentHp = Math.min(hpAfter, hpAfter * currentHpRatio);
         }
     }
+    if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) onPetFusionComplete(player);
+    if (player.incubator.hatchCompleteTime && new Date() >= new Date(player.incubator.hatchCompleteTime)) onHatchComplete(player);
 
-    if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) {
-        onPetFusionComplete(player);
-    }
-    if (player.incubator.hatchCompleteTime && new Date() >= new Date(player.incubator.hatchCompleteTime)) {
-        onHatchComplete(player);
+
+    if (player.raidState && player.raidState.isActive) {
+        const raidBoss = player.raidState.monster;
+        let pDmg = 0;
+        let mDmg = 0;
+
+        const hitChance = 1 - Math.max(0, raidBoss.distortion - (player.focus || 0)) / 100;
+        if (Math.random() <= hitChance) {
+            const playerCritRoll = Math.random();
+            if (playerCritRoll < player.stats.critChance) {
+                pDmg += player.stats.total.attack;
+            } else {
+                pDmg += Math.max(0, player.stats.total.attack - (raidBoss.defense * (1 - (player.stats.total.defPenetration || 0))));
+            }
+        }
+        const empoweredDamageReduction = 1 - ((player.tenacity || 0) / 100);
+        const empoweredDamage = player.stats.total.hp * (raidBoss.empoweredAttack / 100) * empoweredDamageReduction;
+        mDmg = Math.max(0, raidBoss.attack - player.stats.total.defense) + empoweredDamage;
+        
+
+        player.currentHp -= mDmg;
+
+ 
+        if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
+            const bloodthirstDamage = raidBoss.hp * 0.50;
+            pDmg += bloodthirstDamage; // 추가 피해를 입히고
+            player.currentHp = player.stats.total.hp; // 체력을 100%로 회복합니다. (방금 입은 피해가 상쇄됨)
+            pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
+        }
+        
+        player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg });
+
+        if (player.currentHp <= 0) {
+            return endPersonalRaid(player, true);
+        }
+
+        if (raidBoss.currentBarrier > 0) {
+            const barrierDamage = pDmg * (1 + (player.penetration || 0) / 100);
+            raidBoss.currentBarrier -= barrierDamage;
+            if (raidBoss.currentBarrier < 0) {
+                raidBoss.currentHp += raidBoss.currentBarrier;
+                raidBoss.currentBarrier = 0;
+            }
+        } else {
+            raidBoss.currentHp -= pDmg;
+        }
+
+        if (raidBoss.currentHp <= 0) {
+            onPersonalRaidFloorClear(player);
+        }
+
+        const { socket: _, ...playerStateForClient } = player;
+        player.socket.emit('stateUpdate', { player: playerStateForClient, monster: player.raidState.monster, isInRaid: true });
+        return;
     }
     
-    let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
-    let titleBossDamageBonus = 1;
-    let titleWBBonus = 1;
-    let titleWBContributionBonus = 1;
 
-    if (titleEffects) {
-        if (titleEffects.bossDamage) titleBossDamageBonus += titleEffects.bossDamage;
-        if (titleEffects.worldBossDamage) titleWBBonus += titleEffects.worldBossDamage;
-        if (titleEffects.worldBossContribution) titleWBContributionBonus += titleEffects.worldBossContribution;
-    }
+    let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
+    let titleBossDamageBonus = 1, titleWBBonus = 1, titleWBContributionBonus = 1;
+    if (titleEffects) { /* ... */ }
 
     if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
         let pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
         
-        pDmg *= titleWBBonus;
+
+        if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
+            const bloodthirstDamage = worldBossState.maxHp * 0.01;
+            pDmg += bloodthirstDamage;
+            player.currentHp = player.stats.total.hp;
+            pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
+        }
         
+        pDmg *= titleWBBonus;
         worldBossState.currentHp = Math.max(0, (worldBossState.currentHp || 0) - pDmg);
-        if (player.equipment.earring && player.equipment.earring.id === 'acc_earring_01' && Math.random() < 0.03) {
-            applyAwakeningBuff(player);
-        }       
+
+        if (player.equipment.earring && player.equipment.earring.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player);
         const userId = player.user.toString();
         const participant = worldBossState.participants.get(userId) || { username: player.username, damageDealt: 0 };
-        
         const contributionDamage = pDmg * titleWBContributionBonus;
         participant.damageDealt = (participant.damageDealt || 0) + contributionDamage;
-        
         worldBossState.participants.set(userId, participant);
-        
-        if (!player.worldBossContribution) {
-            player.worldBossContribution = { damageDealt: 0, bossId: null };
-        }
+        const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + (p.damageDealt || 0), 0);
+        const myShare = totalDamage > 0 ? (participant.damageDealt / totalDamage) * 100 : 0;
+        player.socket.emit('myBossContributionUpdate', { myContribution: participant.damageDealt, myShare: myShare });
+        if (!player.worldBossContribution) player.worldBossContribution = { damageDealt: 0, bossId: null };
         player.worldBossContribution.damageDealt = participant.damageDealt;
         player.worldBossContribution.bossId = worldBossState.bossId;
-
         if (worldBossState.currentHp <= 0) { 
             worldBossState.lastHitter = player.user.toString();
             onWorldBossDefeated(); 
@@ -1912,63 +2002,50 @@ function gameTick(player) {
         sendState(player.socket, player, calcMonsterStats(player));
         return;
     }
+    
 
     calculateTotalStats(player);
     const m = calcMonsterStats(player);
-    
     if (player.monster.lastCalculatedLevel !== player.level) {
         player.monster.currentHp = m.hp;
         player.monster.currentBarrier = m.barrier;
         player.monster.lastCalculatedLevel = player.level;
     }
-
-    let pDmg = 0;
-    let mDmg = 0;
+    let pDmg = 0, mDmg = 0;
+    
 
     const hitChance = 1 - Math.max(0, (m.distortion || 0) - (player.focus || 0)) / 100;
-    if (Math.random() > hitChance) {
-        pDmg = 0;
-    } else {
+    if (Math.random() > hitChance) { pDmg += 0; } 
+    else {
         const playerCritRoll = Math.random();
-        if (playerCritRoll < player.stats.critChance) {
-            pDmg = player.stats.total.attack;
-        } else {
-            const monsterEffectiveDefense = m.defense * (1 - (player.stats.total.defPenetration || 0));
-            pDmg = Math.max(0, player.stats.total.attack - monsterEffectiveDefense);
-        }
+        if (playerCritRoll < player.stats.critChance) { pDmg += player.stats.total.attack; } 
+        else { pDmg += Math.max(0, player.stats.total.attack - (m.defense * (1 - (player.stats.total.defPenetration || 0)))); }
     }
-
-    if (m.isBoss) {
-        pDmg *= titleBossDamageBonus;
-    }
-
+    if (m.isBoss) { pDmg *= titleBossDamageBonus; }
     const monsterCritConfig = monsterCritRateTable.find(r => m.level <= r.maxLevel);
     const monsterCritChance = m.isBoss ? monsterCritConfig.boss : monsterCritConfig.normal;
     const finalMonsterCritChance = Math.max(0, monsterCritChance - player.stats.critResistance);
     const monsterCritRoll = Math.random();
-
-    if (monsterCritRoll < finalMonsterCritChance) {
-        mDmg = m.attack;
-    } else {
-        const playerEffectiveDefense = m.isBoss ? (player.stats.total.defense * 0.5) : player.stats.total.defense;
-        mDmg = Math.max(0, m.attack - playerEffectiveDefense);
-    }
-    
+    if (monsterCritRoll < finalMonsterCritChance) { mDmg = m.attack; } 
+    else { mDmg = Math.max(0, m.attack - (m.isBoss ? (player.stats.total.defense * 0.5) : player.stats.total.defense)); }
     if (m.empoweredAttack > 0) {
         const empoweredDamageReduction = 1 - ((player.tenacity || 0) / 100);
         const empoweredDamage = player.stats.total.hp * (m.empoweredAttack / 100) * empoweredDamageReduction;
         mDmg += empoweredDamage;
     }
 
-    if (pDmg > 0 || mDmg > 0) {
-        player.currentHp -= mDmg;
-        player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg });
+
+    player.currentHp -= mDmg;
+    if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
+        const bloodthirstDamage = m.hp * 0.50;
+        pDmg += bloodthirstDamage;
+        player.currentHp = player.stats.total.hp;
+        pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
     }
 
-    if (pDmg > 0 && player.equipment.earring && player.equipment.earring.id === 'acc_earring_01' && Math.random() < 0.03) {
-        applyAwakeningBuff(player);
-    }
-
+    if (pDmg > 0 || mDmg > 0) { player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg }); }
+    if (pDmg > 0 && player.equipment.earring && player.equipment.earring.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player);
+    
     if (player.currentHp <= 0) {
         const reviveEffect = player.equippedPet?.effects?.revive;
         if (reviveEffect && (!player.petReviveCooldown || new Date() > new Date(player.petReviveCooldown))) {
@@ -1976,14 +2053,9 @@ function gameTick(player) {
             player.petReviveCooldown = new Date(Date.now() + reviveEffect.cooldown);
             pushLog(player, `[${player.equippedPet.name}]의 힘으로 죽음의 문턱에서 돌아옵니다!`);
         } else {
-            let deathMessage;
-            let returnFloor = 1;
-            if (player.level >= 1000000) {
-                deathMessage = `[${player.level}층] 심연의 균열에서 패배하여 100만층으로 귀환합니다.`;
-                returnFloor = 1000000;
-            } else {
-                deathMessage = m.isBoss ? `[${player.level}층 보스]에게 패배하여 1층으로 귀환합니다.` : `[${player.level}층] 몬스터에게 패배하여 1층으로 귀환합니다.`;
-            }
+            let deathMessage, returnFloor = 1;
+            if (player.level >= 1000000) { deathMessage = `[${player.level}층] 심연의 균열에서 패배하여 100만층으로 귀환합니다.`; returnFloor = 1000000; } 
+            else { deathMessage = m.isBoss ? `[${player.level}층 보스]에게 패배하여 1층으로 귀환합니다.` : `[${player.level}층] 몬스터에게 패배하여 1층으로 귀환합니다.`; }
             resetPlayer(player, deathMessage, returnFloor);
         }
     } else {
@@ -1993,19 +2065,12 @@ function gameTick(player) {
                 const remainingDamage = barrierDamage - player.monster.currentBarrier;
                 player.monster.currentBarrier = 0;
                 player.monster.currentHp -= remainingDamage;
-            } else {
-                player.monster.currentBarrier -= barrierDamage;
-            }
-        } else {
-            player.monster.currentHp -= pDmg;
-        }
-
+            } else { player.monster.currentBarrier -= barrierDamage; }
+        } else { player.monster.currentHp -= pDmg; }
         if (player.monster.currentHp <= 0) {
             player.level++;
             player.maxLevel = Math.max(player.maxLevel, player.level);
-            if (player.level > (player.previousMaxLevel || player.maxLevel -1) ) {
-                updateFameScore(player.socket, player);
-            }
+            if (player.level > (player.previousMaxLevel || player.maxLevel -1)) updateFameScore(player.socket, player);
             player.previousMaxLevel = player.maxLevel;
             onClearFloor(player);
             calculateTotalStats(player);
@@ -2023,11 +2088,13 @@ setInterval(() => { for (const userId in onlinePlayers) { gameTick(onlinePlayers
 
 setInterval(() => {
     if (worldBossState && worldBossState.isActive) {
-        const serializableState = {
-            ...worldBossState,
-            participants: Object.fromEntries(worldBossState.participants)
+        const lightWeightState = {
+            name: worldBossState.name,
+            currentHp: worldBossState.currentHp,
+            maxHp: worldBossState.maxHp,
+            isActive: worldBossState.isActive
         };
-        io.emit('worldBossUpdate', serializableState);
+        io.emit('worldBossUpdate', lightWeightState);
     }
 }, 2000);
 
@@ -2171,39 +2238,36 @@ function onClearFloor(p) {
     }
 }
 
+
 async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
     if (!p) return;
-    let item;
+
+    let originalItem;
     let isEquipped = false;
-    let itemIndex = p.inventory.findIndex(i => i.uid === uid);
-    if (itemIndex !== -1) {
-        item = p.inventory[itemIndex];
+    let originalItemLocation = 'inventory';
+
+    let itemFromInventory = p.inventory.find(i => i.uid === uid);
+    if (itemFromInventory) {
+        originalItem = { ...itemFromInventory };
     } else {
-        for (const key of Object.keys(p.equipment)) {
-            if (p.equipment[key] && p.equipment[key].uid === uid) {
-                item = p.equipment[key];
+        for (const type of ['weapon', 'armor']) {
+            if (p.equipment[type] && p.equipment[type].uid === uid) {
+                originalItem = { ...p.equipment[type] };
                 isEquipped = true;
+                originalItemLocation = 'equipment';
                 break;
             }
         }
     }
-    if (!item || (item.type !== 'weapon' && item.type !== 'armor')) return;
-    if (!isEquipped && item.quantity > 1) {
-        item.quantity--;
-        const newItemForEnhance = { ...item, quantity: 1, uid: new mongoose.Types.ObjectId().toString() };
-        p.inventory.push(newItemForEnhance);
-        item = newItemForEnhance;
-        uid = item.uid;
-        itemIndex = p.inventory.length - 1;
+
+    if (!originalItem || (originalItem.type !== 'weapon' && originalItem.type !== 'armor')) {
+        return;
     }
 
-    const cur = item.enhancement;
-    const isPrimal = item.grade === 'Primal';
-
+    const cur = originalItem.enhancement;
+    const isPrimal = originalItem.grade === 'Primal';
     const titleEffects = p.equippedTitle ? titleData[p.equippedTitle]?.effect : null;
-    
-    let cost;
-    let riftShardCost = 0;
+    let cost, riftShardCost = 0;
 
     if (isPrimal) {
         const nextLevel = cur + 1;
@@ -2211,184 +2275,143 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
         riftShardCost = nextLevel * 10;
         const shardItem = p.inventory.find(i => i.id === 'rift_shard');
         if (!shardItem || shardItem.quantity < riftShardCost) {
-            pushLog(p, `[강화] 균열의 파편이 부족합니다. (필요: ${riftShardCost}개)`);
-            return;
+            return pushLog(p, `[강화] 균열의 파편이 부족합니다. (필요: ${riftShardCost}개)`);
         }
     } else {
         cost = Math.floor(1000 * Math.pow(2.1, cur));
     }
-
     if (titleEffects && titleEffects.enhancementCostReduction) {
         cost = Math.floor(cost * (1 - titleEffects.enhancementCostReduction));
     }
-
     if (p.gold < cost) {
-        pushLog(p, '[강화] 골드가 부족합니다.');
-        return;
+        return pushLog(p, '[강화] 골드가 부족합니다.');
     }
-    if (useTicket && item.enhancement >= 10) {
-        const ticketIndex = p.inventory.findIndex(i => i.id === 'prevention_ticket');
-        if (ticketIndex === -1) {
-            pushLog(p, '[강화] 파괴 방지권이 없어 사용할 수 없습니다.');
-            return;
+    if (useTicket && originalItem.enhancement >= 10) {
+        if (!p.inventory.some(i => i.id === 'prevention_ticket')) {
+            return pushLog(p, '[강화] 파괴 방지권이 없습니다.');
         }
     }
 
-    p.gold -= cost;
-    if (isPrimal) {
-        const shardItem = p.inventory.find(i => i.id === 'rift_shard');
-        shardItem.quantity -= riftShardCost;
-        if (shardItem.quantity <= 0) {
-            p.inventory = p.inventory.filter(i => i.uid !== shardItem.uid);
-        }
-    }
 
-    let rates;
-    if (isPrimal && cur >= 10) {
-        rates = { success: 0.10, maintain: 0.00, fail: 0.00, destroy: 0.90 };
+    let itemTaken = false;
+    if (!isEquipped && originalItem.quantity > 1) {
+
+        const updateResult = await GameData.updateOne(
+            { user: p.user, "inventory.uid": uid, "inventory.quantity": { $gt: 0 } },
+            { $inc: { "inventory.$.quantity": -1 } }
+        );
+        if (updateResult.modifiedCount > 0) {
+            itemTaken = true;
+            p.inventory.find(i => i.uid === uid).quantity--; // 로컬 데이터에도 반영
+        }
     } else {
-        rates = { ...(enhancementTable[cur + 1] || highEnhancementRate) };
-    }
 
-
-    if (titleEffects && titleEffects.enhancementSuccessRate) {
-        rates.success += titleEffects.enhancementSuccessRate;
-    }
-
-    if (titleEffects && titleEffects.enhancementMaintainChance && rates.fail > 0) {
-        const shiftAmount = Math.min(rates.fail, titleEffects.enhancementMaintainChance);
-        rates.fail -= shiftAmount;
-        rates.maintain += shiftAmount;
-    }
-
-    if (useHammer && !isPrimal) {
-        const hammerIndex = p.inventory.findIndex(i => i.id === 'hammer_hephaestus');
-        if (hammerIndex > -1) {
-            let bonusToApply = 0.15;
-            const fromDestroy = Math.min(bonusToApply, rates.destroy);
-            rates.destroy -= fromDestroy;
-            bonusToApply -= fromDestroy;
-            if (bonusToApply > 0) {
-                const fromFail = Math.min(bonusToApply, rates.fail);
-                rates.fail -= fromFail;
-                bonusToApply -= fromFail;
-            }
-            if (bonusToApply > 0) {
-                const fromMaintain = Math.min(bonusToApply, rates.maintain);
-                rates.maintain -= fromMaintain;
-                bonusToApply -= fromMaintain;
-            }
-            rates.success += (0.15 - bonusToApply);
-            rates.success = Math.min(1, rates.success);
-            p.inventory[hammerIndex].quantity--;
-            if (p.inventory[hammerIndex].quantity <= 0) {
-                p.inventory.splice(hammerIndex, 1);
-            }
-            pushLog(p, '[강화] 헤파이스토스의 망치 효과로 성공 확률이 증가합니다!');
+        const pullQuery = isEquipped 
+            ? { $set: { [`equipment.${originalItem.type}`]: null } }
+            : { $pull: { inventory: { uid: uid } } };
+        const updateResult = await GameData.updateOne({ user: p.user }, pullQuery);
+        if (updateResult.modifiedCount > 0) {
+            itemTaken = true;
+             if (isEquipped) p.equipment[originalItem.type] = null;
+             else p.inventory = p.inventory.filter(i => i.uid !== uid);
         }
+    }
+
+    if (!itemTaken) {
+
+        return pushLog(p, '[강화] 아이템을 처리하는 중입니다. 잠시 후 다시 시도해주세요.');
+    }
+    
+
+    const itemToEnhance = { ...originalItem, quantity: 1 }; // 분리된 아이템으로 강화 진행
+
+    p.gold -= cost; 
+    if (isPrimal) { p.inventory.find(i => i.id === 'rift_shard').quantity -= riftShardCost; }
+
+    let rates = { ...(enhancementTable[cur + 1] || highEnhancementRate) };
+    if (isPrimal && cur >= 10) rates = { success: 0.10, maintain: 0.00, fail: 0.00, destroy: 0.90 };
+    if (titleEffects?.enhancementSuccessRate) rates.success += titleEffects.enhancementSuccessRate;
+    if (titleEffects?.enhancementMaintainChance && rates.fail > 0) {
+        const shift = Math.min(rates.fail, titleEffects.enhancementMaintainChance);
+        rates.fail -= shift;
+        rates.maintain += shift;
+    }
+    if (useHammer && !isPrimal && p.inventory.some(i => i.id === 'hammer_hephaestus')) {
+        p.inventory.find(i => i.id === 'hammer_hephaestus').quantity--;
+
+        let bonusToApply = 0.15;
+        const fromDestroy = Math.min(bonusToApply, rates.destroy);
+        rates.destroy -= fromDestroy; bonusToApply -= fromDestroy;
+        if (bonusToApply > 0) { const fromFail = Math.min(bonusToApply, rates.fail); rates.fail -= fromFail; bonusToApply -= fromFail; }
+        if (bonusToApply > 0) { const fromMaintain = Math.min(bonusToApply, rates.maintain); rates.maintain -= fromMaintain; bonusToApply -= fromMaintain; }
+        rates.success += (0.15 - bonusToApply);
+        rates.success = Math.min(1, rates.success);
     }
 
     const r = Math.random();
-    let result = '';
-    let msg = '';
+    let result = '', msg = '', finalItem = null;
     const hpBefore = p.stats.total.hp;
+    
 
     if (r < rates.success) {
         result = 'success';
-        item.enhancement++;
-        msg = `[+${cur} ${item.name}] 강화 성공! → [+${item.enhancement}]`;
-        if (item.enhancement >= 12) {
-            const announcementMsg = `🎉 ${p.username}님이 [+${item.enhancement} ${item.name}] 강화에 성공하였습니다! 모두 축하해주세요! 🎉`;
-            io.emit('globalAnnouncement', announcementMsg);
-            io.emit('chatMessage', { type: 'announcement', username: 'SYSTEM', role: 'admin', message: announcementMsg });
-        }
-        if (item.type === 'weapon') {
-            if (item.enhancement > (p.maxWeaponEnhancement || 0)) {
-                p.maxWeaponEnhancement = item.enhancement;
-                p.maxWeaponName = item.name;
-            }
-        } else if (item.type === 'armor') {
-            if (item.enhancement > (p.maxArmorEnhancement || 0)) {
-                p.maxArmorEnhancement = item.enhancement;
-                p.maxArmorName = item.name;
-            }
-        }
-        const currentTopEnh = globalRecordsCache.topEnhancement || { enhancementLevel: 0 };
-        if (item.enhancement > currentTopEnh.enhancementLevel) {
-            updateGlobalRecord('topEnhancement', { username: p.username, itemName: item.name, itemGrade: item.grade, enhancementLevel: item.enhancement });
-        }
-
-        if (item.id === 'w001' && item.enhancement >= 15) {
-            grantTitle(p, '[대체왜?]');
-        }
-
+        itemToEnhance.enhancement++;
+        finalItem = itemToEnhance;
+        msg = `[+${cur} ${itemToEnhance.name}] 강화 성공! → [+${itemToEnhance.enhancement}]`;
+        if (itemToEnhance.enhancement >= 12) { io.emit('globalAnnouncement', `🎉 ${p.username}님이 [+${itemToEnhance.enhancement} ${itemToEnhance.name}] 강화에 성공하였습니다!`); }
+        if (itemToEnhance.type === 'weapon') { p.maxWeaponEnhancement = Math.max(p.maxWeaponEnhancement || 0, itemToEnhance.enhancement); p.maxWeaponName = itemToEnhance.name; }
+        else { p.maxArmorEnhancement = Math.max(p.maxArmorEnhancement || 0, itemToEnhance.enhancement); p.maxArmorName = itemToEnhance.name; }
+        if (itemToEnhance.enhancement > (globalRecordsCache.topEnhancement?.enhancementLevel || 0)) { updateGlobalRecord('topEnhancement', { username: p.username, itemName: itemToEnhance.name, itemGrade: itemToEnhance.grade, enhancementLevel: itemToEnhance.enhancement }); }
+        if (itemToEnhance.id === 'w001' && itemToEnhance.enhancement >= 15) grantTitle(p, '[대체왜?]');
     } else if (r < rates.success + rates.maintain) {
         result = 'maintain';
-        msg = `[+${cur} ${item.name}] 강화 유지!`;
-
-        p.titleCounters.enhancementFailCount = (p.titleCounters.enhancementFailCount || 0) + 1;
-        if (p.titleCounters.enhancementFailCount >= 500) {
-            grantTitle(p, '[키리]');
-        }
+        finalItem = itemToEnhance;
+        msg = `[+${cur} ${itemToEnhance.name}] 강화 유지!`;
+        if (++p.titleCounters.enhancementFailCount >= 500) grantTitle(p, '[키리]');
     } else if (r < rates.success + rates.maintain + rates.fail) {
         result = 'fail';
-        const newLevel = Math.max(0, item.enhancement - 1);
-        msg = `[+${cur} ${item.name}] 강화 실패... → [+${newLevel}]`;
-        item.enhancement = newLevel;
-
-        p.titleCounters.enhancementFailCount = (p.titleCounters.enhancementFailCount || 0) + 1;
-        if (p.titleCounters.enhancementFailCount >= 500) {
-            grantTitle(p, '[키리]');
-        }
-    } else { 
-        if (useTicket && item.enhancement >= 10) {
-            const ticketIndex = p.inventory.findIndex(i => i.id === 'prevention_ticket');
-            if (ticketIndex !== -1) {
-                p.inventory[ticketIndex].quantity--;
-                if (p.inventory[ticketIndex].quantity <= 0) {
-                    p.inventory.splice(ticketIndex, 1);
-                }
-                result = 'maintain'; 
-                msg = `<span class="Epic">파괴 방지권</span>을 사용하여 <span class="${item.grade}">${item.name}</span>의 파괴를 막았습니다!`;
-            } else {
-                result = 'destroy';
-                msg = `<span class="${item.grade}">${item.name}</span>이(가) 강화에 실패하여 파괴되었습니다...`;
-                if (isEquipped) { p.equipment[item.type] = null; } 
-                else {
-                    const itemToRemoveIndex = p.inventory.findIndex(i => i.uid === uid);
-                    if (itemToRemoveIndex > -1) p.inventory.splice(itemToRemoveIndex, 1);
-                }
-
-                p.titleCounters.destroyCount = (p.titleCounters.destroyCount || 0) + 1;
-                if (p.titleCounters.destroyCount >= 50) {
-                    grantTitle(p, '[펑..]');
-                }
-            }
-        } else { 
+        itemToEnhance.enhancement = Math.max(0, cur - 1);
+        finalItem = itemToEnhance;
+        msg = `[+${cur} ${itemToEnhance.name}] 강화 실패... → [+${itemToEnhance.enhancement}]`;
+        if (++p.titleCounters.enhancementFailCount >= 500) grantTitle(p, '[키리]');
+    } else {
+        if (useTicket && cur >= 10) {
+            p.inventory.find(i => i.id === 'prevention_ticket').quantity--;
+            result = 'maintain';
+            finalItem = itemToEnhance;
+            msg = `<span class="Epic">파괴 방지권</span>을 사용하여 파괴를 막았습니다!`;
+        } else {
             result = 'destroy';
-            msg = `<span class="${item.grade}">${item.name}</span>이(가) 강화에 실패하여 파괴되었습니다...`;
-            if (isEquipped) { p.equipment[item.type] = null; } 
-            else {
-                const itemToRemoveIndex = p.inventory.findIndex(i => i.uid === uid);
-                if (itemToRemoveIndex > -1) p.inventory.splice(itemToRemoveIndex, 1);
-            }
-
-            p.titleCounters.destroyCount = (p.titleCounters.destroyCount || 0) + 1;
-            if (p.titleCounters.destroyCount >= 50) {
-                grantTitle(p, '[펑..]');
-            }
+            finalItem = null; // 아이템 파괴
+            msg = `<span class="${itemToEnhance.grade}">${itemToEnhance.name}</span>이(가) 파괴되었습니다...`;
+            if (++p.titleCounters.destroyCount >= 50) grantTitle(p, '[펑..]');
         }
     }
     
+
+    if (finalItem) {
+        finalItem.uid = new mongoose.Types.ObjectId().toString(); 
+        if (isEquipped) {
+            await GameData.updateOne({ user: p.user }, { $set: { [`equipment.${finalItem.type}`]: finalItem } });
+            p.equipment[finalItem.type] = finalItem; 
+        } else {
+            await GameData.updateOne({ user: p.user }, { $push: { inventory: finalItem } });
+            p.inventory.push(finalItem); 
+        }
+    }
+    
+
     calculateTotalStats(p);
     const hpAfter = p.stats.total.hp;
     p.currentHp = hpBefore > 0 && hpAfter > 0 ? p.currentHp * (hpAfter / hpBefore) : hpAfter;
     if (p.currentHp > hpAfter) p.currentHp = hpAfter;
-    pushLog(p, msg);
 
-    socket.emit('enhancementResult', { result, newItem: (result !== 'destroy' ? item : null), destroyed: result === 'destroy' });
-    sendState(p.socket, p, calcMonsterStats(p));
-    sendInventoryUpdate(p);
+    p.inventory = p.inventory.filter(i => i.quantity > 0);
+    
+    pushLog(p, msg);
+    socket.emit('enhancementResult', { result, newItem: finalItem, destroyed: result === 'destroy' });
+    sendState(p.socket, p, calcMonsterStats(p)); 
+    sendInventoryUpdate(p); 
     updateFameScore(socket, p);
 }
 
@@ -2466,7 +2489,10 @@ function calcMonsterStats(p) {
 }
 
 function resetPlayer(p, msg, returnFloor = 1) {
-
+if (p.raidState && p.raidState.isActive) {
+    p.raidState.isActive = false;
+    p.socket.emit('personalRaid:ended');
+}
     const titleEffects = p.equippedTitle ? titleData[p.equippedTitle]?.effect : null;
     if (titleEffects && titleEffects.goldOnDeath) {
         p.gold += titleEffects.goldOnDeath;
@@ -2673,16 +2699,17 @@ function getFameTier(score) {
 
 async function savePlayerData(userId) { const p = onlinePlayers[userId]; if (!p) return; try { const { socket: _, attackTarget: __, ...playerDataToSave } = p; await GameData.updateOne({ user: userId }, { $set: playerDataToSave }); } catch (error) { console.error(`[저장 실패] 유저: ${p.username} 데이터 저장 중 오류 발생:`, error); } }
 
+
 async function sendState(socket, player, monsterStats) {
     if (!socket || !player) return;
+
     const playerStateForClient = {
-username: player.username,
+        username: player.username,
         gold: player.gold,
         level: player.level,
         maxLevel: player.maxLevel,
         stats: player.stats,
         currentHp: player.currentHp,
-        isExploring: player.isExploring,
         fameScore: player.fameScore,
         hasUnreadMail: player.hasUnreadMail,
         buffs: player.buffs || [],
@@ -2697,17 +2724,25 @@ username: player.username,
         focus: player.focus,
         penetration: player.penetration,
         tenacity: player.tenacity,
+        bloodthirst: player.bloodthirst, 
         riftShards: player.inventory.find(i => i.id === 'rift_shard')?.quantity || 0,
-        safeZoneCooldownUntil: player.safeZoneCooldownUntil
+        safeZoneCooldownUntil: player.safeZoneCooldownUntil,
+        personalRaid: player.personalRaid
     };
-    
+
     const monsterStateForClient = {
         ...monsterStats,
         currentHp: player.monster.currentHp,
         currentBarrier: player.monster.currentBarrier
     };
 
-    socket.emit('stateUpdate', { player: playerStateForClient, monster: monsterStateForClient });
+    const isInRaid = player.raidState && player.raidState.isActive;
+
+    socket.emit('stateUpdate', {
+        player: playerStateForClient,
+        monster: isInRaid ? player.raidState.monster : monsterStateForClient,
+        isInRaid: isInRaid
+    });
 }
 
 function sendPlayerState(player) {
@@ -2731,8 +2766,22 @@ function useItem(player, uid, useAll = false) {
    
 
  switch (item.id) {
+case 'pure_blood_crystal':
+    if (player.bloodthirst >= 10) {
+        messages.push("[피의 갈망] 이미 최대치(10%)에 도달했습니다.");
+        break;
+    }
+    if (Math.random() < 0.20) { 
+        player.bloodthirst = parseFloat((player.bloodthirst + 0.1).toFixed(1));
+        messages.push(`[피의 갈망] 순수한 피의 결정을 흡수하는 데 성공했습니다! (현재: ${player.bloodthirst}%)`);
+        calculateTotalStats(player);
+    } else {
+        messages.push("[피의 갈망] 결정이 사용자의 피에 스며들지 못했습니다...");
+    }
+    break;
+
         case 'box_power':
-            const guaranteedGold = 50000000;
+            const guaranteedGold = 500000000;
             player.gold += guaranteedGold;
             messages.push(`[권능의 상자] 확정 보상으로 ${guaranteedGold.toLocaleString()} G를 획득했습니다!`);
             const rand = Math.random();
@@ -2973,193 +3022,120 @@ function unequipPet(player) {
 checkStateBasedTitles(player);
 }
 
-
 async function onWorldBossDefeated() {
     if (!worldBossState || !worldBossState.isActive) return;
-    console.log('[월드보스] 처치되어 보상 분배를 시작합니다.');
+
+    console.log('[월드보스] 처치 완료! 보상 분배를 시작합니다.');
     worldBossState.isActive = false;
     await WorldBossState.updateOne({ uniqueId: 'singleton' }, { $set: { isActive: false, currentHp: 0 } });
+
     const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + p.damageDealt, 0);
     if (totalDamage <= 0) {
         io.emit('worldBossDefeated');
         worldBossState = null;
         return;
     }
+
     const defeatedMessage = `[월드보스] 🔥 ${worldBossState.name} 🔥 처치 완료! 보상 분배를 시작합니다.`;
     io.emit('globalAnnouncement', defeatedMessage);
     io.emit('chatMessage', { isSystem: true, message: defeatedMessage });
-    const playersToUpdate = new Set();
-    const participationBoxMessage = "[월드보스] 토벌에 참여한 모든 용사에게 '월드보스 참여 상자'가 지급됩니다!";
-    io.emit('chatMessage', { isSystem: true, message: participationBoxMessage });
 
-    for (const [userId, participant] of worldBossState.participants.entries()) {
-        if (participant.damageDealt > 0) {
-            const onlinePlayer = onlinePlayers[userId];
+    const sortedParticipants = Array.from(worldBossState.participants.entries()).sort((a, b) => b[1].damageDealt - a[1].damageDealt);
+    const rewardLedger = new Map();
 
-            if (onlinePlayer && onlinePlayer.titleCounters) {
-                onlinePlayer.titleCounters.wbParticipateCount = (onlinePlayer.titleCounters.wbParticipateCount || 0) + 1;
-                if (onlinePlayer.titleCounters.wbParticipateCount >= 10) {
-                    grantTitle(onlinePlayer, '[토벌대원]');
-                }
-            } else { 
-                const offlineData = await GameData.findOne({ user: userId }).select('titleCounters.wbParticipateCount unlockedTitles').lean();
-                if (offlineData) {
-                    const newCount = (offlineData.titleCounters?.wbParticipateCount || 0) + 1;
-                    await GameData.updateOne({ user: userId }, { $set: { 'titleCounters.wbParticipateCount': newCount } });
-                    if (newCount >= 10 && !offlineData.unlockedTitles.includes('[토벌대원]')) {
-                        await GameData.updateOne({ user: userId }, { $push: { unlockedTitles: '[토벌대원]' } });
-                    }
-                }
-            }
+    for (const [userIdString, participant] of sortedParticipants) {
+        if (!rewardLedger.has(userIdString)) {
+            rewardLedger.set(userIdString, { gold: 0, items: [], username: participant.username });
+        }
+        const userRewards = rewardLedger.get(userIdString);
+        const contributionPercent = (participant.damageDealt / totalDamage) * 100;
 
-            if (onlinePlayer && onlinePlayer.equipment.weapon?.id === 'w001') {
-                grantTitle(onlinePlayer, '[날먹최강자]');
+        const goldReward = Math.floor(10000000000 * (participant.damageDealt / totalDamage));
+        if (goldReward > 0) userRewards.gold += goldReward;
+
+        if (contributionPercent >= 0.1) userRewards.items.push(createItemInstance('boss_participation_box'));
+        if (contributionPercent >= 1) userRewards.items.push(createItemInstance('rift_shard', 5));
+        if (contributionPercent >= 5) userRewards.items.push(createItemInstance('rift_shard', 20));
+        if (contributionPercent >= 10) {
+            if (Math.random() < 0.10) {
+                const mysticPool = ['w005', 'a005', 'acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
+                const randomMysticId = mysticPool[Math.floor(Math.random() * mysticPool.length)];
+                const mysticItem = createItemInstance(randomMysticId);
+                userRewards.items.push(mysticItem);
+                
+                const itemNameHTML = `<span class="${mysticItem.grade}">${mysticItem.name}</span>`;
+                const winMessage = `${participant.username}님이 기여도 ${contributionPercent.toFixed(2)}% 달성으로 미스틱 아이템 ${itemNameHTML}를 획득하였습니다!!`;
+                io.emit('chatMessage', { isSystem: true, message: `🎉 ${winMessage}` });
             }
         }
     }
     
+
+    if (sortedParticipants.length > 0) {
+        const [winnerIdString, winnerParticipant] = sortedParticipants[0];
+        let primalWinMessage = '';
+        if (Math.random() < 0.01) {
+            const primalPool = ['primal_w01', 'primal_a01'];
+            const randomPrimalId = primalPool[Math.floor(Math.random() * primalPool.length)];
+            const primalItem = createItemInstance(randomPrimalId);
+            rewardLedger.get(winnerIdString).items.push(primalItem);
+            
+            const itemNameHTML = `<span class="Primal">${primalItem.name}</span>`;
+            const bannerMessage = `★★★★★ ${winnerParticipant.username}님이 1등 보상으로 태초 아이템 [${primalItem.name}] 획득에 성공했습니다! ★★★★★`;
+            io.emit('globalAnnouncement', bannerMessage, { style: 'primal' });
+            primalWinMessage = `1등: ${winnerParticipant.username}님!!! <span class="Primal">Primal 등급 획득에 성공했습니다!!!</span>`;
+        } else {
+            primalWinMessage = `1등: ${winnerParticipant.username}님!!! 아쉽지만 Primal 등급 획득에 실패했습니다.`;
+        }
+        io.emit('chatMessage', { isSystem: true, message: primalWinMessage });
+    }
+
+
+    for (const [userIdString, finalRewards] of rewardLedger.entries()) {
+        const recipientObjectId = new mongoose.Types.ObjectId(userIdString);
+
+        if (finalRewards.gold > 0) {
+            await sendMail(recipientObjectId, '월드보스', { gold: finalRewards.gold, description: "기여도 보상" });
+        }
+        for (const item of finalRewards.items) {
+            await sendMail(recipientObjectId, '월드보스', { item: item, description: "기여도 보상" });
+        }
+        
+        const onlinePlayer = onlinePlayers[userIdString];
+        if (onlinePlayer) {
+            pushLog(onlinePlayer, "[월드보스] 보상이 우편함으로 모두 발송되었습니다! 확인해주세요.");
+        }
+    }
+io.emit('chatMessage', { isSystem: true, message: "전원에게 기여도에 따른 보상이 지급되었습니다. 우편함을 확인하세요." });
+
+    for (const [userIdString, participant] of worldBossState.participants.entries()) {
+        if (participant.damageDealt > 0) {
+            const onlinePlayer = onlinePlayers[userIdString];
+            if (onlinePlayer) {
+                if (onlinePlayer.titleCounters) onlinePlayer.titleCounters.wbParticipateCount = (onlinePlayer.titleCounters.wbParticipateCount || 0) + 1;
+                if ((onlinePlayer.titleCounters?.wbParticipateCount || 0) >= 10) grantTitle(onlinePlayer, '[토벌대원]');
+                if (onlinePlayer.equipment.weapon?.id === 'w001') grantTitle(onlinePlayer, '[날먹최강자]');
+            }
+        }
+    }
     if (worldBossState.lastHitter) {
         const lastHitterId = worldBossState.lastHitter;
         const onlineLastHitter = onlinePlayers[lastHitterId];
-        if (onlineLastHitter && onlineLastHitter.titleCounters) {
+        if (onlineLastHitter?.titleCounters) {
             onlineLastHitter.titleCounters.wbLastHitCount = (onlineLastHitter.titleCounters.wbLastHitCount || 0) + 1;
-            if (onlineLastHitter.titleCounters.wbLastHitCount >= 5) {
-                grantTitle(onlineLastHitter, '[용사]');
-            }
-        } else { 
-            const offlineData = await GameData.findOne({ user: lastHitterId }).select('titleCounters.wbLastHitCount unlockedTitles').lean();
-            if (offlineData) {
-                const newCount = (offlineData.titleCounters?.wbLastHitCount || 0) + 1;
-                await GameData.updateOne({ user: lastHitterId }, { $set: { 'titleCounters.wbLastHitCount': newCount } });
-                if (newCount >= 5 && !offlineData.unlockedTitles.includes('[용사]')) {
-                    await GameData.updateOne({ user: lastHitterId }, { $push: { unlockedTitles: '[용사]' } });
-                }
-            }
+            if (onlineLastHitter.titleCounters.wbLastHitCount >= 5) grantTitle(onlineLastHitter, '[용사]');
         }
-    }
-
-
-    for (const [userId, participant] of worldBossState.participants.entries()) {
-        if (participant.damageDealt > 0) {
-            const boxItem = createItemInstance('boss_participation_box');
-            if (!boxItem) continue;
-            const onlinePlayer = onlinePlayers[userId];
-            if (onlinePlayer) {
-                handleItemStacking(onlinePlayer, boxItem);
-                pushLog(onlinePlayer, "[월드보스] 기본 참여 보상으로 '월드보스 참여 상자'를 획득했습니다.");
-                playersToUpdate.add(onlinePlayer);
-            } else {
-                 await sendMail(userId, '월드보스', { item: boxItem, description: "토벌 참여 보상" });
-            }
-        }
-    }
-    const sortedParticipants = Array.from(worldBossState.participants.entries()).sort((a, b) => b[1].damageDealt - a[1].damageDealt);
-    io.emit('chatMessage', { isSystem: true, message: "<b>[월드보스] ✨ 기여도 랭킹 ✨</b>" });
-    const topN = Math.min(5, sortedParticipants.length);
-    for (let i = 0; i < topN; i++) {
-        const [userId, participant] = sortedParticipants[i];
-        const percentage = (participant.damageDealt / totalDamage * 100).toFixed(2);
-        io.emit('chatMessage', { isSystem: true, message: `<b>${i + 1}위</b>: ${participant.username} (기여도: ${percentage}%)` });
-    }
-    io.emit('chatMessage', { isSystem: true, message: "====================" });
-    for (const [userId, participant] of sortedParticipants) {
-        const damageShare = participant.damageDealt / totalDamage;
-        const goldReward = Math.floor(WORLD_BOSS_CONFIG.REWARDS.GOLD * damageShare);
-        if (goldReward <= 0) continue;
-        const onlinePlayer = onlinePlayers[userId];
-        if (onlinePlayer) {
-            onlinePlayer.gold += goldReward;
-            pushLog(onlinePlayer, `[월드보스] 기여도 보상으로 ${goldReward.toLocaleString()} G를 획득했습니다.`);
-        } else {
-            await sendMail(userId, '월드보스', { gold: goldReward, description: "기여도 보상" });
-        }
-    }
-    const ticketWinners = {};
-    for (let i = 0; i < WORLD_BOSS_CONFIG.REWARDS.PREVENTION_TICKETS; i++) {
-        const rWinner = Math.random();
-        let accWinner = 0;
-        let winnerId = null;
-        for (const [userId] of sortedParticipants) {
-            const damageShare = worldBossState.participants.get(userId).damageDealt / totalDamage;
-            accWinner += damageShare;
-            if (rWinner < accWinner) { winnerId = userId; break; }
-        }
-        if (winnerId) {
-            const winnerUsername = worldBossState.participants.get(winnerId).username;
-            ticketWinners[winnerUsername] = (ticketWinners[winnerUsername] || 0) + 1;
-        }
-    }
-    if (Object.keys(ticketWinners).length > 0) {
-        const ticketLog = Object.entries(ticketWinners).map(([name, count]) => `${name}님 ${count}개`).join(', ');
-        io.emit('chatMessage', { isSystem: true, message: `[월드보스] 📜 파괴 방지 티켓 분배 결과: ${ticketLog}` });
-        for (const [winnerUsername, count] of Object.entries(ticketWinners)) {
-            const winner = Object.values(onlinePlayers).find(p => p.username === winnerUsername);
-            const winnerId = winner ? winner.user : (await GameData.findOne({username: winnerUsername}).select('user').lean())?.user;
-            const ticketItem = createItemInstance('prevention_ticket', count);
-            if (ticketItem && winnerId) {
-                if (winner) {
-                    handleItemStacking(winner, ticketItem);
-                    pushLog(winner, `[월드보스] 행운 보상으로 '파괴 방지권' ${count}개를 획득했습니다!`);
-                    playersToUpdate.add(winner);
-                } else {
-                    await sendMail(winnerId, '월드보스', { item: ticketItem, description: "행운 보상" });
-                }
-            }
-        }
-    }
-    const { ITEM_DROP_RATES } = WORLD_BOSS_CONFIG.REWARDS;
-    let droppedItem = null;
-    const rGrade = Math.random();
-    let accGrade = 0;
-    let chosenGrade = null;
-    for (const grade in ITEM_DROP_RATES) {
-        accGrade += ITEM_DROP_RATES[grade];
-        if (rGrade < accGrade) { chosenGrade = grade; break; }
-    }
-    if (chosenGrade) {
-        const itemPool = Object.keys(itemData).filter(id => itemData[id].grade === chosenGrade && itemData[id].tradable === true);
-        if (itemPool.length > 0) {
-            const chosenItemId = itemPool[Math.floor(Math.random() * itemPool.length)];
-            droppedItem = createItemInstance(chosenItemId);
-        }
-    }
-    if (droppedItem) {
-        io.emit('chatMessage', { isSystem: true, message: `[월드보스] 기여도에 따라 💎<b>아이템</b>💎 획득 롤을 시작합니다...` });
-        const rWinner = Math.random();
-        let accWinner = 0;
-        let winnerId = null;
-        for (const [userId] of sortedParticipants) {
-            const damageShare = worldBossState.participants.get(userId).damageDealt / totalDamage;
-            accWinner += damageShare;
-            if (rWinner < accWinner) { winnerId = userId; break; }
-        }
-        if (winnerId) {
-            const winnerParticipantData = worldBossState.participants.get(winnerId);
-            const winnerUsername = winnerParticipantData.username;
-            const onlineWinner = onlinePlayers[winnerId];
-            const winnerShare = (winnerParticipantData.damageDealt / totalDamage * 100).toFixed(2);
-            const itemNameHTML = `<span class="${droppedItem.grade}">${droppedItem.name}</span>`;
-            if (onlineWinner) {
-                handleItemStacking(onlineWinner, droppedItem);
-                pushLog(onlineWinner, `[최종 롤 당첨] 축하합니다! 최종 보상으로 '${droppedItem.name}' 아이템을 획득했습니다!`);
-                playersToUpdate.add(onlineWinner);
-            } else {
-                 await sendMail(winnerId, '월드보스', { item: droppedItem, description: "최종 롤 보상" });
-            }
-            const winMessage = `[월드보스] ${winnerUsername}님이 <b>${winnerShare}%</b>의 확률로 승리하여 ${itemNameHTML} 아이템을 획득했습니다!`;
-            io.emit('globalAnnouncement', `🎉 ${winMessage} 🎉`);
-            io.emit('chatMessage', { isSystem: true, message: winMessage });
-        }
-    }
-
-    for (const player of playersToUpdate) {
-        sendInventoryUpdate(player);
     }
     
-    await GameData.updateMany({ "worldBossContribution.bossId": worldBossState.bossId }, { $set: { worldBossContribution: { damageDealt: 0, bossId: null } } });
+    await GameData.updateMany(
+        { "worldBossContribution.bossId": worldBossState.bossId },
+        { $set: { worldBossContribution: { damageDealt: 0, bossId: null } } }
+    );
+
     for (const player of Object.values(onlinePlayers)) {
         sendState(player.socket, player, calcMonsterStats(player));
     }
+
     io.emit('worldBossDefeated');
     worldBossState = null;
     if (worldBossTimer) clearTimeout(worldBossTimer);
@@ -3230,24 +3206,33 @@ async function listOnAuction(player, { uid, price, quantity }) {
 
 async function buyFromAuction(player, { listingId, quantity }) {
     if (!player || !listingId || !quantity) return;
+
     const amountToBuy = parseInt(quantity, 10);
     if (isNaN(amountToBuy) || amountToBuy <= 0) {
         return player.socket.emit('serverAlert', '유효한 구매 수량을 입력해주세요.');
     }
+
     try {
-        const listing = await AuctionItem.findById(listingId);
+        const listing = await AuctionItem.findOneAndUpdate(
+            { _id: listingId, "item.quantity": { $gte: amountToBuy } }, 
+            { $inc: { "item.quantity": -amountToBuy } }, 
+            { new: false } 
+        );
+
+
         if (!listing) {
-            pushLog(player, '[거래소] 이미 판매되었거나 존재하지 않는 물품입니다.');
+            pushLog(player, '[거래소] 이미 판매되었거나 재고가 부족한 물품입니다.');
             return io.emit('auctionUpdate');
         }
+
         if (listing.sellerId.toString() === player.user.toString()) {
+            await AuctionItem.findByIdAndUpdate(listingId, { $inc: { "item.quantity": amountToBuy } });
             return player.socket.emit('serverAlert', '자신이 등록한 물품은 구매할 수 없습니다.');
         }
-        if (listing.item.quantity < amountToBuy) {
-            return player.socket.emit('serverAlert', '구매하려는 수량이 재고보다 많습니다.');
-        }
+
         const totalPrice = listing.price * amountToBuy;
         if (player.gold < totalPrice) {
+            await AuctionItem.findByIdAndUpdate(listingId, { $inc: { "item.quantity": amountToBuy } });
             const feedbackMsg = `골드가 부족하여 구매에 실패했습니다.\n\n필요 골드: ${totalPrice.toLocaleString()} G\n보유 골드: ${player.gold.toLocaleString()} G`;
             return player.socket.emit('serverAlert', feedbackMsg);
         }
@@ -3265,27 +3250,25 @@ async function buyFromAuction(player, { listingId, quantity }) {
             gold: totalPrice,
             description: `'${listing.item.name}' ${amountToBuy}개 판매 대금이 도착했습니다.`
         });
-        listing.item.quantity -= amountToBuy;
-        if (listing.item.quantity <= 0) {
+        
+        const finalListingCheck = await AuctionItem.findById(listingId);
+        if (finalListingCheck && finalListingCheck.item.quantity <= 0) {
             await AuctionItem.findByIdAndDelete(listingId);
-        } else {
-            await AuctionItem.findByIdAndUpdate(listingId, { $set: { 'item.quantity': listing.item.quantity } });
         }
+
         const itemNameHTML = `<span class="${listing.item.grade}">${listing.item.name}</span>`;
         const announcementMessage = `[거래소] ${listing.sellerUsername}님이 등록한 ${itemNameHTML} 아이템을 ${player.username}님이 구매했습니다.`;
         io.emit('chatMessage', { isSystem: true, message: announcementMessage });
         pushLog(player, `[거래소] ${listing.item.name} ${amountToBuy}개를 ${totalPrice.toLocaleString()} G에 구매하여 우편으로 받았습니다.`);
-       
- if (player.titleCounters) {
+
+        if (player.titleCounters) {
             player.titleCounters.ahBuyCount = (player.titleCounters.ahBuyCount || 0) + amountToBuy;
             if (player.titleCounters.ahBuyCount >= 100) {
                 grantTitle(player, '[큰손]');
             }
         }
 
-
-
- sendState(player.socket, player, calcMonsterStats(player));
+        sendState(player.socket, player, calcMonsterStats(player));
         io.emit('auctionUpdate');
     } catch (e) {
         console.error('거래소 구매 오류:', e);
@@ -3320,29 +3303,37 @@ async function spawnWorldBoss() {
 
 async function cancelAuctionListing(player, listingId) {
     if (!player || !listingId) return;
+
     try {
         const listing = await AuctionItem.findById(listingId);
+
         if (!listing) {
             pushLog(player, '[거래소] 존재하지 않는 물품입니다.');
             io.emit('auctionUpdate');
             return;
         }
+
         if (listing.sellerId.toString() !== player.user.toString()) {
             pushLog(player, '[거래소] 자신이 등록한 물품만 취소할 수 있습니다.');
             return;
         }
+        const removedListing = await AuctionItem.findByIdAndDelete(listingId);
+        if (!removedListing) {
+            pushLog(player, '[거래소] 등록 취소 중 문제가 발생했습니다. 아이템이 이미 처리되었을 수 있습니다.');
+            return io.emit('auctionUpdate');
+        }
 
         await sendMail(player.user, '거래소', {
-            item: listing.item,
-            description: `등록 취소한 '${listing.item.name}' 아이템이 반환되었습니다.`
+            item: removedListing.item,
+            description: `등록 취소한 '${removedListing.item.name}' 아이템이 반환되었습니다.`
         });
 
-        await AuctionItem.findByIdAndDelete(listingId);
-        pushLog(player, `[거래소] ${listing.item.name} 등록을 취소하고 아이템을 우편으로 회수했습니다.`);
+        pushLog(player, `[거래소] ${removedListing.item.name} 등록을 취소하고 아이템을 우편으로 회수했습니다.`);
         io.emit('auctionUpdate');
+
     } catch (e) {
-        console.error('거래소 취소 오류:', e);
-        pushLog(player, '[거래소] 등록 취소에 실패했습니다.');
+        console.error(`[거래소 취소 심각한 오류] User: ${player.username}, ListingID: ${listingId}`, e);
+        pushLog(player, '[거래소] 시스템 오류로 등록 취소에 실패했습니다. 운영자에게 문의해주세요.');
     }
 }
 
@@ -3402,5 +3393,102 @@ function startHatching(player) {
     sendInventoryUpdate(player); 
 }
 
+
+function calcPersonalRaidBossStats(floor) {
+    const base = { hp: 100000, attack: 10000, defense: 10000 };
+    const multiplier = Math.pow(1.05, floor - 1);
+    
+    return {
+        name: '혈염의 감시자',
+        floor: floor,
+        hp: base.hp * multiplier,
+        attack: base.attack * multiplier,
+        defense: base.defense * multiplier,
+        barrier: (base.hp * multiplier) * 5,
+        distortion: 50,
+        empoweredAttack: 10
+    };
+}
+
+async function startPersonalRaid(player) {
+    if (!player) return;
+    if (player.raidState && player.raidState.isActive) {
+        return pushLog(player, "[개인 레이드] 이미 레이드를 진행 중입니다.");
+    }
+
+    const now = new Date();
+    const lastReset = new Date(player.personalRaid.lastReset);
+    const lastResetDay = new Date(lastReset.getFullYear(), lastReset.getMonth(), lastReset.getDate());
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (today > lastResetDay) {
+        player.personalRaid.entries = 2;
+        player.personalRaid.lastReset = now;
+    }
+    if (player.personalRaid.entries <= 0) {
+        return pushLog(player, "[개인 레이드] 오늘의 입장 횟수를 모두 소모했습니다.");
+    }
+    player.personalRaid.entries--;
+
+
+    player.raidState = {
+        isActive: true,
+        floor: 1,
+        monster: calcPersonalRaidBossStats(1)
+    };
+    player.raidState.monster.currentHp = player.raidState.monster.hp;
+    player.raidState.monster.currentBarrier = player.raidState.monster.barrier;
+    
+    await GameData.updateOne({ user: player.user }, { $set: { raidState: { isActive: true, floor: 1 } } });
+
+    pushLog(player, `[개인 레이드] 1층 '혈염의 감시자'와의 전투를 시작합니다! (남은 횟수: ${player.personalRaid.entries}회)`);
+    player.socket.emit('personalRaid:started', player.raidState);
+}
+
+
+async function endPersonalRaid(player, died = false) {
+    if (!player || !player.raidState || !player.raidState.isActive) return;
+
+    if (died) {
+        pushLog(player, `[개인 레이드] ${player.raidState.floor}층에서 패배했습니다. 일반 등반으로 복귀합니다.`);
+    } else {
+        pushLog(player, "[개인 레이드] 레이드를 종료하고 일반 등반으로 복귀합니다.");
+    }
+
+
+    player.raidState = { isActive: false, floor: 1, monster: null };
+    await GameData.updateOne({ user: player.user }, { $set: { raidState: { isActive: false, floor: 1 } } });
+    
+    player.socket.emit('personalRaid:ended');
+    resetPlayer(player, '', player.level);
+}
+
+function onPersonalRaidFloorClear(player) {
+    if (!player || !player.raidState) return;
+
+    const clearedFloor = player.raidState.floor;
+    const goldReward = clearedFloor * 1000000;
+    player.gold += goldReward;
+    pushLog(player, `[개인 레이드] ${clearedFloor}층 클리어! (+${goldReward.toLocaleString()} G)`);
+
+
+    if (Math.random() < 0.05) {
+        const crystal = createItemInstance('pure_blood_crystal');
+        handleItemStacking(player, crystal);
+        pushLog(player, `[개인 레이드] <span class="Mystic">${crystal.name}</span> 1개를 획득했습니다!`);
+        sendInventoryUpdate(player);
+    }
+
+
+    player.raidState.floor++;
+    const nextBoss = calcPersonalRaidBossStats(player.raidState.floor);
+    player.raidState.monster = nextBoss;
+    player.raidState.monster.currentHp = nextBoss.hp;
+    player.raidState.monster.currentBarrier = nextBoss.barrier;
+    
+
+    calculateTotalStats(player);
+    player.currentHp = player.stats.total.hp;
+}
 
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));
