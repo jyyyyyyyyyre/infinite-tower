@@ -1933,8 +1933,8 @@ function gameTick(player) {
  
         if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
             const bloodthirstDamage = raidBoss.hp * 0.50;
-            pDmg += bloodthirstDamage; // 추가 피해를 입히고
-            player.currentHp = player.stats.total.hp; // 체력을 100%로 회복합니다. (방금 입은 피해가 상쇄됨)
+            pDmg += bloodthirstDamage; 
+            player.currentHp = player.stats.total.hp; 
             pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
         }
         
@@ -2239,35 +2239,52 @@ function onClearFloor(p) {
 }
 
 
+
 async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
     if (!p) return;
 
-    let originalItem;
-    let isEquipped = false;
-    let originalItemLocation = 'inventory';
 
-    let itemFromInventory = p.inventory.find(i => i.uid === uid);
-    if (itemFromInventory) {
-        originalItem = { ...itemFromInventory };
-    } else {
-        for (const type of ['weapon', 'armor']) {
-            if (p.equipment[type] && p.equipment[type].uid === uid) {
-                originalItem = { ...p.equipment[type] };
-                isEquipped = true;
-                originalItemLocation = 'equipment';
-                break;
+    let itemToEnhance;
+    let isEquipped = false;
+
+
+    for (const slot of ['weapon', 'armor']) {
+        if (p.equipment[slot] && p.equipment[slot].uid === uid) {
+            isEquipped = true;
+            itemToEnhance = p.equipment[slot];
+            p.equipment[slot] = null; 
+            await GameData.updateOne({ user: p.user }, { $set: { [`equipment.${slot}`]: null } });
+            break;
+        }
+    }
+
+
+    if (!itemToEnhance) {
+        const itemIndex = p.inventory.findIndex(i => i.uid === uid);
+        if (itemIndex > -1) {
+            const itemStack = p.inventory[itemIndex];
+            if (itemStack.quantity > 1) {
+                itemStack.quantity--; 
+                itemToEnhance = { ...itemStack, quantity: 1 };
+                await GameData.updateOne({ user: p.user, "inventory.uid": uid }, { $inc: { "inventory.$.quantity": -1 } });
+            } else {
+                itemToEnhance = p.inventory.splice(itemIndex, 1)[0]; 
+                await GameData.updateOne({ user: p.user }, { $pull: { inventory: { uid: uid } } });
             }
         }
     }
 
-    if (!originalItem || (originalItem.type !== 'weapon' && originalItem.type !== 'armor')) {
-        return;
+
+    if (!itemToEnhance) {
+        return pushLog(p, '[강화] 아이템을 처리하는 중 오류가 발생했거나, 이미 소모된 아이템입니다.');
     }
 
-    const cur = originalItem.enhancement;
-    const isPrimal = originalItem.grade === 'Primal';
+
+    const cur = itemToEnhance.enhancement;
+    const isPrimal = itemToEnhance.grade === 'Primal';
     const titleEffects = p.equippedTitle ? titleData[p.equippedTitle]?.effect : null;
     let cost, riftShardCost = 0;
+
 
     if (isPrimal) {
         const nextLevel = cur + 1;
@@ -2275,7 +2292,9 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
         riftShardCost = nextLevel * 10;
         const shardItem = p.inventory.find(i => i.id === 'rift_shard');
         if (!shardItem || shardItem.quantity < riftShardCost) {
-            return pushLog(p, `[강화] 균열의 파편이 부족합니다. (필요: ${riftShardCost}개)`);
+            pushLog(p, `[강화] 균열의 파편이 부족합니다. (필요: ${riftShardCost}개)`);
+            handleItemStacking(p, itemToEnhance);
+            return sendInventoryUpdate(p);
         }
     } else {
         cost = Math.floor(1000 * Math.pow(2.1, cur));
@@ -2284,75 +2303,43 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
         cost = Math.floor(cost * (1 - titleEffects.enhancementCostReduction));
     }
     if (p.gold < cost) {
-        return pushLog(p, '[강화] 골드가 부족합니다.');
+        pushLog(p, '[강화] 골드가 부족합니다.');
+        handleItemStacking(p, itemToEnhance); 
+        return sendInventoryUpdate(p);
     }
-    if (useTicket && originalItem.enhancement >= 10) {
-        if (!p.inventory.some(i => i.id === 'prevention_ticket')) {
-            return pushLog(p, '[강화] 파괴 방지권이 없습니다.');
-        }
-    }
-
-
-    let itemTaken = false;
-    if (!isEquipped && originalItem.quantity > 1) {
-
-        const updateResult = await GameData.updateOne(
-            { user: p.user, "inventory.uid": uid, "inventory.quantity": { $gt: 0 } },
-            { $inc: { "inventory.$.quantity": -1 } }
-        );
-        if (updateResult.modifiedCount > 0) {
-            itemTaken = true;
-            p.inventory.find(i => i.uid === uid).quantity--; // 로컬 데이터에도 반영
-        }
-    } else {
-
-        const pullQuery = isEquipped 
-            ? { $set: { [`equipment.${originalItem.type}`]: null } }
-            : { $pull: { inventory: { uid: uid } } };
-        const updateResult = await GameData.updateOne({ user: p.user }, pullQuery);
-        if (updateResult.modifiedCount > 0) {
-            itemTaken = true;
-             if (isEquipped) p.equipment[originalItem.type] = null;
-             else p.inventory = p.inventory.filter(i => i.uid !== uid);
-        }
+    if (useTicket && cur >= 10 && !p.inventory.some(i => i.id === 'prevention_ticket')) {
+        pushLog(p, '[강화] 파괴 방지권이 없습니다.');
+        handleItemStacking(p, itemToEnhance); 
+        return sendInventoryUpdate(p);
     }
 
-    if (!itemTaken) {
 
-        return pushLog(p, '[강화] 아이템을 처리하는 중입니다. 잠시 후 다시 시도해주세요.');
-    }
-    
+    p.gold -= cost;
+    if (isPrimal) p.inventory.find(i => i.id === 'rift_shard').quantity -= riftShardCost;
 
-    const itemToEnhance = { ...originalItem, quantity: 1 }; // 분리된 아이템으로 강화 진행
-
-    p.gold -= cost; 
-    if (isPrimal) { p.inventory.find(i => i.id === 'rift_shard').quantity -= riftShardCost; }
 
     let rates = { ...(enhancementTable[cur + 1] || highEnhancementRate) };
     if (isPrimal && cur >= 10) rates = { success: 0.10, maintain: 0.00, fail: 0.00, destroy: 0.90 };
     if (titleEffects?.enhancementSuccessRate) rates.success += titleEffects.enhancementSuccessRate;
     if (titleEffects?.enhancementMaintainChance && rates.fail > 0) {
         const shift = Math.min(rates.fail, titleEffects.enhancementMaintainChance);
-        rates.fail -= shift;
-        rates.maintain += shift;
+        rates.fail -= shift; rates.maintain += shift;
     }
     if (useHammer && !isPrimal && p.inventory.some(i => i.id === 'hammer_hephaestus')) {
-        p.inventory.find(i => i.id === 'hammer_hephaestus').quantity--;
-
+        const hammer = p.inventory.find(i => i.id === 'hammer_hephaestus');
+        hammer.quantity--;
         let bonusToApply = 0.15;
-        const fromDestroy = Math.min(bonusToApply, rates.destroy);
-        rates.destroy -= fromDestroy; bonusToApply -= fromDestroy;
+        const fromDestroy = Math.min(bonusToApply, rates.destroy); rates.destroy -= fromDestroy; bonusToApply -= fromDestroy;
         if (bonusToApply > 0) { const fromFail = Math.min(bonusToApply, rates.fail); rates.fail -= fromFail; bonusToApply -= fromFail; }
         if (bonusToApply > 0) { const fromMaintain = Math.min(bonusToApply, rates.maintain); rates.maintain -= fromMaintain; bonusToApply -= fromMaintain; }
-        rates.success += (0.15 - bonusToApply);
-        rates.success = Math.min(1, rates.success);
+        rates.success += (0.15 - bonusToApply); rates.success = Math.min(1, rates.success);
     }
 
     const r = Math.random();
     let result = '', msg = '', finalItem = null;
     const hpBefore = p.stats.total.hp;
     
-
+ 
     if (r < rates.success) {
         result = 'success';
         itemToEnhance.enhancement++;
@@ -2367,36 +2354,37 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
         result = 'maintain';
         finalItem = itemToEnhance;
         msg = `[+${cur} ${itemToEnhance.name}] 강화 유지!`;
-        if (++p.titleCounters.enhancementFailCount >= 500) grantTitle(p, '[키리]');
+        if (p.titleCounters) if (++p.titleCounters.enhancementFailCount >= 500) grantTitle(p, '[키리]');
     } else if (r < rates.success + rates.maintain + rates.fail) {
         result = 'fail';
         itemToEnhance.enhancement = Math.max(0, cur - 1);
         finalItem = itemToEnhance;
         msg = `[+${cur} ${itemToEnhance.name}] 강화 실패... → [+${itemToEnhance.enhancement}]`;
-        if (++p.titleCounters.enhancementFailCount >= 500) grantTitle(p, '[키리]');
+        if (p.titleCounters) if (++p.titleCounters.enhancementFailCount >= 500) grantTitle(p, '[키리]');
     } else {
+        result = 'destroy';
         if (useTicket && cur >= 10) {
-            p.inventory.find(i => i.id === 'prevention_ticket').quantity--;
+            const ticket = p.inventory.find(i => i.id === 'prevention_ticket');
+            ticket.quantity--;
             result = 'maintain';
             finalItem = itemToEnhance;
             msg = `<span class="Epic">파괴 방지권</span>을 사용하여 파괴를 막았습니다!`;
         } else {
-            result = 'destroy';
-            finalItem = null; // 아이템 파괴
+            finalItem = null;
             msg = `<span class="${itemToEnhance.grade}">${itemToEnhance.name}</span>이(가) 파괴되었습니다...`;
-            if (++p.titleCounters.destroyCount >= 50) grantTitle(p, '[펑..]');
+            if (p.titleCounters) if (++p.titleCounters.destroyCount >= 50) grantTitle(p, '[펑..]');
         }
     }
     
 
     if (finalItem) {
         finalItem.uid = new mongoose.Types.ObjectId().toString(); 
-        if (isEquipped) {
-            await GameData.updateOne({ user: p.user }, { $set: { [`equipment.${finalItem.type}`]: finalItem } });
-            p.equipment[finalItem.type] = finalItem; 
+
+        if (result === 'success' && isEquipped) {
+            p.equipment[finalItem.type] = finalItem;
         } else {
-            await GameData.updateOne({ user: p.user }, { $push: { inventory: finalItem } });
-            p.inventory.push(finalItem); 
+
+            handleItemStacking(p, finalItem);
         }
     }
     
@@ -2406,12 +2394,13 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
     p.currentHp = hpBefore > 0 && hpAfter > 0 ? p.currentHp * (hpAfter / hpBefore) : hpAfter;
     if (p.currentHp > hpAfter) p.currentHp = hpAfter;
 
+
     p.inventory = p.inventory.filter(i => i.quantity > 0);
     
     pushLog(p, msg);
     socket.emit('enhancementResult', { result, newItem: finalItem, destroyed: result === 'destroy' });
-    sendState(p.socket, p, calcMonsterStats(p)); 
-    sendInventoryUpdate(p); 
+    sendState(socket, p, calcMonsterStats(p));
+    sendInventoryUpdate(p);
     updateFameScore(socket, p);
 }
 
