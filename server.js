@@ -1172,8 +1172,7 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
             socket.emit('onlineUsersData', { playersList, totalUsers, subAccountCount });
         })
 
-
-  .on('chatMessage', async (msg) => {
+.on('chatMessage', async (msg) => {
     try {
         if (typeof msg !== 'string' || msg.trim().length === 0) return;
         const trimmedMsg = msg.slice(0, 200);
@@ -1181,20 +1180,74 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
 
         if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
             const args = trimmedMsg.substring(1).split(' ').filter(arg => arg.length > 0);
-            const command = args.shift().toLowerCase();
+            const commandOrTarget = args.shift().toLowerCase();
             const adminUsername = socket.username;
 
-            if (command === '공지' || command === '보스소환') {
-                if (command === '공지') {
+            if (commandOrTarget === '추방') {
+                const targetUsername = args.shift();
+                const reason = args.join(' ') || '특별한 사유 없음';
+                if (!targetUsername) {
+                    return pushLog(player, '[관리자] 추방할 유저의 닉네임을 입력하세요. (예: /추방 유저명 [사유])');
+                }
+                const targetPlayer = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === targetUsername.toLowerCase());
+                if (targetPlayer) {
+                    targetPlayer.socket.emit('forceDisconnect', { message: `관리자에 의해 서버와의 연결이 종료되었습니다. (사유: ${reason})` });
+                    targetPlayer.socket.disconnect(true);
+                    const announcement = `[관리자] ${adminUsername}님이 ${targetUsername}님을 추방했습니다. (사유: ${reason})`;
+                    io.emit('chatMessage', { isSystem: true, message: announcement });
+                    pushLog(player, announcement);
+                } else {
+                    pushLog(player, `[관리자] 현재 접속 중인 유저 중에서 '${targetUsername}'을(를) 찾을 수 없습니다.`);
+                }
+                return;
+            }
+
+            if (commandOrTarget === '레이드리셋') {
+                Object.values(onlinePlayers).forEach(p => {
+                    if (p.personalRaid) {
+                        p.personalRaid.entries = 2; // 각 플레이어의 레이드 횟수를 2로 설정
+                    }
+                    pushLog(p, '[관리자]에 의해 개인 레이드 입장 횟수가 2회로 초기화되었습니다.');
+                });
+
+                const announcement = `[관리자] 모든 온라인 유저의 개인 레이드 횟수가 초기화되었습니다.`;
+                io.emit('chatMessage', { isSystem: true, message: announcement });
+                pushLog(player, '[관리자] 모든 온라인 플레이어의 개인 레이드 입장 횟수를 초기화했습니다.');
+                return; 
+            }
+
+
+            if (commandOrTarget === '공지' || commandOrTarget === '보스소환') {
+                if (commandOrTarget === '공지') {
                     const noticeMessage = args.join(' ');
                     io.emit('globalAnnouncement', noticeMessage);
                     io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: noticeMessage, title: player.equippedTitle });
                 }
-                if (command === '보스소환') spawnWorldBoss();
+                if (commandOrTarget === '보스소환') spawnWorldBoss();
                 return;
             }
 
-            const target = command;
+ if (commandOrTarget === '보스제거') {
+                if (!worldBossState || !worldBossState.isActive) {
+                    return pushLog(player, '[관리자] 제거할 월드보스가 없습니다.');
+                }
+
+                const bossName = worldBossState.name;
+               
+                await WorldBossState.updateOne({ uniqueId: 'singleton' }, { $set: { isActive: false, currentHp: 0 } });
+                
+                worldBossState = null;
+
+                io.emit('worldBossDefeated');
+
+                const announcement = `[관리자] ${adminUsername}님이 월드보스(${bossName})를 제거했습니다.`;
+                io.emit('chatMessage', { isSystem: true, message: announcement });
+                pushLog(player, announcement);
+                
+                return; 
+            }
+
+            const target = commandOrTarget;
             const subject = args.shift();
             const param3 = args.shift();
             const description = args.join(' ') || '관리자가 지급한 선물입니다.';
@@ -1254,7 +1307,7 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
                     if (item) await sendMail(recipientId, sender, { item: item, description });
                 }
             }
-
+            
             const isGold = subject.toLowerCase() === '골드';
             const itemInfo = isGold ? null : (itemData[adminItemAlias[subject]] || petData[adminItemAlias[subject]]);
             const givenItemName = isGold ? `${parseInt(param3 || '0', 10).toLocaleString()} 골드` : itemInfo?.name || subject;
@@ -1280,6 +1333,9 @@ checkStateBasedTitles(onlinePlayers[socket.userId]);
         console.error('채팅 메시지 처리 중 오류 발생:', error);
     }
 })
+
+
+  
        .on('showOffItem', ({ uid }) => {
     const player = onlinePlayers[socket.userId];
     if (!player || !uid) return;
@@ -3048,7 +3104,7 @@ async function onWorldBossDefeated() {
         const goldReward = Math.floor(10000000000 * (participant.damageDealt / totalDamage));
         if (goldReward > 0) userRewards.gold += goldReward;
 
-        if (contributionPercent >= 0.1) userRewards.items.push(createItemInstance('boss_participation_box'));
+        if (contributionPercent >= 0) userRewards.items.push(createItemInstance('boss_participation_box'));
         if (contributionPercent >= 1) userRewards.items.push(createItemInstance('rift_shard', 5));
         if (contributionPercent >= 5) userRewards.items.push(createItemInstance('rift_shard', 20));
         if (contributionPercent >= 10) {
@@ -3133,8 +3189,6 @@ io.emit('chatMessage', { isSystem: true, message: "전원에게 기여도에 따
 
     io.emit('worldBossDefeated');
     worldBossState = null;
-    if (worldBossTimer) clearTimeout(worldBossTimer);
-    worldBossTimer = setTimeout(spawnWorldBoss, WORLD_BOSS_CONFIG.SPAWN_INTERVAL);
 }
 
 async function listOnAuction(player, { uid, price, quantity }) {
@@ -3411,15 +3465,32 @@ async function startPersonalRaid(player) {
         return pushLog(player, "[개인 레이드] 이미 레이드를 진행 중입니다.");
     }
 
-    const now = new Date();
-    const lastReset = new Date(player.personalRaid.lastReset);
-    const lastResetDay = new Date(lastReset.getFullYear(), lastReset.getMonth(), lastReset.getDate());
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+ const now = new Date();
+    const lastResetTime = new Date(player.personalRaid.lastReset).getTime();
 
-    if (today > lastResetDay) {
-        player.personalRaid.entries = 2;
-        player.personalRaid.lastReset = now;
+
+    const sixAmToday = new Date();
+    sixAmToday.setHours(6, 0, 0, 0);
+    const sixAmTodayTime = sixAmToday.getTime();
+
+
+    let mostRecentResetPoint;
+    if (now.getTime() >= sixAmTodayTime) {
+
+        mostRecentResetPoint = sixAmTodayTime;
+    } else {
+
+        const sixAmYesterday = new Date(sixAmToday);
+        sixAmYesterday.setDate(sixAmYesterday.getDate() - 1);
+        mostRecentResetPoint = sixAmYesterday.getTime();
     }
+
+
+    if (lastResetTime < mostRecentResetPoint) {
+        player.personalRaid.entries = 2;
+        player.personalRaid.lastReset = now; 
+    }
+
     if (player.personalRaid.entries <= 0) {
         return pushLog(player, "[개인 레이드] 오늘의 입장 횟수를 모두 소모했습니다.");
     }
@@ -3454,8 +3525,11 @@ async function endPersonalRaid(player, died = false) {
     player.raidState = { isActive: false, floor: 1, monster: null };
     await GameData.updateOne({ user: player.user }, { $set: { raidState: { isActive: false, floor: 1 } } });
     
+    calculateTotalStats(player);
+    player.currentHp = player.stats.total.hp;
+    
     player.socket.emit('personalRaid:ended');
-    resetPlayer(player, '', player.level);
+    sendState(player.socket, player, calcMonsterStats(player));
 }
 
 function onPersonalRaidFloorClear(player) {

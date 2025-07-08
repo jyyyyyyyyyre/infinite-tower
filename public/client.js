@@ -1583,10 +1583,11 @@ function updateRiftEnchantPanel(item, previouslyLockedIndices = []) {
             const valueSuffix = ['focus', 'penetration', 'tenacity', 'attack_percent', 'defense_percent', 'hp_percent', 'all_stats_percent', 'gold_gain', 'extra_climb_chance', 'def_penetration'].includes(enchant.type) ? '%' : '';
             labelContent = `<span style="color: ${color};">${name} +${enchant.value}${valueSuffix}</span>`;
         }
-
+        
+        const isDisabled = !enchant;
         const isChecked = previouslyLockedIndices.includes(i) ? 'checked' : '';
         optionDiv.innerHTML = `
-            <input type="checkbox" id="lock-enchant-${i}" data-index="${i}" ${isChecked}>
+            <input type="checkbox" id="lock-enchant-${i}" data-index="${i}" ${isChecked} ${isDisabled ? 'disabled' : ''}>
             <label for="lock-enchant-${i}">${labelContent}</label>
         `;
         optionsContainer.appendChild(optionDiv);
