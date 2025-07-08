@@ -3885,6 +3885,10 @@ async function startPersonalRaid(player) {
     }
     player.personalRaid.entries--;
 
+await GameData.updateOne({ user: player.user }, { 
+        $set: { "personalRaid.entries": player.personalRaid.entries } 
+    });
+
 
     player.raidState = {
         isActive: true,
@@ -3902,25 +3906,13 @@ async function startPersonalRaid(player) {
 
 
 async function endPersonalRaid(player, died = false) {
-    if (died) {
-        pushLog(player, `[개인 레이드] ${player.raidState.floor}층에서 패배했습니다. 일반 등반으로 복귀합니다.`);
-    } else {
-        pushLog(player, "[개인 레이드] 레이드를 종료하고 일반 등반으로 복귀합니다.");
-    }
+    if (!player || !player.raidState || !player.raidState.isActive) return;
 
-    player.raidState = { isActive: false, floor: 1, monster: null };
-    await GameData.updateOne({ user: player.user }, { $set: { raidState: { isActive: false, floor: 1 } } });
-    
-    calculateTotalStats(player);
-    player.currentHp = player.stats.total.hp;
+    const message = died 
+        ? `[개인 레이드] ${player.raidState.floor}층에서 패배하여 일반 등반으로 복귀합니다.`
+        : "[개인 레이드] 레이드를 종료하고 일반 등반으로 복귀합니다.";
 
-    const newMonster = calcMonsterStats(player);
-    player.monster.currentHp = newMonster.hp;
-    player.monster.currentBarrier = newMonster.barrier;
-    player.monster.lastCalculatedLevel = player.level;
-    
-    player.socket.emit('personalRaid:ended');
-    sendState(player.socket, player, newMonster); 
+    resetPlayer(player, message, player.level); 
 }
 
 function onPersonalRaidFloorClear(player) {
