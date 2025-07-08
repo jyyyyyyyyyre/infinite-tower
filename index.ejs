@@ -559,6 +559,279 @@
         </div>
     </div>
 
+  <div id="admin-panel-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content admin-panel-content">
+            <span class="close-button">&times;</span>
+            <h2>👑 어드민 패널</h2>
+            <div class="admin-panel-container">
+                <div class="admin-tabs">
+                    <button class="admin-tab-button active" data-tab="admin-dashboard">대시보드</button>
+                    <button class="admin-tab-button" data-tab="admin-user-mgmt">유저 관리</button>
+                    <button class="admin-tab-button" data-tab="admin-chat-log">채팅 로그</button>
+                    <button class="admin-tab-button" data-tab="admin-settings">게임 설정</button>
+                </div>
+
+                <div class="admin-tab-content active" id="admin-dashboard">
+                    <h3>서버 실시간 현황</h3>
+                    <div class="dashboard-metrics">
+                        <div class="metric-card">
+                            <h4>총 유저 수</h4>
+                            <p id="admin-total-users">0</p>
+                        </div>
+                        <div class="metric-card">
+                            <h4>온라인 유저 수</h4>
+                            <p id="admin-online-users">0</p>
+                        </div>
+                        <div class="metric-card">
+                            <h4>서버 총 골드</h4>
+                            <p id="admin-total-gold">0 G</p>
+                        </div>
+                    </div>
+                    <h3>실시간 접속자 목록</h3>
+                    <div class="online-users-list-container">
+                        <table id="admin-online-users-table">
+                            <thead>
+                                <tr>
+                                    <th>닉네임</th>
+                                    <th>레벨</th>
+                                    <th>명성 점수</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            <div class="admin-tab-content" id="admin-user-mgmt">
+                    <h3>유저 검색 및 관리</h3>
+                    <div class="user-mgmt-container">
+                        <div class="user-search-section">
+                            <input type="text" id="admin-user-search-input" placeholder="닉네임으로 유저 검색...">
+                            <button id="admin-user-search-btn" class="action-btn">검색</button>
+                        </div>
+
+                        <div id="admin-user-details-section" style="display: none; margin-top: 20px;">
+                            <input type="hidden" id="admin-target-userId">
+                            <input type="hidden" id="admin-target-username">
+
+                            <div class="admin-details-grid">
+                                
+                                <div class="admin-detail-card">
+                                    <h4>기본 정보 및 제재</h4>
+                                    <div class="admin-form-grid">
+                                        <label>ObjectID:</label><input type="text" id="admin-user-id" readonly>
+                                        <label>KakaoID:</label><input type="text" id="admin-user-kakaoId" readonly>
+                                        <label>닉네임:</label><input type="text" id="admin-user-username">
+                                        <label>골드:</label><input type="number" id="admin-user-gold">
+                                        <label>레벨:</label><input type="number" id="admin-user-level">
+                                        <label>최고 레벨:</label><input type="number" id="admin-user-maxLevel">
+                                        <label>피의 갈망(%):</label><input type="number" id="admin-user-bloodthirst">
+                                        <label>레이드 횟수:</label><input type="number" id="admin-user-raidEntries">
+                                    </div>
+                                    <div class="admin-section" style="margin-top:20px; background:transparent; padding:0;">
+                                        <h4>유저 제재</h4>
+                                        <div id="admin-sanction-info" style="color:red; margin-bottom:10px;"></div>
+                                        <div class="sanction-grid">
+                                            <input type="number" id="admin-sanction-duration" placeholder="기간 (예: 7)">
+                                            <select id="admin-sanction-unit">
+                                                <option value="minutes">분</option>
+                                                <option value="hours">시간</option>
+                                                <option value="days">일</option>
+                                            </select>
+                                            <input type="text" id="admin-sanction-reason" placeholder="제재 사유 (선택)">
+                                        </div>
+                                        <div class="sanction-buttons">
+                                            <button class="action-btn sell-btn" data-sanction-type="kick">접속 종료</button>
+                                            <button class="action-btn sell-btn" data-sanction-type="mute">채팅 금지</button>
+                                            <button class="action-btn sell-btn" data-sanction-type="ban">기간 정지</button>
+                                            <button class="action-btn sell-btn" data-sanction-type="permaban">영구 정지</button>
+                                            <button class="action-btn" data-sanction-type="unban">모든 제재 해제</button>
+                                        </div>
+                                    </div>
+                                     <button id="admin-user-save-btn" class="action-btn" style="width:100%; margin-top: 20px; padding: 12px; font-size: 1.1em;">모든 정보 저장</button>
+                                </div>
+
+                                <div class="admin-detail-card">
+                                    <h4>상세 데이터</h4>
+                                    <div class="admin-form-grid">
+                                        <label>기본 HP:</label><input type="number" id="admin-stat-base-hp">
+                                        <label>기본 공격력:</label><input type="number" id="admin-stat-base-attack">
+                                        <label>기본 방어력:</label><input type="number" id="admin-stat-base-defense">
+                                        <label>명성 점수:</label><input type="number" id="admin-user-fameScore">
+                                        <label>파괴 방지권:</label><input type="number" id="admin-user-tickets">
+                                        <label>칭호: </label><input type="text" id="admin-user-equippedTitle">
+                                        <hr>
+                                        <label>파괴 카운트:</label><input type="number" id="admin-counter-destroy">
+                                        <label>강화 실패 카운트:</label><input type="number" id="admin-counter-enh-fail">
+                                        <label>부화 카운트:</label><input type="number" id="admin-counter-hatch">
+                                        <label>사망 카운트:</label><input type="number" id="admin-counter-death">
+                                    </div>
+                                </div>
+                                <div class="admin-detail-card">
+                                    <h4>장착 장비 현황</h4>
+                                    <div id="admin-user-equipment" class="equipment-slots" style="grid-template-columns: repeat(3, 1fr); gap: 10px; min-height: 250px;">
+                                    </div>
+                                </div>
+                                <div class="admin-detail-card" style="grid-column: span 2; min-width: 600px;">
+                                    <h4>인벤토리 및 경매장 관리</h4>
+                                    <div class="admin-section">
+                                        <h4>비공개 아이템 지급</h4>
+                                        <div class="item-grant-grid">
+                                            <input type="text" id="admin-item-alias" placeholder="아이템 단축어 (예: 무기5)">
+                                            <input type="number" id="admin-item-quantity" placeholder="수량 (기본 1)">
+                                            <input type="number" id="admin-item-enhancement" placeholder="강화 수치 (기본 0)">
+                                            <select id="admin-primal-quality" style="display: none;">
+                                                <option value="최하급">최하급</option>
+                                                <option value="중급">중급</option>
+                                                <option value="상급">상급</option>
+                                                <option value="최상급">최상급</option>
+                                            </select>
+                                            <button id="admin-grant-item-btn" class="action-btn list-auction-btn">아이템 지급</button>
+                                        </div>
+                                    </div>
+                                    <div class="admin-sub-tabs">
+                                        <button class="admin-sub-tab-button active" data-tab="admin-inventory">인벤토리</button>
+                                        <button class="admin-sub-tab-button" data-tab="admin-pet-inventory">펫</button>
+                                        <button class="admin-sub-tab-button" data-tab="admin-auctions">경매장 목록</button>
+                                    </div>
+                                    <div class="admin-sub-tab-content active" id="admin-inventory">
+                                        <div id="admin-user-inventory-grid" class="admin-inventory-grid"></div>
+                                    </div>
+                                    <div class="admin-sub-tab-content" id="admin-pet-inventory">
+                                        <div id="admin-user-pet-inventory-grid" class="admin-inventory-grid"></div>
+                                    </div>
+                                    <div class="admin-sub-tab-content" id="admin-auctions">
+                                        <table id="admin-user-auctions-table">
+                                            <thead><tr><th>아이템</th><th>가격</th><th>등록일</th><th>액션</th></tr></thead>
+                                            <tbody></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="admin-tab-content" id="admin-chat-log">
+                    <h3>채팅 로그 (최근 100개)</h3>
+                    <ul id="admin-chat-log-list"></ul>
+                </div>
+
+                <div class="admin-tab-content" id="admin-settings">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3>게임 설정 관리</h3>
+                        <div>
+                            <button id="admin-save-settings-btn" class="action-btn">모든 설정 저장</button>
+                            <button id="admin-reload-settings-btn" class="action-btn sell-btn">서버에 실시간 적용</button>
+                        </div>
+                    </div>
+                    <div id="admin-game-settings-container">
+                        </div>
+                </div>
+                        
+                        <div id="admin-user-details-section" style="display: none;">
+                            <input type="hidden" id="admin-target-userId">
+                            <input type="hidden" id="admin-target-username">
+
+                            <div class="admin-details-grid">
+                                
+                                <div class="admin-detail-card">
+                                    <h4>기본 정보 및 제재</h4>
+                                    <div class="admin-form-grid">
+                                        <label>ObjectID:</label><input type="text" id="admin-user-id" readonly>
+                                        <label>KakaoID:</label><input type="text" id="admin-user-kakaoId" readonly>
+                                        <label>닉네임:</label><input type="text" id="admin-user-username">
+                                        <label>골드:</label><input type="number" id="admin-user-gold">
+                                        <label>레벨:</label><input type="number" id="admin-user-level">
+                                        <label>최고 레벨:</label><input type="number" id="admin-user-maxLevel">
+                                        <label>피의 갈망(%):</label><input type="number" id="admin-user-bloodthirst">
+                                        <label>레이드 횟수:</label><input type="number" id="admin-user-raidEntries">
+                                    </div>
+                                    <div class="admin-section" style="margin-top:20px; background:transparent; padding:0;">
+                                        <h4>유저 제재</h4>
+                                        <div id="admin-sanction-info" style="color:red; margin-bottom:10px;"></div>
+                                        <div class="sanction-grid">
+                                            <input type="number" id="admin-sanction-duration" placeholder="기간 (예: 7)">
+                                            <select id="admin-sanction-unit">
+                                                <option value="minutes">분</option>
+                                                <option value="hours">시간</option>
+                                                <option value="days">일</option>
+                                            </select>
+                                            <input type="text" id="admin-sanction-reason" placeholder="제재 사유 (선택)">
+                                        </div>
+                                        <div class="sanction-buttons">
+                                            <button class="action-btn sell-btn" data-sanction-type="kick">접속 종료</button>
+                                            <button class="action-btn sell-btn" data-sanction-type="mute">채팅 금지</button>
+                                            <button class="action-btn sell-btn" data-sanction-type="ban">기간 정지</button>
+                                            <button class="action-btn sell-btn" data-sanction-type="permaban">영구 정지</button>
+                                            <button class="action-btn" data-sanction-type="unban">모든 제재 해제</button>
+                                        </div>
+                                    </div>
+                                     <button id="admin-user-save-btn" class="action-btn" style="width:100%; margin-top: 20px; padding: 12px; font-size: 1.1em;">모든 정보 저장</button>
+                                </div>
+
+                                <div class="admin-detail-card">
+                                    <h4>상세 데이터</h4>
+                                    <div class="admin-form-grid">
+                                        <label>기본 HP:</label><input type="number" id="admin-stat-base-hp">
+                                        <label>기본 공격력:</label><input type="number" id="admin-stat-base-attack">
+                                        <label>기본 방어력:</label><input type="number" id="admin-stat-base-defense">
+                                        <label>명성 점수:</label><input type="number" id="admin-user-fameScore">
+                                        <label>파괴 방지권:</label><input type="number" id="admin-user-tickets">
+                                        <label>칭호: </label><input type="text" id="admin-user-equippedTitle">
+                                        <hr>
+                                        <label>파괴 카운트:</label><input type="number" id="admin-counter-destroy">
+                                        <label>강화 실패 카운트:</label><input type="number" id="admin-counter-enh-fail">
+                                        <label>부화 카운트:</label><input type="number" id="admin-counter-hatch">
+                                        <label>사망 카운트:</label><input type="number" id="admin-counter-death">
+                                    </div>
+                                </div>
+  <div class="admin-detail-card">
+                                    <h4>장착 장비 현황</h4>
+                                    <div id="admin-user-equipment" class="equipment-slots" style="grid-template-columns: repeat(3, 1fr); gap: 10px; min-height: 250px;">
+                                        </div>
+                                </div>
+                                <div class="admin-detail-card" style="grid-column: span 2; min-width: 600px;">
+                                    <h4>인벤토리 및 경매장 관리</h4>
+                                    <div class="admin-section">
+                                        <h4>비공개 아이템 지급</h4>
+                                        <div class="item-grant-grid">
+                                            <input type="text" id="admin-item-alias" placeholder="아이템 단축어 (예: 무기5)">
+                                            <input type="number" id="admin-item-quantity" placeholder="수량 (기본 1)">
+                                            <input type="number" id="admin-item-enhancement" placeholder="강화 수치 (기본 0)">
+                                            <select id="admin-primal-quality" style="display: none;">
+                                                <option value="최하급">최하급</option>
+                                                <option value="중급">중급</option>
+                                                <option value="상급">상급</option>
+                                                <option value="최상급">최상급</option>
+                                            </select>
+                                            <button id="admin-grant-item-btn" class="action-btn list-auction-btn">아이템 지급</button>
+                                        </div>
+                                    </div>
+                                    <div class="admin-sub-tabs">
+                                        <button class="admin-sub-tab-button active" data-tab="admin-inventory">인벤토리</button>
+                                        <button class="admin-sub-tab-button" data-tab="admin-pet-inventory">펫</button>
+                                        <button class="admin-sub-tab-button" data-tab="admin-auctions">경매장 목록</button>
+                                    </div>
+                                    <div class="admin-sub-tab-content active" id="admin-inventory">
+                                        <div id="admin-user-inventory-grid" class="admin-inventory-grid"></div>
+                                    </div>
+                                    <div class="admin-sub-tab-content" id="admin-pet-inventory">
+                                        <div id="admin-user-pet-inventory-grid" class="admin-inventory-grid"></div>
+                                    </div>
+                                    <div class="admin-sub-tab-content" id="admin-auctions">
+                                        <table id="admin-user-auctions-table">
+                                            <thead><tr><th>아이템</th><th>가격</th><th>등록일</th><th>액션</th></tr></thead>
+                                            <tbody></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                        </div>
+                </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="client.js?v=<%= version %>"></script>

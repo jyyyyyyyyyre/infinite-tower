@@ -1817,3 +1817,421 @@ body.auth-view {
     margin-right: 5px;
     vertical-align: middle;
 }
+
+#admin-panel-button {
+    background: var(--gold-color);
+    color: var(--bg-color-dark);
+    font-weight: 700;
+    border: 1px solid #000;
+}
+
+.admin-panel-content {
+    width: 95%;
+    max-width: 1600px;
+    height: 90vh;
+}
+
+.admin-panel-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.admin-tabs {
+    display: flex;
+    border-bottom: 2px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.admin-tab-button {
+    padding: 12px 20px;
+    font-size: 1.2em;
+    font-weight: 500;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 3px solid transparent;
+}
+
+.admin-tab-button.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.admin-tab-content {
+    display: none;
+    padding: 20px;
+    flex-grow: 1;
+    overflow-y: auto;
+    background-color: rgba(0,0,0,0.1);
+    border-radius: 0 0 8px 8px;
+}
+
+.admin-tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-tab-content h3 {
+    font-size: 1.5em;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* 대시보드 */
+.dashboard-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.metric-card {
+    background: var(--surface-color);
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.metric-card h4 {
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+
+.metric-card p {
+    font-size: 2em;
+    font-weight: 700;
+}
+
+.online-users-list-container {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+#admin-online-users-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#admin-online-users-table th, #admin-online-users-table td {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    text-align: left;
+}
+
+#admin-online-users-table tbody tr {
+    cursor: pointer;
+}
+
+#admin-online-users-table tbody tr:hover {
+    background-color: var(--surface-color);
+}
+
+/* 유저 관리 */
+.user-mgmt-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.user-search-section {
+    display: flex;
+    gap: 10px;
+}
+
+#admin-user-search-input {
+    flex-grow: 1;
+    padding: 10px;
+    font-size: 1em;
+    background: var(--bg-color-dark);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 6px;
+}
+
+.admin-section {
+    background: var(--surface-color);
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.admin-section h4 {
+    margin-bottom: 15px;
+    color: var(--secondary-color);
+}
+
+.user-edit-grid, .item-grant-grid, .sanction-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
+}
+.user-edit-grid label {
+    align-self: center;
+}
+
+.admin-section input, .admin-section select {
+    padding: 8px;
+    font-size: 1em;
+    background: var(--bg-color-dark);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 4px;
+}
+
+.sanction-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 15px;
+}
+.sanction-buttons .action-btn.sell-btn {
+    background-color: var(--fail-color);
+}
+
+/* 채팅 로그 */
+#admin-chat-log-list {
+    list-style-type: none;
+    padding: 0;
+    height: 100%;
+    overflow-y: auto;
+}
+
+#admin-chat-log-list li {
+    padding: 8px;
+    border-bottom: 1px solid var(--surface-color);
+    line-height: 1.6;
+}
+
+#admin-user-details-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.admin-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 20px;
+}
+
+.admin-detail-card {
+    background: var(--surface-color);
+    padding: 20px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.admin-detail-card h4 {
+    font-size: 1.3em;
+    color: var(--secondary-color);
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 10px;
+}
+
+.admin-form-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 12px;
+    align-items: center;
+}
+
+.admin-form-grid label {
+    font-weight: 500;
+    color: var(--text-muted);
+}
+.admin-form-grid input {
+    width: 100%;
+}
+.admin-form-grid hr {
+    grid-column: 1 / -1;
+    border: 0;
+    border-top: 1px solid var(--border-color);
+    margin: 5px 0;
+}
+
+
+/* 인벤토리/경매 관리 탭 */
+.admin-sub-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 15px;
+}
+.admin-sub-tab-button {
+    padding: 10px 15px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1em;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+.admin-sub-tab-button.active {
+    color: var(--success-color);
+    border-bottom-color: var(--success-color);
+}
+
+.admin-sub-tab-content {
+    display: none;
+    min-height: 200px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+.admin-sub-tab-content.active {
+    display: block;
+}
+
+/* 관리자용 인벤토리 그리드 */
+.admin-inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
+}
+.admin-inventory-item {
+    position: relative;
+}
+
+/* 아이템 삭제 버튼 */
+.admin-item-delete-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background-color: var(--fail-color);
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 2;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+.admin-item-delete-btn:hover {
+    opacity: 1;
+}
+
+/* 경매 목록 테이블 */
+#admin-user-auctions-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+#admin-user-auctions-table th, #admin-user-auctions-table td {
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: middle;
+}
+#admin-user-auctions-table .action-btn {
+    padding: 4px 8px;
+    font-size: 0.9em;
+}
+
+#admin-user-equipment .slot {
+    height: 110px;
+    border: 2px solid var(--border-color);
+    background-color: rgba(0,0,0,0.2);
+    position: relative;
+}
+
+#admin-user-equipment .slot .inventory-item {
+    border: none;
+    padding: 0;
+    background: none;
+    cursor: default;
+}
+
+#admin-user-equipment .slot:empty::after {
+    content: '없음';
+    color: var(--text-muted);
+}
+
+/* 태초 등급 전용 공지 스타일 */
+#announcement-banner.primal {
+    background: linear-gradient(
+        -45deg, 
+        #000000, 
+        #2d004d, 
+        #00e6d2, 
+        #ffd700, 
+        #000000
+    );
+    background-size: 400% 400%;
+    color: #ffffff;
+    font-weight: 900;
+    border: 2px solid #ffd700;
+    box-shadow: 0 0 15px 5px rgba(0, 230, 210, 0.7), 
+                0 0 30px 10px rgba(255, 215, 0, 0.5),
+                inset 0 0 10px 2px rgba(255, 215, 0, 0.8);
+    animation: primal-gradient-flow 5s ease infinite;
+}
+
+#announcement-banner.primal span {
+    text-shadow: 
+        0 0 5px #fff, 
+        0 0 10px #fff, 
+        0 0 15px #00e6d2, 
+        0 0 20px #00e6d2, 
+        0 0 25px #00e6d2, 
+        0 0 30px #00e6d2, 
+        0 0 35px #00e6d2;
+    animation: text-flicker 3s linear infinite;
+}
+
+@keyframes primal-gradient-flow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+@keyframes text-flicker {
+    0%, 18%, 22%, 25%, 53%, 57%, 100% {
+        text-shadow:
+            0 0 4px #fff,
+            0 0 11px #00e6d2,
+            0 0 19px #00e6d2,
+            0 0 40px #00e6d2,
+            0 0 80px #00e6d2;
+    }
+    20%, 24%, 55% {
+        text-shadow: none;
+    }
+}
+
+.primal-drop-message {
+    background: linear-gradient(-45deg, #000000, #2d004d, #00e6d2, #ffd700, #000000);
+    background-size: 400% 400%;
+    border: 1px solid #ffd700;
+    border-radius: 8px;
+    padding: 10px 15px;
+    margin: 8px 0 !important;
+    box-shadow: 0 0 10px 2px rgba(0, 230, 210, 0.6);
+    animation: primal-gradient-flow 5s ease infinite;
+    text-align: center;
+    line-height: 1.6;
+}
+
+.primal-drop-content .primal-congrats {
+    display: block;
+    font-size: 1.2em;
+    font-weight: 900;
+    color: #ffd700;
+    text-shadow: 0 0 8px #ffd700;
+    animation: text-flicker 3s linear infinite;
+    margin-bottom: 5px;
+}
+
+.primal-drop-content .primal-text {
+    font-size: 1.1em;
+    color: #fff;
+    text-shadow: 0 0 5px #000;
+}
