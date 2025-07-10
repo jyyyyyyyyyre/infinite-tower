@@ -204,6 +204,7 @@
                         <button class="tab-button" data-tab="fusion-tab">융합</button>
                         <button class="tab-button" data-tab="log-tab">로그</button>
                         <button class="tab-button" data-tab="chat-tab">채팅</button>
+<button class="tab-button" data-tab="account-storage-tab">계정금고</button>
                     </div>
 
                     <div class="tab-content active" id="weapon-inventory-tab">
@@ -328,6 +329,11 @@
                             <button type="submit">전송</button>
                         </form>
                     </div>
+
+<div class="tab-content" id="account-storage-tab">
+    <p class="inventory-tip">동일 카카오 계정만 사용가능합니다</p>
+    <div id="account-storage-grid" class="inventory-grid"></div>
+</div>
                 </main>
             </div>
         </div>
@@ -676,7 +682,7 @@
                                 <div class="admin-detail-card" style="grid-column: span 2; min-width: 600px;">
                                     <h4>인벤토리 및 경매장 관리</h4>
                                     <div class="admin-section">
-                                        <h4>비공개 아이템 지급</h4>
+                                        <h4>아이템 지급(복구로직)</h4>
                                         <div class="item-grant-grid">
                                             <input type="text" id="admin-item-alias" placeholder="아이템 단축어 (예: 무기5)">
                                             <input type="number" id="admin-item-quantity" placeholder="수량 (기본 1)">

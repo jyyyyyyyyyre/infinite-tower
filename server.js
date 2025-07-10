@@ -239,6 +239,11 @@ const AdminLogSchema = new mongoose.Schema({
     details: { type: Object },
 }, { timestamps: true });
 
+const AccountStorageSchema = new mongoose.Schema({
+    kakaoId: { type: String, required: true, unique: true, index: true },
+    inventory: { type: [Object], default: [] }
+});
+
 const PostSchema = new mongoose.Schema({
     authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     authorUsername: { type: String, required: true },
@@ -263,6 +268,7 @@ const Post = mongoose.model('Post', PostSchema);
 const Comment = mongoose.model('Comment', CommentSchema);
 const GameSettings = mongoose.model('GameSettings', GameSettingsSchema);
 const AdminLog = mongoose.model('AdminLog', AdminLogSchema);
+const AccountStorage = mongoose.model('AccountStorage', AccountStorageSchema);
 
 mongoose.connect(MONGO_URI).then(() => {
     console.log('MongoDB 성공적으로 연결되었습니다.');
@@ -541,7 +547,7 @@ let globalRecordsCache = {};
 let worldBossState = null;
 let worldBossTimer = null;
 let isBossSpawning = false;
-let connectedIPs = new Set();
+
 
 async function loadWorldBossState() {
     const savedState = await WorldBossState.findOne({ uniqueId: 'singleton' });
@@ -1014,27 +1020,43 @@ async function updateFameScore(socket, gameData) {
         console.log(`[명성 업데이트] ${socket.username}님의 명성이 ${newFameScore}(으)로 변경되었습니다.`);
     }
 }
-
 io.on('connection', async (socket) => {
-    const clientIp = getNormalizedIp(socket);
-    if (connectedIPs.has(clientIp)) {
-        console.log(`[연결 거부] 중복 IP 접속 시도: ${socket.username} (${clientIp})`);
-        socket.emit('forceDisconnect', { message: '해당 IP 주소에서는 이미 다른 계정이 접속 중입니다.\n기존 연결을 종료한 후 다시 시도해 주세요.' });
+    const user = await User.findById(socket.userId).select('kakaoId isKakaoVerified').lean();
+    if (!user || !user.isKakaoVerified || !user.kakaoId) {
+        socket.emit('forceDisconnect', { message: '카카오 계정과 연동된 계정만 접속할 수 있습니다.' });
         socket.disconnect(true);
         return;
     }
-
+    const newPlayerKakaoId = user.kakaoId;
+    const clientIp = getNormalizedIp(socket);
+    const existingPlayerWithSameIP = Object.values(onlinePlayers).find(p => getNormalizedIp(p.socket) === clientIp);
+    if (existingPlayerWithSameIP) {
+        if (existingPlayerWithSameIP.kakaoId !== newPlayerKakaoId) {
+            console.log(`[연결 거부] 중복 IP 접속 시도 (다른 카카오 계정): ${socket.username} (${clientIp})`);
+            socket.emit('forceDisconnect', { message: '해당 IP 주소에서는 다른 카카오 계정이 이미 접속 중입니다.' });
+            socket.disconnect(true);
+            return;
+        }
+    }
+    
     if (onlinePlayers[socket.userId]) {
         const oldSocket = onlinePlayers[socket.userId].socket;
-        const oldIp = getNormalizedIp(oldSocket);
-        connectedIPs.delete(oldIp);
         oldSocket.emit('forceDisconnect', { message: '다른 기기 또는 탭에서 접속하여 연결을 종료합니다.' });
         oldSocket.disconnect(true);
     }
     
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
-    const user = await User.findById(socket.userId).select('kakaoId').lean(); 
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
+    if (!gameData) { 
+        console.error(`[오류] ${socket.username}의 게임 데이터를 찾을 수 없습니다.`);
+        return socket.disconnect(); 
+    }
+    
+    gameData.kakaoId = newPlayerKakaoId;
+
+
+
+
     if (gameData) {
 
 gameData.isExploring = false;
@@ -1106,7 +1128,6 @@ if (!gameData.personalRaid) {
     }
 
     gameData.attackTarget = 'monster';
-    connectedIPs.add(clientIp);
     
     const initialMonster = calcMonsterStats(gameData);
     onlinePlayers[socket.userId] = { 
@@ -1117,7 +1138,8 @@ if (!gameData.personalRaid) {
             lastCalculatedLevel: gameData.level
         }, 
         socket: socket, 
-        buffs: [] 
+        buffs: [] ,
+isStorageTransacting: false
     };
 
 if (gameData.raidState && gameData.raidState.isActive) {
@@ -1266,18 +1288,31 @@ const userAccount = await User.findById(socket.userId).select('mute').lean();
                 return;
             }
 
-            if (commandOrTarget === '레이드리셋') {
-                Object.values(onlinePlayers).forEach(p => {
-                    if (p.personalRaid) {
-                        p.personalRaid.entries = 2;
-                    }
-                    pushLog(p, '[관리자]에 의해 개인 레이드 입장 횟수가 2회로 초기화되었습니다.');
-                });
+          if (commandOrTarget === '레이드리셋') {
+                try {
 
-                const announcement = `[관리자] 모든 온라인 유저의 개인 레이드 횟수가 초기화되었습니다.`;
-                io.emit('chatMessage', { isSystem: true, message: announcement });
-                pushLog(player, '[관리자] 모든 온라인 플레이어의 개인 레이드 입장 횟수를 초기화했습니다.');
-                return; 
+                    await GameData.updateMany(
+                        {}, 
+                        { $set: { "personalRaid.entries": 2 } }
+                    );
+
+                    Object.values(onlinePlayers).forEach(p => {
+                        if (p && p.personalRaid) {
+                            p.personalRaid.entries = 2;
+                            pushLog(p, '[관리자]에 의해 개인 레이드 입장 횟수가 2회로 초기화되었습니다.');
+                            sendPlayerState(p); 
+                        }
+                    });
+
+                    const announcement = `[관리자] 서버 '전체 유저'의 개인 레이드 횟수가 초기화되었습니다.`;
+                    io.emit('chatMessage', { isSystem: true, message: announcement });
+                    pushLog(player, '[관리자] 서버 전체 유저의 개인 레이드 입장 횟수를 초기화했습니다.');
+
+                } catch (error) {
+                    console.error('[관리자] /레이드리셋 명령어 처리 중 DB 오류 발생:', error);
+                    pushLog(player, '[오류] 전체 유저 레이드 횟수 초기화 중 문제가 발생했습니다.');
+                }
+                return;
             }
 
 
@@ -2048,7 +2083,7 @@ title: player.equippedTitle
                 const onlinePlayer = onlinePlayers[userId];
                 if (onlinePlayer) {
                     onlinePlayer[inventoryPath] = gameData[inventoryPath];
-                    pushLog(onlinePlayer, `[시스템] 관리자에 의해 인벤토리 아이템이 ${quantity ? quantity + '개' : '전체'} 삭제되었습니다.`);
+                    
                     sendInventoryUpdate(onlinePlayer);
                 }
 
@@ -2098,7 +2133,6 @@ title: player.equippedTitle
                         onlinePlayer.equipment[slotType] = null;
                     }
                     calculateTotalStats(onlinePlayer); 
-                    pushLog(onlinePlayer, `[시스템] 관리자에 의해 ${slotType} 슬롯의 아이템이 삭제되었습니다.`);
                     sendPlayerState(onlinePlayer);
                 }
 
@@ -2119,7 +2153,7 @@ title: player.equippedTitle
                 const finalUpdates = {};
                 Object.keys(updates).forEach(key => {
                     const value = (updates[key] !== '' && !isNaN(updates[key])) ? Number(updates[key]) : updates[key];
-                    if (key !== 'username') { // username은 GameData에 없으므로 제외
+                    if (key !== 'username') { 
                         finalUpdates[key] = value;
                     }
                 });
@@ -2143,7 +2177,6 @@ title: player.equippedTitle
                     });
                     calculateTotalStats(onlinePlayer);
                     sendState(onlinePlayer.socket, onlinePlayer, calcMonsterStats(onlinePlayer));
-                    pushLog(onlinePlayer, '[시스템] 관리자에 의해 정보가 수정되었습니다.');
                 }
                 new AdminLog({ adminUsername: socket.username, actionType: 'update_user', targetUsername: updates.username, details: { userId, updates } }).save();
             } catch (error) {
@@ -2176,8 +2209,11 @@ title: player.equippedTitle
     if (onlinePlayer) {
         handleItemStacking(onlinePlayer, newItem);
         sendInventoryUpdate(onlinePlayer);
-        pushLog(onlinePlayer, `[관리자 지급] <span class="${newItem.grade}">${newItem.name}</span> 을(를) 획득했습니다!`);
-        announceMysticDrop(onlinePlayer, newItem); 
+
+          const naturalDropLog = `[${onlinePlayer.level}층]에서 <span class="${newItem.grade}">${newItem.name}</span> ${newItem.quantity}개를 획득했습니다!`;
+            pushLog(onlinePlayer, naturalDropLog);
+        
+announceMysticDrop(onlinePlayer, newItem); 
 
     } else { 
         const gameData = await GameData.findOne({ user: userId });
@@ -2260,7 +2296,6 @@ title: player.equippedTitle
             if (socket.role !== 'admin') return;
 
             await loadGameSettings();
-            io.emit('chatMessage', { isSystem: true, message: `[시스템] 관리자에 의해 게임 설정이 실시간으로 변경되었습니다.` });
             callback({ success: true, message: '게임 설정이 서버에 실시간으로 적용되었습니다.' });
         })
 
@@ -2274,13 +2309,192 @@ title: player.equippedTitle
             } catch (error) { callback([]); }
         })
     
-   
+   .on('accountStorage:get', async (callback) => {
+            const player = onlinePlayers[socket.userId];
+            if (!player || !player.kakaoId) {
+                return callback({ success: false, message: '카카오 연동 계정만 사용할 수 있습니다.' });
+            }
+
+            try {
+                const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId });
+                callback({ success: true, items: storage ? storage.inventory : [] });
+            } catch (error) {
+                console.error(`[AccountStorage GET] Error for ${player.username}:`, error);
+                callback({ success: false, message: '금고 정보를 불러오는 중 오류가 발생했습니다.' });
+            }
+        })
+ .on('accountStorage:deposit', async ({ uid, quantity }) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player || !player.kakaoId) return;
+
+    if (player.isStorageTransacting) {
+        return pushLog(player, '[계정금고] 이전 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    const itemIndex = player.inventory.findIndex(i => i.uid === uid);
+    if (itemIndex === -1) return;
+
+    const itemInInventory = player.inventory[itemIndex];
+    if (itemInInventory.tradable === false) {
+        return pushLog(player, '[계정금고] 거래 불가 아이템은 보관할 수 없습니다.');
+    }
+    
+    const quantityToDeposit = parseInt(quantity, 10);
+    if (isNaN(quantityToDeposit) || quantityToDeposit <= 0 || quantityToDeposit > itemInInventory.quantity) {
+        return pushLog(player, '[계정금고] 잘못된 수량입니다.');
+    }
+
+    try {
+        player.isStorageTransacting = true;
+
+        const isStackableInStorage = (!itemInInventory.enhancement || itemInInventory.enhancement === 0) && itemInInventory.grade !== 'Primal';
+
+        let operationPerformed = false;
+        if (isStackableInStorage) {
+            const result = await AccountStorage.updateOne(
+                {
+                    "kakaoId": player.kakaoId,
+                    "inventory": {
+                        "$elemMatch": {
+                            "id": itemInInventory.id,
+                            "$or": [
+                                { "enhancement": 0 },
+                                { "enhancement": { "$exists": false } }
+                            ]
+                        }
+                    }
+                },
+                { "$inc": { "inventory.$.quantity": quantityToDeposit } }
+            );
+
+            if (result.modifiedCount > 0) {
+                operationPerformed = true;
+            }
+        }
+        
+        if (!operationPerformed) {
+            const itemToPush = { ...itemInInventory, quantity: quantityToDeposit };
+            itemToPush.uid = new mongoose.Types.ObjectId().toString();
+
+            await AccountStorage.updateOne(
+                { kakaoId: player.kakaoId },
+                { "$push": { "inventory": itemToPush } },
+                { "upsert": true }
+            );
+        }
+
+        if (itemInInventory.quantity > quantityToDeposit) {
+            itemInInventory.quantity -= quantityToDeposit;
+        } else {
+            player.inventory.splice(itemIndex, 1);
+        }
+        await GameData.updateOne({ user: player.user }, { $set: { inventory: player.inventory } });
+        
+        pushLog(player, `[계정금고] ${itemInInventory.name} ${quantityToDeposit}개를 보관했습니다.`);
+
+        const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId });
+        const updatedInventory = storage ? storage.inventory : [];
+        
+        for (const onlinePlayer of Object.values(onlinePlayers)) {
+            if (onlinePlayer.kakaoId === player.kakaoId && onlinePlayer.socket) {
+                onlinePlayer.socket.emit('accountStorage:update', updatedInventory);
+            }
+        }
+        sendInventoryUpdate(player);
+
+    } catch (error) {
+        console.error(`[AccountStorage DEPOSIT] Error for ${player.username}:`, error);
+        pushLog(player, '[계정금고] 아이템 보관 중 오류가 발생했습니다.');
+        sendInventoryUpdate(player);
+    } finally {
+        player.isStorageTransacting = false;
+    }
+})
+
+
+
+
+
+ .on('accountStorage:withdraw', async ({ uid, quantity }) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player || !player.kakaoId) return;
+
+    if (player.isStorageTransacting) {
+        return pushLog(player, '[계정금고] 이전 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    const quantityToWithdraw = parseInt(quantity, 10);
+    if (isNaN(quantityToWithdraw) || quantityToWithdraw <= 0) {
+        return; 
+    }
+
+    try {
+        player.isStorageTransacting = true;
+
+        const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId });
+        if (!storage) {
+            pushLog(player, '[계정금고] 금고 정보를 찾을 수 없습니다.');
+            return;
+        }
+        
+        const itemInStorage = storage.inventory.find(i => i.uid === uid);
+        if (!itemInStorage) {
+            pushLog(player, '[계정금고] 해당 아이템을 금고에서 찾을 수 없습니다.');
+            return;
+        }
+
+        if (itemInStorage.quantity < quantityToWithdraw) {
+            pushLog(player, '[계정금고] 요청한 수량이 금고에 있는 수량보다 많습니다.');
+            return;
+        }
+
+        const itemToMove = { ...itemInStorage, quantity: quantityToWithdraw };
+
+        if (itemInStorage.quantity > quantityToWithdraw) {
+            await AccountStorage.updateOne(
+                { kakaoId: player.kakaoId, 'inventory.uid': uid },
+                { $inc: { 'inventory.$.quantity': -quantityToWithdraw } }
+            );
+        } else {
+            await AccountStorage.updateOne(
+                { kakaoId: player.kakaoId },
+                { $pull: { inventory: { uid: uid } } }
+            );
+        }
+
+        handleItemStacking(player, itemToMove);
+        await GameData.updateOne({ user: player.user }, { $set: { inventory: player.inventory, petInventory: player.petInventory } });
+
+        pushLog(player, `[계정금고] ${itemToMove.name} ${quantityToWithdraw}개를 인벤토리로 가져왔습니다.`);
+
+        const updatedStorage = await AccountStorage.findOne({ kakaoId: player.kakaoId });
+        const updatedInventory = updatedStorage ? updatedStorage.inventory : [];
+
+        for (const onlinePlayer of Object.values(onlinePlayers)) {
+            if (onlinePlayer.kakaoId === player.kakaoId && onlinePlayer.socket) {
+                onlinePlayer.socket.emit('accountStorage:update', updatedInventory);
+            }
+        }
+        sendInventoryUpdate(player);
+
+    } catch (error) {
+        console.error(`[AccountStorage WITHDRAW] Error for ${player.username}:`, error);
+        pushLog(player, '[계정금고] 아이템을 가져오는 중 오류가 발생했습니다.');
+    } finally {
+        player.isStorageTransacting = false;
+    }
+})
+
+
+
+
+
+
         .on('disconnect', () => {
             console.log(`[연결 해제] 유저: ${socket.username}`);
             const player = onlinePlayers[socket.userId];
             if(player) {
                 const clientIp = getNormalizedIp(player.socket);
-                connectedIPs.delete(clientIp);
                 savePlayerData(socket.userId);
             }
             delete onlinePlayers[socket.userId];
@@ -2389,7 +2603,7 @@ function gameTick(player) {
         
 
         if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
-            const bloodthirstDamage = worldBossState.maxHp * 0.01;
+            const bloodthirstDamage = worldBossState.maxHp * 0.003;
             pDmg += bloodthirstDamage;
             player.currentHp = player.stats.total.hp;
             pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
@@ -2835,8 +3049,8 @@ async function announceMysticDrop(player, item) {
 
         const primalDropMessage = {
             type: 'primal_drop',
-            username: player.username,   // player 객체에서 직접 정보 추출
-            fameScore: player.fameScore, // player 객체에서 직접 정보 추출
+            username: player.username,   
+            fameScore: player.fameScore, 
             itemName: item.name,
             itemGrade: item.grade
         };
@@ -3160,7 +3374,8 @@ const playerStateForClient = {
         bloodthirst: player.bloodthirst, 
         riftShards: player.inventory.find(i => i.id === 'rift_shard')?.quantity || 0,
         safeZoneCooldownUntil: player.safeZoneCooldownUntil,
-        personalRaid: player.personalRaid
+        personalRaid: player.personalRaid,
+kakaoId: player.kakaoId 
     };
 
     const monsterStateForClient = {
@@ -3789,6 +4004,49 @@ setInterval(() => {
     }
 }, AUTO_SAVE_INTERVAL);
 
+let lastRaidResetDate = null; 
+
+function scheduleDailyReset(io) {
+    console.log('⏰ 매일 아침 6시 개인 레이드 초기화 스케줄러가 활성화되었습니다.');
+
+   setInterval(async () => {
+        const now = new Date();
+        const kstOffset = 9 * 60 * 60 * 1000;
+        const kstNow = new Date(now.getTime() + kstOffset);
+
+        const kstHour = kstNow.getUTCHours();
+        const kstMinute = kstNow.getUTCMinutes();
+
+        if (kstHour === 5 && kstMinute === 59) {
+            const kstTodayStr = kstNow.toDateString();
+
+            if (lastRaidResetDate !== kstTodayStr) {
+                console.log('6:00 AM - 모든 유저의 개인 레이드 이용 횟수를 초기화합니다.');
+                lastRaidResetDate = kstTodayStr;
+
+                try {
+                    const updateResult = await GameData.updateMany(
+                        {}, 
+                        { $set: { "personalRaid.entries": 2 } } // 기존 코드에 맞춰 2회로 수정
+                    );
+                    console.log(`[DB] 총 ${updateResult.modifiedCount}명의 유저 데이터가 초기화되었습니다.`);
+
+                    for (const player of Object.values(onlinePlayers)) {
+                        if (player && player.socket) {
+                            player.personalRaid.entries = 2;
+                            pushLog(player, '☀️ 아침 6시가 되어 개인 레이드 입장 횟수가 초기화되었습니다.');
+                            sendPlayerState(player);
+                        }
+                    }
+
+                } catch (error) {
+                    console.error('[오류] 개인 레이드 초기화 중 문제가 발생했습니다:', error);
+                }
+            }
+        }
+    }, 60000);
+}
+
 function checkAndSpawnBoss() {
     if ((worldBossState && worldBossState.isActive) || isBossSpawning) {
         return;
@@ -3847,37 +4105,10 @@ function calcPersonalRaidBossStats(floor) {
         empoweredAttack: 10
     };
 }
-
 async function startPersonalRaid(player) {
     if (!player) return;
     if (player.raidState && player.raidState.isActive) {
         return pushLog(player, "[개인 레이드] 이미 레이드를 진행 중입니다.");
-    }
-
- const now = new Date();
-    const lastResetTime = new Date(player.personalRaid.lastReset).getTime();
-
-
-    const sixAmToday = new Date();
-    sixAmToday.setHours(6, 0, 0, 0);
-    const sixAmTodayTime = sixAmToday.getTime();
-
-
-    let mostRecentResetPoint;
-    if (now.getTime() >= sixAmTodayTime) {
-
-        mostRecentResetPoint = sixAmTodayTime;
-    } else {
-
-        const sixAmYesterday = new Date(sixAmToday);
-        sixAmYesterday.setDate(sixAmYesterday.getDate() - 1);
-        mostRecentResetPoint = sixAmYesterday.getTime();
-    }
-
-
-    if (lastResetTime < mostRecentResetPoint) {
-        player.personalRaid.entries = 2;
-        player.personalRaid.lastReset = now; 
     }
 
     if (player.personalRaid.entries <= 0) {
@@ -3885,10 +4116,9 @@ async function startPersonalRaid(player) {
     }
     player.personalRaid.entries--;
 
-await GameData.updateOne({ user: player.user }, { 
+    await GameData.updateOne({ user: player.user }, { 
         $set: { "personalRaid.entries": player.personalRaid.entries } 
     });
-
 
     player.raidState = {
         isActive: true,
@@ -3943,4 +4173,5 @@ function onPersonalRaidFloorClear(player) {
     player.currentHp = player.stats.total.hp;
 }
 
+scheduleDailyReset(io); 
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));

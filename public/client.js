@@ -663,6 +663,43 @@ function initializeGame(socket) {
     elements.modals.enhancement.button.addEventListener('click', () => { elements.modals.enhancement.overlay.style.display = 'flex'; });
     elements.modals.online.button.addEventListener('click', () => { socket.emit('requestOnlineUsers'); elements.modals.online.overlay.style.display = 'flex'; });
 
+const accountStorageTabBtn = document.querySelector('.tab-button[data-tab="account-storage-tab"]');
+if(accountStorageTabBtn) {
+    accountStorageTabBtn.addEventListener('click', () => {
+        const grid = document.getElementById('account-storage-grid');
+        grid.innerHTML = '<p class="inventory-tip">금고 정보를 불러오는 중...</p>'; 
+
+        if(!currentPlayerState || !currentPlayerState.kakaoId) {
+            grid.innerHTML = '<p class="inventory-tip">카카오 계정과 연동된 캐릭터만 계정금고를 사용할 수 있습니다.</p>';
+            return;
+        }
+
+        socket.emit('accountStorage:get', (response) => {
+            if (response.success) {
+                renderAccountStorage(response.items);
+            } else {
+                alert(response.message);
+                grid.innerHTML = `<p class="inventory-tip" style="color: red;">${response.message || '오류가 발생했습니다.'}</p>`;
+            }
+        });
+    });
+}
+
+ function renderAccountStorage(items) {
+    const grid = document.getElementById('account-storage-grid');
+    if (!items || items.length === 0) {
+        grid.innerHTML = '<p class="inventory-tip"></p>';
+        return;
+    }
+    grid.innerHTML = items.map(item =>
+        `<div class="inventory-item ${getEnhanceClass(item.enhancement)}" data-uid="${item.uid}" data-item-type="${item.type}" data-quantity="${item.quantity}">${createItemHTML(item)}</div>`
+    ).join('');
+}
+
+    socket.on('accountStorage:update', (items) => {
+        renderAccountStorage(items);
+    });
+
     elements.codex.button.addEventListener('click', () => {
         socket.emit('codex:getData', (data) => {
             if (data) {
@@ -769,6 +806,7 @@ function initializeGame(socket) {
     let selectedAuctionGroupKey = null;
 
     elements.modals.auction.button.addEventListener('click', () => {
+	selectedInventoryItemUid = null;
         fetchAuctionListings();
         elements.modals.auction.overlay.style.display = 'flex';
     });
@@ -890,6 +928,7 @@ function initializeGame(socket) {
         const listingId = target.dataset.listingId;
         if (!listingId) return;
         if (target.classList.contains('buy-auction-btn')) {
+e.stopPropagation();
             const maxQuantity = parseInt(target.dataset.maxQuantity, 10);
             let quantity = 1;
             if (maxQuantity > 1) {
@@ -1084,9 +1123,20 @@ function initializeGame(socket) {
 
         elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
         elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
-        elements.player.totalHp.textContent = formatFloat(player.stats.total.hp);
-        elements.player.totalAttack.textContent = formatFloat(player.stats.total.attack);
-        elements.player.totalDefense.textContent = formatFloat(player.stats.total.defense);
+const baseHp = player.stats.base.hp;
+const totalHp = player.stats.total.hp;
+const bonusHp = Math.max(0, totalHp - baseHp);
+elements.player.totalHp.textContent = `${formatInt(baseHp)} (+${formatInt(bonusHp)})`;
+
+const baseAttack = player.stats.base.attack;
+const totalAttack = player.stats.total.attack;
+const bonusAttack = Math.max(0, totalAttack - baseAttack);
+elements.player.totalAttack.textContent = `${formatInt(baseAttack)} (+${formatInt(bonusAttack)})`;
+
+const baseDefense = player.stats.base.defense;
+const totalDefense = player.stats.total.defense;
+const bonusDefense = Math.max(0, totalDefense - baseDefense);
+elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${formatInt(bonusDefense)})`;
 
         if (isInRaid) {
             elements.monster.level.innerHTML = `<span style="color:#c0392b; font-weight:bold;">[개인 레이드 ${monster.floor}층] ${monster.name}</span>`;
@@ -1528,6 +1578,7 @@ function initializeGame(socket) {
         }
         if (item.tradable !== false) {
             buttonsHTML += `<button class="action-btn list-auction-btn" data-action="list-auction">거래소 등록</button>`;
+            buttonsHTML += `<button class="action-btn" data-action="deposit-storage" style="background-color: #4B0082;">계정금고</button>`;
         }
         
         buttonsHTML += '</div>';
@@ -1756,6 +1807,30 @@ function initializeGame(socket) {
         });
     });
 
+document.getElementById('account-storage-grid').addEventListener('click', (e) => {
+    const card = e.target.closest('.inventory-item');
+    if (!card) return;
+
+    const uid = card.dataset.uid;
+    const itemName = card.querySelector('.item-name')?.textContent || '해당';
+    const maxQuantity = parseInt(card.dataset.quantity, 10);
+    let quantityToWithdraw = 1;
+
+    if (maxQuantity > 1) {
+        const input = prompt(`[${itemName}] 아이템을 몇 개 가져오시겠습니까? (최대: ${maxQuantity}개)`, maxQuantity);
+        if (input === null) return; 
+        quantityToWithdraw = parseInt(input, 10);
+        if (isNaN(quantityToWithdraw) || quantityToWithdraw <= 0 || quantityToWithdraw > maxQuantity) {
+            alert('올바른 수량을 입력해주세요.');
+            return;
+        }
+    }
+
+    if (confirm(`[${itemName}] ${quantityToWithdraw}개를 인벤토리로 가져오시겠습니까?`)) {
+        socket.emit('accountStorage:withdraw', { uid, quantity: quantityToWithdraw });
+    }
+});
+
     function handleLegacyItemSelection(item) {
         if (!item) return;
         selectedInventoryItemUid = item.uid;
@@ -1892,6 +1967,11 @@ function initializeGame(socket) {
                 document.querySelector('.tab-button[data-tab="rift-enchant-tab"]').click();
                 setTimeout(() => updateRiftEnchantPanel(item), 50);
                 break;
+case 'deposit-storage':
+                if (confirm(`[${item.name}] 아이템을 계정금고로 이동하시겠습니까?`)) {
+                    socket.emit('accountStorage:deposit', { uid: item.uid });
+                }
+                break;
         }
         elements.modals.itemAction.overlay.style.display = 'none';
     });
@@ -1923,6 +2003,7 @@ function initializeGame(socket) {
                         return alert("올바른 수량을 입력해주세요.");
                     }
                 }
+
                 const price = prompt("개당 판매할 가격(골드)을 숫자로만 입력하세요:");
                 if (price && !isNaN(price) && parseInt(price, 10) > 0) {
                     socket.emit('listOnAuction', { uid: selectedInventoryItemUid, price: parseInt(price, 10), quantity }, (response) => {
@@ -1949,6 +2030,31 @@ function initializeGame(socket) {
                 }
             }
             break;
+
+case 'deposit-storage':
+                let depositQuantity = 1;
+
+                if (item.quantity > 1) {
+                    const inputQty = prompt(
+                        `금고에 보관할 수량을 입력하세요. (최대 ${item.quantity}개)`,
+                        item.quantity
+                    );
+                    
+                    if (inputQty === null) return; 
+
+                    depositQuantity = parseInt(inputQty, 10);
+
+                    if (isNaN(depositQuantity) || depositQuantity <= 0 || depositQuantity > item.quantity) {
+                        return alert("올바른 수량을 입력해주세요.");
+                    }
+                }
+
+                if (confirm(`[${item.name}] ${depositQuantity}개를 계정금고로 이동하시겠습니까?`)) {
+                    socket.emit('accountStorage:deposit', { uid: selectedInventoryItemUid, quantity: depositQuantity });
+                    selectedInventoryItemUid = null;
+                    updateEnhancementPanel(null);
+                }
+                break;
             case 'use-all':
                 socket.emit('useItem', { uid: selectedInventoryItemUid, useAll: true });
                 break;
@@ -1971,41 +2077,55 @@ function initializeGame(socket) {
         }
     });
     
-    document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('click', () => {
-        const stat = btn.dataset.stat;
-        const amountStr = btn.dataset.amount;
-        if (!currentPlayerState) return;
-        let cost = 0;
-        let amount = 0;
-        const base = currentPlayerState.stats.base[stat];
-        if (amountStr === 'MAX') {
-            let gold = currentPlayerState.gold;
-            let inc = 0;
-            while (true) {
-                const nextCost = base + inc;
-                if (cost + nextCost > gold) break;
-                cost += nextCost;
-                inc++;
-            }
-            amount = inc;
-        } else {
-            amount = parseInt(amountStr, 10);
-            for (let i = 0; i < amount; i++) { cost += base + i; }
+document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('click', () => {
+    const stat = btn.dataset.stat;
+    const amountStr = btn.dataset.amount;
+    if (amountStr === 'MAX') {
+        if (!confirm('현재 보유한 골드를 모두 사용하여 스탯을 올리시겠습니까?')) {
+            return; 
         }
+    }
+
+    if (!currentPlayerState) return;
+    
+    let cost = 0;
+    let amount = 0;
+    const base = currentPlayerState.stats.base[stat];
+
+    if (amountStr === 'MAX') {
+        let gold = currentPlayerState.gold;
+        let currentStatLevel = base;
+        let upgrades = 0;
+        let cumulativeCost = 0;
+
+        while(true) {
+            let nextCost = currentStatLevel + upgrades;
+            if(cumulativeCost + nextCost > gold) break;
+            cumulativeCost += nextCost;
+            upgrades++;
+        }
+        amount = upgrades;
+        cost = cumulativeCost;
+    } else {
+        amount = parseInt(amountStr, 10);
+        for (let i = 0; i < amount; i++) {
+            cost += (base + i);
+        }
+    }
+    
+    if (amount > 0 && currentPlayerState.gold >= cost) {
+        currentPlayerState.gold -= cost;
+        elements.gold.textContent = formatInt(currentPlayerState.gold);
+        elements.gold.classList.add('flash');
+        setTimeout(() => elements.gold.classList.remove('flash'), 300);
         
-        if (amount > 0 && currentPlayerState.gold >= cost) {
-            currentPlayerState.gold -= cost;
-            elements.gold.textContent = formatInt(currentPlayerState.gold);
-            elements.gold.classList.add('flash');
-            setTimeout(() => elements.gold.classList.remove('flash'), 300);
-            
-            const activeTabIsEnhance = document.getElementById('enhancement-tab').classList.contains('active');
-            if (activeTabIsEnhance && selectedInventoryItemUid && findItemInState(selectedInventoryItemUid)) {
-                updateEnhancementPanel(findItemInState(selectedInventoryItemUid));
-            }
-            socket.emit('upgradeStat', { stat, amount: amountStr });
+        const activeTabIsEnhance = document.getElementById('enhancement-tab').classList.contains('active');
+        if (activeTabIsEnhance && selectedInventoryItemUid && findItemInState(selectedInventoryItemUid)) {
+            updateEnhancementPanel(findItemInState(selectedInventoryItemUid));
         }
-    }));
+        socket.emit('upgradeStat', { stat, amount: amountStr });
+    }
+}));
     
     elements.enhancement.button.addEventListener('click', () => { 
         if (selectedInventoryItemUid) { 
