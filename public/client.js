@@ -518,6 +518,13 @@ function initializeGame(socket) {
                 title: document.getElementById('item-action-title'),
                 buttons: document.getElementById('item-action-buttons')
             },
+researchDetail: {
+                overlay: document.getElementById('research-detail-modal'),
+                title: document.getElementById('research-modal-title'),
+                body: document.getElementById('research-modal-body'),
+                upgradeBtn: document.getElementById('research-upgrade-button'),
+                closeBtn: document.getElementById('research-detail-modal').querySelector('.close-button')
+            },
             itemInfo: {
                 overlay: document.getElementById('item-info-modal'),
                 content: document.getElementById('item-info-modal-content')
@@ -1113,9 +1120,14 @@ e.stopPropagation();
         }
     };
 
-    const updateUI = ({ player, monster, isInRaid = false }) => {
+ const updateUI = ({ player, monster, isInRaid = false }) => {
         currentPlayerState = player; 
         updateTopBarInfo(player);
+
+  const essenceDisplaySpan = document.querySelector('.research-essence-display span');
+        if (essenceDisplaySpan) {
+            essenceDisplaySpan.textContent = (player.researchEssence || 0).toLocaleString();
+        }
 
         if (elements.gold.textContent !== formatInt(player.gold)) { 
             elements.gold.textContent = formatInt(player.gold); 
@@ -1238,6 +1250,15 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
         elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
         elements.modals.mailbox.button.classList.toggle('new-mail', player.hasUnreadMail);
         updateAffordableButtons();
+        
+
+    const activeTab = document.querySelector('.tab-button.active');
+        if (activeTab && activeTab.dataset.tab === 'research-tab') {
+            const essenceDisplaySpan = document.querySelector('.research-essence-display span');
+            if (essenceDisplaySpan) {
+                essenceDisplaySpan.textContent = (player.researchEssence || 0).toLocaleString();
+            }
+        }
     };
 
     elements.floorControls.personalRaidBtn.addEventListener('click', () => {
@@ -1587,8 +1608,9 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
 
     function updateRiftEnchantPanel(item, previouslyLockedIndices = []) {
         const { slot, optionsContainer, costDisplay, button } = elements.riftEnchant;
-        if (!item || (item.type !== 'weapon' && item.type !== 'armor')) {
-            slot.innerHTML = '마법을 부여할 장비를 선택하세요 (무기/방어구)';
+    const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' || (item.type === 'accessory' && item.grade === 'Primal'));
+        if (!isEnchantable) {
+            slot.innerHTML = '마법을 부여할 장비를 선택하세요 (무기/방어구, 태초 등급 액세서리만 가능)';
             optionsContainer.innerHTML = '';
             costDisplay.innerHTML = '';
             button.disabled = true;
@@ -1794,6 +1816,15 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
             if (activeTabContent) { 
                 activeTabContent.classList.add('active'); 
             }
+
+if (tabId === 'research-tab') {
+                const researchContainer = activeTabContent.querySelector('.research-container');
+             
+                if (!researchContainer || researchContainer.innerHTML.trim() === '') {
+                    renderResearchTab(currentPlayerState);
+                }
+            }
+
             if (tabId === 'chat-tab') {
                 setTimeout(() => {
                     elements.chat.messages.scrollTop = elements.chat.messages.scrollHeight;
@@ -1861,7 +1892,7 @@ document.getElementById('account-storage-grid').addEventListener('click', (e) =>
 
     function handleItemClick(e) {
         const card = e.target.closest('.inventory-item');
-        if (!card || card.closest('#auction-grid')) return;
+if (!card || card.closest('#auction-grid') || card.closest('#account-storage-grid')) return;
 
         const uid = card.dataset.uid;
         const item = findItemInState(uid);
@@ -1914,7 +1945,7 @@ document.getElementById('account-storage-grid').addEventListener('click', (e) =>
             buttons.appendChild(fusionAction);
         }
 
-        if (item.type === 'weapon' || item.type === 'armor') {
+        if (item.type === 'weapon' || item.type === 'armor' || (item.type === 'accessory' && item.grade === 'Primal')) {
             const enchantAction = document.createElement('button');
             enchantAction.className = 'action-btn list-auction-btn';
             enchantAction.textContent = '마법부여하기';
@@ -2250,7 +2281,7 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
         modal.style.display = 'flex';
     });
 
-  function addChatMessage(data) {
+function addChatMessage(data) {
     const { type, username, role, message, isSystem, fameScore, itemData, title } = data;
     const item = document.createElement('li');
     const isScrolledToBottom = elements.chat.messages.scrollHeight - elements.chat.messages.clientHeight <= elements.chat.messages.scrollTop + 1;
@@ -2274,8 +2305,6 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
                 <span class="primal-text">${userHtml} 님이 ${itemNameHtml} 아이템을 획득했습니다!</span>
             </div>
         `;
-
-
     } else {
         item.classList.add(`${type || 'user'}-message`);
         const usernameSpan = document.createElement('span');
@@ -2285,7 +2314,6 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
         const messageSpan = document.createElement('span');
         messageSpan.classList.add('message');
         const userHtml = createFameUserHtml(username, fameScore || 0);
-
         const titleHtml = title ? `<span class="title ${getGradeByTitle(title)}">${title}</span>` : '';
         
         if (role === 'admin') {
@@ -2308,7 +2336,15 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
         item.appendChild(usernameSpan);
         item.appendChild(messageSpan);
     }
+
     elements.chat.messages.appendChild(item);
+
+    const MAX_CHAT_MESSAGES = 25;
+
+    if (elements.chat.messages.children.length > MAX_CHAT_MESSAGES) {
+        elements.chat.messages.firstChild.remove();
+    }
+
     if (isScrolledToBottom) {
         elements.chat.messages.scrollTop = elements.chat.messages.scrollHeight;
     }
@@ -2450,6 +2486,187 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
             socket.emit('client-heartbeat');
         }
     }, 45000);
+
+const researchTab = document.getElementById('research-tab');
+
+researchTab.addEventListener('click', (e) => {
+    const node = e.target.closest('.research-node');
+
+    if (node && !node.classList.contains('locked')) {
+
+        const specId = node.dataset.specId;
+        const techId = node.dataset.techId;
+
+        if (specId && techId) {
+            openResearchDetailModal(specId, techId);
+        }
+    }
+});
+
+function getResearchTierClassName(researchName) {
+    if (researchName.startsWith('[초급]')) return 'research-tier-초급';
+    if (researchName.startsWith('[중급]')) return 'research-tier-중급';
+    if (researchName.startsWith('[상급]')) return 'research-tier-상급';
+    if (researchName.startsWith('[무한]')) return 'research-tier-무한';
+    return '';
+}
+
+function renderResearchTab(playerData) {
+    const researchTab = document.getElementById('research-tab');
+    if (!researchTab) return; 
+
+    if (!window.researchConfig) {
+        researchTab.innerHTML = '<p class="inventory-tip" style="text-align:center; padding: 50px;">연구소 데이터를 불러오는 중입니다...</p>';
+        return;
+    }
+
+    researchTab.innerHTML = `
+        <div class="research-header">
+            <h3>연구소</h3>
+            <div class="research-essence-display">
+                무한의 정수: <span>${(playerData.researchEssence || 0).toLocaleString()}</span>개
+            </div>
+        </div>
+        <div class="research-container"></div>
+    `;
+
+    const container = researchTab.querySelector('.research-container');
+
+    for (const specializationId in window.researchConfig) {
+        const specialization = window.researchConfig[specializationId];
+        const playerResearchLevels = (playerData.research && playerData.research[specializationId]) || {};
+
+        const column = document.createElement('div');
+        column.className = 'research-specialization-column';
+
+        const tree = document.createElement('div');
+        tree.className = 'research-tree';
+
+        column.innerHTML = `<h4>${specialization.name}</h4>`;
+
+        specialization.researches.forEach((tech, index) => {
+            const currentLevel = playerResearchLevels[tech.id] || 0;
+            let status = 'locked';
+
+            let isUnlocked = false;
+            if (!tech.requires) {
+                isUnlocked = true;
+            } else {
+                const requiredLevel = playerResearchLevels[tech.requires.techId] || 0;
+                if (requiredLevel >= tech.requires.level) {
+                    isUnlocked = true;
+                }
+            }
+
+            if (isUnlocked) {
+                status = currentLevel >= tech.maxLevel ? 'maxed' : 'unlocked';
+            }
+
+            const node = document.createElement('div');
+            node.className = `research-node ${status}`;
+            node.dataset.techId = tech.id;
+            node.dataset.specId = specializationId;
+
+            const tierClass = getResearchTierClassName(tech.name);
+            node.innerHTML = `
+                <div class="research-node-name ${tierClass}">${tech.name}</div>
+                <div class="research-node-level ${currentLevel >= tech.maxLevel ? 'maxed-level' : ''}">
+                    Lv. ${currentLevel}
+                </div>
+            `;
+
+          
+
+            tree.appendChild(node);
+
+            if (index < specialization.researches.length - 1) {
+                const connector = document.createElement('div');
+                connector.className = 'research-connector';
+                tree.appendChild(connector);
+            }
+        });
+
+        column.appendChild(tree);
+        container.appendChild(column);
+    }
+}
+function openResearchDetailModal(playerData, specializationId, techId) {
+    console.log(`[진단 1] openResearchDetailModal 함수가 호출되었습니다. (techId: ${techId})`);
+
+    try {
+        const spec = window.researchConfig[specializationId];
+        const tech = spec.researches.find(t => t.id === techId);
+        
+        if (!tech) {
+            console.error("[진단 2] 오류: 연구 데이터를 찾지 못했습니다. 함수를 중단합니다.");
+            return;
+        }
+        console.log("[진단 2] 연구 데이터를 성공적으로 찾았습니다.", tech);
+
+        const { overlay, title, body, upgradeBtn, closeBtn } = elements.modals.researchDetail;
+
+
+        if (!overlay || !upgradeBtn) {
+            console.error("[진단 3] 오류: 모달 UI 요소를 찾을 수 없습니다. HTML의 id 속성을 확인하세요.");
+            return;
+        }
+        console.log("[진단 3] 모달 UI 요소를 성공적으로 가져왔습니다.");
+
+ const playerResearchLevels = (currentPlayerState.research && currentPlayerState.research[specializationId]) || {};
+        const currentLevel = playerResearchLevels[tech.id] || 0;
+        const isMaxed = currentLevel >= tech.maxLevel;
+        const cost = !isMaxed ? tech.cost(currentLevel + 1) : 'N/A';
+        console.log(`[진단 4] 레벨(${currentLevel}), 비용(${cost}) 계산을 완료했습니다.`);
+        
+
+        const tierClass = getResearchTierClassName(tech.name);
+        title.innerHTML = `<span class="${tierClass}">${tech.name}</span>`;
+        let requirementText = '';
+        if (tech.requires) {
+            const requiredTech = spec.researches.find(t => t.id === tech.requires.techId);
+            const requiredTierClass = getResearchTierClassName(requiredTech.name);
+            requirementText = `<div class="requirements"><strong>요구 조건:</strong> <span class="${requiredTierClass}">${requiredTech.name}</span> ${tech.requires.level}레벨</div>`;
+        }
+        body.innerHTML = `
+            <p class="current-effect"><strong>현재 효과 (Lv.${currentLevel}):</strong> ${tech.description(currentLevel)}</p>
+            ${!isMaxed ? `<p class="next-effect"><strong>다음 효과 (Lv.${currentLevel + 1}):</strong> ${tech.description(currentLevel + 1)}</p>` : ''}
+            ${requirementText}
+            ${!isMaxed ? `<div class="cost"><strong>필요 정수:</strong> ${cost.toLocaleString()}</div>` : '<div class="cost" style="color: var(--gold-color);">최대 레벨에 도달했습니다.</div>'}
+        `;
+        console.log("[진단 5] 모달 내용(innerHTML) 설정을 완료했습니다.");
+
+
+upgradeBtn.disabled = isMaxed || (currentPlayerState.researchEssence || 0) < cost;
+        upgradeBtn.onclick = () => {
+            if (!upgradeBtn.disabled) {
+                socket.emit('research:upgrade', { specializationId, techId });
+                overlay.style.display = 'none';
+            }
+        };
+        closeBtn.onclick = () => {
+            overlay.style.display = 'none';
+            upgradeBtn.onclick = null;
+        };
+        overlay.onclick = (e) => {
+            if (e.target === overlay) {
+                closeBtn.onclick();
+            }
+        };
+        console.log("[진단 6] 이벤트 핸들러 설정을 완료했습니다.");
+        
+
+        overlay.style.display = 'flex';
+        console.log("[진단 7] 모달 표시를 시도했습니다. 모달이 보이지 않는다면 다른 CSS 문제일 수 있습니다.");
+
+    } catch (error) {
+        console.error("openResearchDetailModal 함수 실행 중 예외 오류가 발생했습니다:", error);
+        alert("모달을 여는 중 심각한 오류가 발생했습니다. 개발자 콘솔을 확인해주세요.");
+    }
+}
+
+
+
+
 }
 
 function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, completionPercentage }) {

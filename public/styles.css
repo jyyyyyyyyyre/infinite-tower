@@ -983,7 +983,7 @@ body.auth-view {
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 10000
+    z-index: 10002; /* z-index 수정: 10000 -> 10002 */
 }
 
 .modal-content {
@@ -2235,3 +2235,200 @@ body.auth-view {
     color: #fff;
     text-shadow: 0 0 5px #000;
 }
+
+.stat-row .stat-value {
+    font-size: 0.8em; /* 기존보다 약간 작게 조절 */
+    letter-spacing: -0.5px; /* 자간을 미세하게 줄여 공간 확보 */
+}
+
+#online-users-list li {
+    font-size: 1.0em; /* 기존 1.2em에서 크기 축소 */
+}
+
+#research-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 20px;
+}
+
+.research-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.research-header h3 {
+    font-size: 1.8em;
+    color: var(--primary-color);
+}
+
+.research-essence-display {
+    font-size: 1.4em;
+    font-weight: 500;
+    color: var(--mystic-color); /* 무한의 정수 색상 */
+}
+
+.research-essence-display span {
+    font-weight: 700;
+}
+
+.research-container {
+    display: flex;
+    gap: 20px;
+    overflow-x: auto; /* 가로 스크롤 허용 */
+    flex-grow: 1;
+    min-height: 0;
+    padding: 10px;
+    background-color: rgba(0,0,0,0.15);
+    border-radius: 8px;
+}
+
+.research-specialization-column {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+    min-width: 180px; /* 각 전문화 컬럼의 최소 너비 */
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--bg-color-dark);
+}
+
+.research-specialization-column h4 {
+    font-size: 1.5em;
+    color: var(--secondary-color);
+    margin-bottom: 10px;
+    white-space: nowrap;
+}
+
+.research-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+}
+
+.research-node {
+    width: 130px;
+    height: 100px;
+    border-radius: 8px; /* 사각형 형태로 변경 */
+    background-color: var(--surface-color);
+    border: 2px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 8px;
+    position: relative;
+    transition: all 0.2s;
+}
+
+.research-node.unlocked {
+    cursor: pointer;
+    border-color: var(--primary-color);
+}
+
+.research-node.unlocked:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 15px var(--primary-color);
+}
+
+.research-node.locked {
+    filter: grayscale(80%);
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.research-node.maxed {
+    border-color: var(--gold-color);
+    box-shadow: 0 0 15px var(--gold-color);
+    cursor: default;
+}
+
+.research-node-name {
+    font-size: 1em; /* 폰트 크기 조정 */
+    font-weight: bold;
+    line-height: 1.3;
+    word-break: keep-all;
+}
+
+.research-node-level {
+    font-size: 0.9em;
+    color: var(--success-color);
+    font-weight: bold;
+    margin-top: 8px;
+}
+
+.research-node-level.maxed-level {
+    color: var(--gold-color);
+}
+
+.research-connector {
+    width: 4px;
+    height: 20px;
+    background-color: var(--border-color);
+}
+
+/* 연구 등급별 색상 */
+.research-tier-초급 { color: #a9a9a9; }
+.research-tier-중급 { color: var(--rare-color); }
+.research-tier-상급 { color: var(--legendary-color); }
+.research-tier-무한 { color: var(--mystic-color); }
+
+/* 연구 정보 모달 스타일 */
+#research-modal-body {
+    padding: 20px 0;
+    line-height: 1.7;
+}
+
+#research-modal-body h5 {
+    font-size: 1.4em;
+    margin-bottom: 15px;
+    color: var(--primary-color);
+}
+
+#research-modal-body p {
+    margin: 8px 0;
+    font-size: 1.1em;
+}
+
+#research-modal-body .current-effect {
+    color: var(--success-color);
+}
+
+#research-modal-body .next-effect {
+    color: var(--text-muted);
+}
+
+#research-modal-body .requirements {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+    color: var(--fail-color);
+}
+
+#research-modal-body .cost {
+    margin-top: 10px;
+    color: var(--mystic-color);
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
+#research-modal-footer {
+    text-align: center;
+    margin-top: 10px;
+}
+
+#research-upgrade-button {
+    width: 60%;
+    padding: 15px;
+    font-size: 1.2em;
+}
+
+/* 끝 */
