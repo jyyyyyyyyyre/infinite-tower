@@ -2246,7 +2246,6 @@ body.auth-view {
 }
 
 #research-tab {
-    display: flex;
     flex-direction: column;
     gap: 20px;
     padding: 20px;

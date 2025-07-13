@@ -1,3 +1,4 @@
+// [수정] const를 var로 변경하여 브라우저의 window 객체에 자동으로 할당되도록 합니다.
 var researchConfig = {
     warlord: {
         name: '워로드',

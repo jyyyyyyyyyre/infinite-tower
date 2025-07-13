@@ -37,7 +37,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-const storageTransactionLocks = new Set();
+
 const app = express();
 const server = http.createServer(app);
 const researchConfig = require('./researchConfig');
@@ -60,13 +60,14 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_OBJECT_ID = '68617d506c3498183c9b367f';
 const BOSS_INTERVAL = 200;
 
+
 const RIFT_ENCHANT_COST = {
     GOLD: 100000000,
     SHARDS: 100
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 495000000000, ATTACK: 0, DEFENSE: 0,
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 30000000, ATTACK: 0, DEFENSE: 0,
     REWARDS: { GOLD: 800000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
@@ -247,10 +248,7 @@ const AdminLogSchema = new mongoose.Schema({
     details: { type: Object },
 }, { timestamps: true });
 
-const AccountStorageSchema = new mongoose.Schema({
-    kakaoId: { type: String, required: true, unique: true, index: true },
-    inventory: { type: [Object], default: [] }
-});
+
 
 const PostSchema = new mongoose.Schema({
     authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -276,7 +274,7 @@ const Post = mongoose.model('Post', PostSchema);
 const Comment = mongoose.model('Comment', CommentSchema);
 const GameSettings = mongoose.model('GameSettings', GameSettingsSchema);
 const AdminLog = mongoose.model('AdminLog', AdminLogSchema);
-const AccountStorage = mongoose.model('AccountStorage', AccountStorageSchema);
+
 
 mongoose.connect(MONGO_URI).then(() => {
     console.log('MongoDB 성공적으로 연결되었습니다.');
@@ -322,8 +320,8 @@ app.get('/api/kakao/callback', async (req, res) => {
         const kakaoId = userResponse.data.id.toString();
         
         const linkedAccounts = await User.find({ kakaoId: kakaoId });
-        if (linkedAccounts.length >= 2) {
-            return res.redirect('/?error=하나의 카카오 계정으로는 2개의 게임 계정만 생성할 수 있습니다.');
+        if (linkedAccounts.length >= 1) {
+            return res.redirect('/?error=하나의 카카오 계정으로는 1개의 게임 계정만 생성할 수 있습니다.');
         }
       
         const tempToken = jwt.sign({ kakaoId, accountCount: linkedAccounts.length }, JWT_SECRET, { expiresIn: '10m' });
@@ -585,22 +583,22 @@ async function loadGameSettings() {
             settingId: 'main_settings',
            dropTable: {
                 1: { itemsByGrade: { Common: ['w001', 'a001'] }, rates: { Common: 0.979, Rare: 0.02 }, specialDrops: { 'rift_shard': { chance: 0.0005 } } },
-                2: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'] }, rates: { Common: 0.899, Rare: 0.09, Legendary: 0.01 }, specialDrops: { 'rift_shard': { chance: 0.0005 } } },
-                3: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'] }, rates: { Common: 0.779, Rare: 0.16, Legendary: 0.055, Epic: 0.005 }, specialDrops: { 'rift_shard': { chance: 0.0005 } } },
-                4: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'] }, rates: { Common: 0.649, Rare: 0.25, Legendary: 0.09, Epic: 0.0098, Mystic: 0.0002 }, specialDrops: { 'rift_shard': { chance: 0.0005 } } },
+                2: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'] }, rates: { Common: 0.899, Rare: 0.09, Legendary: 0.01 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
+                3: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'] }, rates: { Common: 0.779, Rare: 0.16, Legendary: 0.055, Epic: 0.005 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
+                4: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'] }, rates: { Common: 0.649, Rare: 0.25, Legendary: 0.09, Epic: 0.0098, Mystic: 0.0002 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
                 5: {
                     itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'], Primal: ['primal_w01', 'primal_a01'] },
                     rates: { Common: 0.5994995, Rare: 0.28, Legendary: 0.11, Epic: 0.0098, Mystic: 0.0002, Primal: 0.0000005 },
-                    specialDrops: { 'rift_shard': { chance: 0.0005 } }
+                    specialDrops: { 'rift_shard': { chance: 0.001 } }
                 },
                 6: {
                     itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'], Primal: ['primal_w01', 'primal_a01', 'primal_acc_necklace_01', 'primal_acc_earring_01', 'primal_acc_wristwatch_01'] },
                     rates: { Common: 0.5491995, Rare: 0.30, Legendary: 0.13, Epic: 0.019, Mystic: 0.0008, Primal: 0.0000005 },
-                    specialDrops: { 'rift_shard': { chance: 0.001 } }
+                    specialDrops: { 'rift_shard': { chance: 0.002 } }
                 }
             },
             globalLootTable: [
-                { id: 'gold_pouch', chance: (0.001) }, { id: 'pet_egg_normal', chance: (0.0008) }, { id: 'prevention_ticket', chance: (0.00009) }, { id: 'pet_egg_ancient', chance: (0.00005) }, { id: 'hammer_hephaestus', chance: (0.00003) }, { id: 'tome_socket1', chance: (0.000008 / 1.2) }, { id: 'tome_socket2', chance: (0.0000065 / 1.2) }, { id: 'tome_socket3', chance: (0.000005 / 1.2) }, { id: 'return_scroll', chance: (0.000009 / 1) }, { id: 'acc_necklace_01', chance: (0.000002) }, { id: 'acc_earring_01', chance: (0.000002) }, { id: 'acc_wristwatch_01', chance: (0.000002) }, { id: 'pet_egg_mythic', chance: (0.0000005) }, { id: 'form_locking_stone', chance: (0.0001 / 3) }
+                { id: 'gold_pouch', chance: (0.002) }, { id: 'pet_egg_normal', chance: (0.0016) }, { id: 'prevention_ticket', chance: (0.00018) }, { id: 'pet_egg_ancient', chance: (0.00005) }, { id: 'hammer_hephaestus', chance: (0.00006) }, { id: 'tome_socket1', chance: (0.000008) }, { id: 'tome_socket2', chance: (0.0000065) }, { id: 'tome_socket3', chance: (0.000005) }, { id: 'return_scroll', chance: (0.000009 *1.5) }, { id: 'acc_necklace_01', chance: (0.000004) }, { id: 'acc_earring_01', chance: (0.000004) }, { id: 'acc_wristwatch_01', chance: (0.000004) }, { id: 'pet_egg_mythic', chance: (0.0000005) }, { id: 'form_locking_stone', chance: (0.0001 / 2) }
             ],
             enhancementTable: { 1: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 2: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 3: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 4: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 5: { success: 0.90, maintain: 0.10, fail: 0.00, destroy: 0.00 }, 6: { success: 0.80, maintain: 0.20, fail: 0.00, destroy: 0.00 }, 7: { success: 0.70, maintain: 0.25, fail: 0.05, destroy: 0.00 }, 8: { success: 0.50, maintain: 0.30, fail: 0.20, destroy: 0.00 }, 9: { success: 0.40, maintain: 0.40, fail: 0.20, destroy: 0.00 }, 10: { success: 0.30, maintain: 0.45, fail: 0.25, destroy: 0.00 }, 11: { success: 0.20, maintain: 0.00, fail: 0.00, destroy: 0.80 }, 12: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }, 13: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }, 14: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }, 15: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 } },
             highEnhancementRate: { success: 0.10, maintain: 0.90, fail: 0.00, destroy: 0.00 }
@@ -608,7 +606,7 @@ async function loadGameSettings() {
 
 const settings = await GameSettings.findOneAndUpdate(
     { settingId: 'main_settings' },
-    { $set: defaultSettings }, // 이렇게 변경
+    { $set: defaultSettings }, 
     { new: true, upsert: true, setDefaultsOnInsert: true }
 );
 
@@ -630,8 +628,8 @@ app.post('/api/finalize-registration', async (req, res) => {
         const decoded = jwt.verify(tempToken, JWT_SECRET);
         const { kakaoId } = decoded;
         const linkedAccounts = await User.find({ kakaoId });
-        if (linkedAccounts.length >= 2) {
-            return res.status(409).json({ message: '하나의 카카오 계정으로는 2개의 게임 계정만 생성할 수 있습니다.' });
+        if (linkedAccounts.length >= 1) {
+            return res.status(409).json({ message: '하나의 카카오 계정으로는 1개의 게임 계정만 생성할 수 있습니다.' });
         }
         const existingUser = await User.findOne({ username });
         if (existingUser) {
@@ -677,8 +675,8 @@ app.post('/api/finalize-linking', async (req, res) => {
             return res.status(409).json({ message: '이미 사용중인 닉네임입니다.' });
         }
         const linkedAccounts = await User.find({ kakaoId });
-        if (linkedAccounts.length >= 2) {
-             return res.status(409).json({ message: '하나의 카카오 계정으로는 2개의 게임 계정만 생성할 수 있습니다.' });
+        if (linkedAccounts.length >= 1) {
+             return res.status(409).json({ message: '하나의 카카오 계정으로는 1개의 게임 계정만 생성할 수 있습니다.' });
         }
 
         const oldUsername = user.username;
@@ -882,6 +880,7 @@ function handleItemStacking(player, item) {
 function calculateTotalStats(player) {
     if (!player || !player.stats) return;
 
+    // --- 1단계: 연구를 제외한 모든 소스에서 스탯 합산 ---
     const base = player.stats.base;
     let weaponBonus = 0;
     let armorBonus = 0;
@@ -890,43 +889,6 @@ function calculateTotalStats(player) {
     let buffHpMultiplier = 1;
     let artifactAttackMultiplier = 1;
     let artifactDefenseMultiplier = 1;
-
-    let researchBonuses = {
-        attackPercent: 0,
-        hpPercent: 0,
-        defensePercent: 0,
-        critChance: 0,
-        critDamage: 0,
-        penetration: 0,
-        focus: 0,
-        critResistance: 0,
-        tenacity: 0,
-        bloodthirst: 0,
-        lowHpAttackPercent: 0,
-    };
-
-    if (player.research) {
-        for (const specializationId in player.research) {
-            const specialization = researchConfig[specializationId];
-            if (!specialization) continue;
-
-            const playerResearchLevels = player.research[specializationId];
-            if (!playerResearchLevels) continue;
-
-            const researchLevels = playerResearchLevels instanceof Map ? Object.fromEntries(playerResearchLevels) : playerResearchLevels;
-
-            for (const techId in researchLevels) {
-                const level = researchLevels[techId];
-                const tech = specialization.researches.find(t => t.id === techId);
-                if (tech && level > 0) {
-                    const bonus = tech.getBonus(level);
-                    for (const key in bonus) {
-                        researchBonuses[key] = (researchBonuses[key] || 0) + bonus[key];
-                    }
-                }
-            }
-        }
-    }
 
     let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
     let titleAttackBonus = 1;
@@ -941,18 +903,19 @@ function calculateTotalStats(player) {
         if (titleEffects.petStatBonus) titlePetStatBonus += titleEffects.petStatBonus;
     }
 
-    player.stats.critChance = 0; 
+    // 스탯 초기화
+    player.stats.critChance = 0;
     player.stats.critResistance = 0;
     player.focus = 0;
     player.penetration = 0;
     player.tenacity = 0;
-
+    
     let petDefPenetration = 0;
-    let enchantDefPenetration = 0;
     let enchantAttackPercent = 1;
     let enchantDefensePercent = 1;
     let enchantHpPercent = 1;
     let enchantAllStatsPercent = 1;
+    let enchantDefPenetration = 0;
 
     if (player.equippedPet && player.equippedPet.effects) {
         const effects = player.equippedPet.effects;
@@ -961,9 +924,9 @@ function calculateTotalStats(player) {
         petDefPenetration = (effects.defPenetration || 0) * titlePetStatBonus;
     }
 
-    if (player.equipment.wristwatch && player.equipment.wristwatch.id === 'acc_wristwatch_01') {
-        player.stats.critChance += 0.20;
-    }
+    if (player.equipment.wristwatch?.id === 'acc_wristwatch_01') player.stats.critChance += 0.20;
+    if (player.equipment.wristwatch?.id === 'primal_acc_wristwatch_01') player.stats.critChance += 0.30;
+
 
     if (player.buffs && player.buffs.length > 0) {
         player.buffs.forEach(buff => {
@@ -986,8 +949,8 @@ function calculateTotalStats(player) {
         artifactDefenseMultiplier += 0.50;
     }
 
-    for (const slot of ['weapon', 'armor']) {
-        const item = player.equipment[slot];
+    const allEquipment = [...Object.values(player.equipment), player.equippedPet];
+    for (const item of allEquipment) {
         if (item && item.enchantments) {
             for (const enchant of item.enchantments) {
                 switch (enchant.type) {
@@ -1003,40 +966,75 @@ function calculateTotalStats(player) {
             }
         }
     }
+
+    // --- 2단계: 연구 보너스 수치 집계 ---
+    let researchBonuses = {
+        attackPercent: 0, hpPercent: 0, defensePercent: 0, critChance: 0, critDamage: 0,
+        penetration: 0, focus: 0, critResistance: 0, tenacity: 0, bloodthirst: 0,
+        lowHpAttackPercent: 0,
+    };
+    if (player.research) {
+        for (const specializationId in player.research) {
+            const specialization = researchConfig[specializationId];
+            if (!specialization) continue;
+
+            const playerResearchLevels = player.research[specializationId] instanceof Map ? Object.fromEntries(player.research[specializationId]) : player.research[specializationId];
+
+            for (const techId in playerResearchLevels) {
+                const level = playerResearchLevels[techId];
+                const tech = specialization.researches.find(t => t.id === techId);
+                if (tech && level > 0) {
+                    const bonus = tech.getBonus(level);
+                    for (const key in bonus) {
+                        researchBonuses[key] = (researchBonuses[key] || 0) + bonus[key];
+                    }
+                }
+            }
+        }
+    }
     
-    player.bloodthirst += (researchBonuses.bloodthirst || 0);
-    player.stats.critChance += (researchBonuses.critChance || 0);
-    player.stats.critResistance += (researchBonuses.critResistance || 0);
-    player.focus += (researchBonuses.focus || 0) * 100; 
-    player.penetration += (researchBonuses.penetration || 0) * 100;
-    player.tenacity += (researchBonuses.tenacity || 0) * 100;
+    // --- 3단계: 최종 스탯 계산 및 연구 보너스(곱연산) 적용 ---
+    
+    // 기본 + 장비 + 버프 + 기타 보너스로 중간 합산
+    let totalHp = (base.hp * (1 + armorBonus)) * buffHpMultiplier * enchantHpPercent * enchantAllStatsPercent * titleHpBonus;
+    let totalAttack = (base.attack * (1 + weaponBonus)) * artifactAttackMultiplier * buffAttackMultiplier * enchantAttackPercent * enchantAllStatsPercent * titleAttackBonus;
+    let totalDefense = (base.defense * (1 + armorBonus)) * artifactDefenseMultiplier * buffDefenseMultiplier * enchantDefensePercent * enchantAllStatsPercent;
 
-    let totalHp = (base.hp * (1 + armorBonus + researchBonuses.hpPercent)) * buffHpMultiplier * enchantHpPercent * enchantAllStatsPercent * titleHpBonus;
-    let totalAttack = (base.attack * (1 + weaponBonus + researchBonuses.attackPercent)) * artifactAttackMultiplier * buffAttackMultiplier * enchantAttackPercent * enchantAllStatsPercent * titleAttackBonus;
-    let totalDefense = (base.defense * (1 + armorBonus + researchBonuses.defensePercent)) * artifactDefenseMultiplier * buffDefenseMultiplier * enchantDefensePercent * enchantAllStatsPercent;
-
-    player.stats.critChance += titleCritBonus;
-
+    // 도감 보너스
     if (player.codexBonusActive) {
         totalHp *= 1.05;
         totalAttack *= 1.05;
         totalDefense *= 1.05;
         player.stats.critChance += 0.05;
     }
-    
     if (player.titleCodexCompleted) {
         totalHp *= 1.05;
         totalAttack *= 1.05;
         totalDefense *= 1.05;
     }
 
+    // 혈석 적용 (합산)
+    player.bloodthirst += (researchBonuses.bloodthirst || 0);
+
+    // 연구 보너스를 최종적으로 곱연산 적용
+    totalHp *= (1 + researchBonuses.hpPercent);
+    totalAttack *= (1 + researchBonuses.attackPercent);
+    totalDefense *= (1 + researchBonuses.defensePercent);
+
+    player.stats.critChance = (player.stats.critChance + titleCritBonus) * (1 + researchBonuses.critChance);
+    player.stats.critResistance *= (1 + researchBonuses.critResistance);
+    player.focus = player.focus * (1 + researchBonuses.focus);
+    player.penetration = player.penetration * (1 + researchBonuses.penetration);
+    player.tenacity = player.tenacity * (1 + researchBonuses.tenacity);
+    
+    // 최종 스탯 저장
     player.stats.total = {
         hp: totalHp,
         attack: totalAttack,
         defense: totalDefense,
         defPenetration: petDefPenetration + enchantDefPenetration,
-        critDamage: (researchBonuses.critDamage || 0),
-        lowHpAttackPercent: (researchBonuses.lowHpAttackPercent || 0), 
+        critDamage: researchBonuses.critDamage, // 치명타 피해는 합연산이 유리하므로 유지
+        lowHpAttackPercent: researchBonuses.lowHpAttackPercent, 
     };
 }
 
@@ -2407,209 +2405,7 @@ announceMysticDrop(onlinePlayer, newItem);
             } catch (error) { callback([]); }
         })
     
-   .on('accountStorage:get', async (callback) => {
-            const player = onlinePlayers[socket.userId];
-            if (!player || !player.kakaoId) {
-                return callback({ success: false, message: '카카오 연동 계정만 사용할 수 있습니다.' });
-            }
-
-            try {
-                const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId });
-                callback({ success: true, items: storage ? storage.inventory : [] });
-            } catch (error) {
-                console.error(`[AccountStorage GET] Error for ${player.username}:`, error);
-                callback({ success: false, message: '금고 정보를 불러오는 중 오류가 발생했습니다.' });
-            }
-        })
-
-.on('accountStorage:deposit', async ({ uid, quantity }) => {
-    const player = onlinePlayers[socket.userId];
-    if (!player || !player.kakaoId) return;
-
-    if (storageTransactionLocks.has(player.kakaoId)) {
-        return pushLog(player, '[계정금고] 다른 작업을 처리 중입니다. 잠시 후 다시 시도해주세요.');
-    }
-    storageTransactionLocks.add(player.kakaoId);
-
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-        const quantityToDeposit = parseInt(quantity, 10);
-        if (isNaN(quantityToDeposit) || quantityToDeposit <= 0) {
-            throw new Error('잘못된 수량입니다.');
-        }
-
-        const gameData = await GameData.findOne({ "user": player.user, "inventory.uid": uid }).lean({ session });
-        if (!gameData) {
-             throw new Error('인벤토리에 해당 아이템이 없습니다.');
-        }
-        const itemInInventory = gameData.inventory.find(i => i.uid === uid);
-        if (!itemInInventory) {
-             throw new Error('인벤토리에서 아이템 정보를 찾는 데 실패했습니다.');
-        }
-        if (quantityToDeposit > itemInInventory.quantity) {
-            throw new Error('보유한 수량보다 많이 보관할 수 없습니다.');
-        }
-        if (itemInInventory.tradable === false) {
-            throw new Error('거래 불가 아이템은 보관할 수 없습니다.');
-        }
-
-        let playerInvUpdateResult;
-        if (itemInInventory.quantity > quantityToDeposit) {
-            playerInvUpdateResult = await GameData.updateOne(
-                { "user": player.user, "inventory.uid": uid },
-                { "$inc": { "inventory.$.quantity": -quantityToDeposit } },
-                { session }
-            );
-        } else {
-            playerInvUpdateResult = await GameData.updateOne(
-                { user: player.user },
-                { "$pull": { inventory: { uid: uid } } },
-                { session }
-            );
-        }
-        if (playerInvUpdateResult.modifiedCount === 0) {
-            throw new Error('인벤토리에서 아이템을 차감하는 데 실패했습니다.');
-        }
-        
-        // [핵심 수정] 항상 새로운 고유 ID를 가진 아이템 객체를 생성합니다.
-        const itemToDeposit = { ...itemInInventory, quantity: quantityToDeposit, uid: new mongoose.Types.ObjectId().toString() };
-        
-        // [핵심 수정] 기존 스택에 더하는 로직을 완전히 제거하고, 항상 $push로 새 스택을 추가합니다.
-        await AccountStorage.updateOne(
-            { kakaoId: player.kakaoId },
-            { "$push": { "inventory": itemToDeposit } },
-            { upsert: true, session }
-        );
-        
-        await session.commitTransaction();
-
-        const finalPlayerData = await GameData.findOne({ user: player.user });
-        player.inventory = finalPlayerData.inventory;
-        sendInventoryUpdate(player);
-        pushLog(player, `[계정금고] ${itemInInventory.name} ${quantityToDeposit}개를 보관했습니다.`);
-
-        const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId }).lean();
-        const updatedInventory = storage ? storage.inventory : [];
-        for (const p of Object.values(onlinePlayers)) {
-            if (p.kakaoId === player.kakaoId && p.socket) {
-                p.socket.emit('accountStorage:update', updatedInventory);
-            }
-        }
-
-    } catch (error) {
-        await session.abortTransaction();
-        pushLog(player, `[계정금고] 아이템 보관 실패: ${error.message}`);
-        
-        const refreshedPlayerData = await GameData.findOne({ user: player.user });
-        if (refreshedPlayerData) {
-            player.inventory = refreshedPlayerData.inventory;
-            sendInventoryUpdate(player);
-        }
-    } finally {
-        session.endSession();
-        storageTransactionLocks.delete(player.kakaoId);
-    }
-})
-
-.on('accountStorage:withdraw', async ({ uid, quantity }) => {
-    const player = onlinePlayers[socket.userId];
-    if (!player || !player.kakaoId) return;
-
-    if (storageTransactionLocks.has(player.kakaoId)) {
-        return pushLog(player, '[계정금고] 다른 작업을 처리 중입니다. 잠시 후 다시 시도해주세요.');
-    }
-    storageTransactionLocks.add(player.kakaoId);
-
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-        const quantityToWithdraw = parseInt(quantity, 10);
-        if (isNaN(quantityToWithdraw) || quantityToWithdraw <= 0) {
-            throw new Error('잘못된 수량입니다.');
-        }
-
-        const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId, "inventory.uid": uid }).lean({ session });
-        if (!storage) {
-            throw new Error('금고에서 해당 아이템을 찾을 수 없습니다.');
-        }
-        const itemInStorage = storage.inventory.find(i => i.uid === uid);
-        if (!itemInStorage || itemInStorage.quantity < quantityToWithdraw) {
-            throw new Error('요청한 수량이 금고에 있는 수량보다 많습니다.');
-        }
-
-        let storageUpdateResult;
-        if (itemInStorage.quantity > quantityToWithdraw) {
-            storageUpdateResult = await AccountStorage.updateOne(
-                { kakaoId: player.kakaoId, "inventory.uid": uid, "inventory.quantity": { "$gte": quantityToWithdraw } },
-                { "$inc": { "inventory.$.quantity": -quantityToWithdraw } },
-                { session }
-            );
-        } else {
-            storageUpdateResult = await AccountStorage.updateOne(
-                { kakaoId: player.kakaoId, "inventory.uid": uid },
-                { "$pull": { inventory: { uid: uid } } },
-                { session }
-            );
-        }
-        
-        if (storageUpdateResult.modifiedCount === 0) {
-            throw new Error('금고에서 아이템을 차감하는 데 실패했습니다.');
-        }
-
-        const itemToGive = { ...itemInStorage, quantity: quantityToWithdraw, uid: new mongoose.Types.ObjectId().toString() };
-        const isStackable = !itemToGive.enhancement && itemToGive.grade !== 'Primal';
-        
-        let playerInvUpdateResult;
-        if (isStackable) {
-            playerInvUpdateResult = await GameData.updateOne(
-                { user: player.user, "inventory": { "$elemMatch": { "id": itemToGive.id, "enhancement": { "$in": [0, null] }, "grade": { "$ne": "Primal" } } } },
-                { "$inc": { "inventory.$.quantity": quantityToWithdraw } },
-                { session }
-            );
-        }
-        
-        if (!isStackable || (playerInvUpdateResult && playerInvUpdateResult.modifiedCount === 0)) {
-            await GameData.updateOne(
-                { user: player.user },
-                { "$push": { "inventory": itemToGive } },
-                { session }
-            );
-        }
-
-        await session.commitTransaction();
-        
-        const finalPlayerData = await GameData.findOne({ user: player.user });
-        player.inventory = finalPlayerData.inventory;
-        sendInventoryUpdate(player);
-
-        pushLog(player, `[계정금고] ${itemToGive.name} ${quantityToWithdraw}개를 인벤토리로 가져왔습니다.`);
-
-        const finalStorageState = await AccountStorage.findOne({ kakaoId: player.kakaoId }).lean();
-        const updatedInventory = finalStorageState ? finalStorageState.inventory : [];
-        for (const p of Object.values(onlinePlayers)) {
-            if (p.kakaoId === player.kakaoId && p.socket) {
-                p.socket.emit('accountStorage:update', updatedInventory);
-            }
-        }
-        
-    } catch (error) {
-        await session.abortTransaction();
-        pushLog(player, `[계정금고] 아이템 인출 실패: ${error.message}`);
-        
-        const refreshedPlayerData = await GameData.findOne({ user: player.user });
-        if (refreshedPlayerData) {
-            player.inventory = refreshedPlayerData.inventory;
-            sendInventoryUpdate(player);
-        }
-    } finally {
-        session.endSession();
-        storageTransactionLocks.delete(player.kakaoId);
-    }
-})
-
+  
  .on('research:upgrade', ({ specializationId, techId }) => {
             const player = onlinePlayers[socket.userId];
             if (!player || !researchConfig[specializationId]) return;
@@ -2691,7 +2487,6 @@ function applyAwakeningBuff(player, duration = 10000) {
 function gameTick(player) {
     if (!player || !player.socket) return;
 
-
     if (player.buffs && player.buffs.length > 0) {
         const now = Date.now();
         const initialBuffCount = player.buffs.length;
@@ -2707,16 +2502,17 @@ function gameTick(player) {
     if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) onPetFusionComplete(player);
     if (player.incubator.hatchCompleteTime && new Date() >= new Date(player.incubator.hatchCompleteTime)) onHatchComplete(player);
 
-
     if (player.raidState && player.raidState.isActive) {
         const raidBoss = player.raidState.monster;
         let pDmg = 0;
         let mDmg = 0;
+        
+        // [수정됨] 집중(Focus) 스탯을 비율 감소로 적용
+        const effectiveDistortion = raidBoss.distortion * (1 - (player.focus || 0) / 100);
+        const hitChance = 1 - Math.max(0, effectiveDistortion) / 100;
 
-        const hitChance = 1 - Math.max(0, raidBoss.distortion - (player.focus || 0)) / 100;
         if (Math.random() <= hitChance) {
             const playerCritRoll = Math.random();
-
             if (playerCritRoll < player.stats.critChance) {
                 const critMultiplier = 1.5 + (player.stats.total.critDamage || 0);
                 pDmg += player.stats.total.attack * critMultiplier;
@@ -2725,22 +2521,18 @@ function gameTick(player) {
             }
         }
 
-
         if (player.stats.total.lowHpAttackPercent > 0 && player.currentHp < player.stats.total.hp) {
             const missingHpPercent = (player.stats.total.hp - player.currentHp) / player.stats.total.hp;
             const damageMultiplier = 1 + (missingHpPercent * 100 * player.stats.total.lowHpAttackPercent);
             pDmg *= damageMultiplier;
         }
 
-
         const empoweredDamageReduction = 1 - ((player.tenacity || 0) / 100);
         const empoweredDamage = player.stats.total.hp * (raidBoss.empoweredAttack / 100) * empoweredDamageReduction;
         mDmg = Math.max(0, raidBoss.attack - player.stats.total.defense) + empoweredDamage;
         
-
         player.currentHp -= mDmg;
 
- 
         if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
             const bloodthirstDamage = raidBoss.hp * 0.50;
             pDmg += bloodthirstDamage; 
@@ -2774,15 +2566,14 @@ function gameTick(player) {
         return;
     }
     
-
     let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
-    let titleBossDamageBonus = 1, titleWBBonus = 1, titleWBContributionBonus = 1;
-    if (titleEffects) { /* ... */ }
+    let titleBossDamageBonus = (titleEffects && titleEffects.bossDamage) ? (1 + titleEffects.bossDamage) : 1;
+    let titleWBBonus = (titleEffects && titleEffects.worldBossDamage) ? (1 + titleEffects.worldBossDamage) : 1;
+    let titleWBContributionBonus = (titleEffects && titleEffects.worldBossContribution) ? (1 + titleEffects.worldBossContribution) : 1;
 
     if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
         let pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
         
-
         if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
             const bloodthirstDamage = worldBossState.maxHp * 0.003;
             pDmg += bloodthirstDamage;
@@ -2793,7 +2584,9 @@ function gameTick(player) {
         pDmg *= titleWBBonus;
         worldBossState.currentHp = Math.max(0, (worldBossState.currentHp || 0) - pDmg);
 
-        if (player.equipment.earring && player.equipment.earring.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player);
+        if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 10000);
+        if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 15000);
+        
         const userId = player.user.toString();
         const participant = worldBossState.participants.get(userId) || { username: player.username, damageDealt: 0 };
         const contributionDamage = pDmg * titleWBContributionBonus;
@@ -2813,7 +2606,6 @@ function gameTick(player) {
         return;
     }
     
-
     calculateTotalStats(player);
     const m = calcMonsterStats(player);
     if (player.monster.lastCalculatedLevel !== player.level) {
@@ -2823,7 +2615,10 @@ function gameTick(player) {
     }
     let pDmg = 0, mDmg = 0;
     
-    const hitChance = 1 - Math.max(0, (m.distortion || 0) - (player.focus || 0)) / 100;
+    // [수정됨] 집중(Focus) 스탯을 비율 감소로 적용
+    const effectiveDistortion = (m.distortion || 0) * (1 - (player.focus || 0) / 100);
+    const hitChance = 1 - Math.max(0, effectiveDistortion) / 100;
+
     if (Math.random() > hitChance) { pDmg += 0; } 
     else {
         const playerCritRoll = Math.random();
@@ -2855,7 +2650,6 @@ function gameTick(player) {
         mDmg += empoweredDamage;
     }
 
-
     player.currentHp -= mDmg;
     if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
         const bloodthirstDamage = m.hp * 0.50;
@@ -2865,7 +2659,8 @@ function gameTick(player) {
     }
 
     if (pDmg > 0 || mDmg > 0) { player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg }); }
-    if (pDmg > 0 && player.equipment.earring && player.equipment.earring.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player);
+    if (pDmg > 0 && player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 10000);
+    if (pDmg > 0 && player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 15000);
     
     if (player.currentHp <= 0) {
         const reviveEffect = player.equippedPet?.effects?.revive;
@@ -2983,18 +2778,18 @@ function onClearFloor(p) {
         pushLog(p, `[${clearedFloor}층 보스] 클리어! (+${goldEarned.toLocaleString()} G)`); 
     }
     
-
-   let essenceGained = 0;
-    if (clearedFloor >= 1000000) {
-        if (Math.random() < 0.005) { 
+  let essenceGained = 0;
+    if (isBoss) {
+        essenceGained = 1; 
+        p.researchEssence = (p.researchEssence || 0) + essenceGained;
+        pushLog(p, `[보스] <span class="Mystic">무한의 정수</span> ${essenceGained}개를 획득했습니다!`);
+    } 
+    else if (clearedFloor >= 1000000) { 
+        if (Math.random() < 0.001) {
             essenceGained = 1;
             p.researchEssence = (p.researchEssence || 0) + essenceGained;
             pushLog(p, `[심연] <span class="Mystic">무한의 정수</span> ${essenceGained}개를 획득했습니다!`);
         }
-    } else if (isBoss) {
-        essenceGained = Math.max(1, Math.floor(clearedFloor / BOSS_INTERVAL));
-        p.researchEssence = (p.researchEssence || 0) + essenceGained;
-        pushLog(p, `[보스] <span class="Mystic">무한의 정수</span> ${essenceGained}개를 획득했습니다!`);
     }
   
 
