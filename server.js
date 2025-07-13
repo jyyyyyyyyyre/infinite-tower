@@ -57,7 +57,7 @@ const PORT = 3000;
 const TICK_RATE = 1000; 
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_OBJECT_ID = '68617d506c3498183c9b367f';
+const ADMIN_OBJECT_ID = '6873333f38f1aa40c838b666';
 const BOSS_INTERVAL = 200;
 
 
