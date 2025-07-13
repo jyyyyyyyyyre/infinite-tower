@@ -2493,13 +2493,13 @@ announceMysticDrop(onlinePlayer, newItem);
     }
 })
 
-
-
+const storageTransactionLocks = new Set();
 .on('accountStorage:withdraw', async ({ uid, quantity }) => {
     const player = onlinePlayers[socket.userId];
     if (!player || !player.kakaoId) return;
-    if (player.isBusy) {
-        return pushLog(player, '[계정금고] 이전 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.');
+
+    if (storageTransactionLocks.has(player.kakaoId)) {
+        return pushLog(player, '[계정금고] 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.');
     }
 
     const quantityToWithdraw = parseInt(quantity, 10);
@@ -2507,58 +2507,75 @@ announceMysticDrop(onlinePlayer, newItem);
         return;
     }
 
-    player.isBusy = true;
+    storageTransactionLocks.add(player.kakaoId);
     try {
-        const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId });
-        if (!storage) {
-            pushLog(player, '[계정금고] 금고 정보를 찾을 수 없습니다.');
-            return;
-        }
+        const originalStorage = await AccountStorage.findOne(
+            { kakaoId: player.kakaoId, 'inventory.uid': uid },
+            { 'inventory.$': 1 }
+        ).lean();
 
-        const itemInStorage = storage.inventory.find(i => i.uid === uid);
-        if (!itemInStorage) {
+        if (!originalStorage || !originalStorage.inventory || originalStorage.inventory.length === 0) {
             pushLog(player, '[계정금고] 해당 아이템을 금고에서 찾을 수 없습니다.');
             return;
         }
-
+        
+        const itemInStorage = originalStorage.inventory[0];
+        
         if (itemInStorage.quantity < quantityToWithdraw) {
             pushLog(player, '[계정금고] 요청한 수량이 금고에 있는 수량보다 많습니다.');
             return;
         }
 
-        const itemToMove = { ...itemInStorage, quantity: quantityToWithdraw };
+        const itemToGive = { ...itemInStorage, quantity: quantityToWithdraw };
 
-        if (itemInStorage.quantity > quantityToWithdraw) {
-            await AccountStorage.updateOne(
-                { kakaoId: player.kakaoId, 'inventory.uid': uid },
-                { $inc: { 'inventory.$.quantity': -quantityToWithdraw } }
-            );
-        } else {
-            await AccountStorage.updateOne(
-                { kakaoId: player.kakaoId },
-                { $pull: { inventory: { uid: uid } } }
-            );
+        const updateResult = await AccountStorage.updateOne(
+            { 
+                kakaoId: player.kakaoId, 
+                'inventory.uid': uid,
+                'inventory.quantity': { $gte: quantityToWithdraw } 
+            },
+            {
+                $inc: { 'inventory.$.quantity': -quantityToWithdraw }
+            }
+        );
+        
+    
+        if (updateResult.modifiedCount === 0) {
+            pushLog(player, '[계정금고] 아이템을 가져오는 중 오류가 발생했습니다. (다른 곳에서 인출되었거나 수량 부족)');
+            return;
         }
+        
 
-        handleItemStacking(player, itemToMove);
+        handleItemStacking(player, itemToGive);
+
+        await AccountStorage.updateOne(
+            { kakaoId: player.kakaoId },
+            { $pull: { inventory: { quantity: 0 } } }
+        );
+
+        pushLog(player, `[계정금고] ${itemToGive.name} ${quantityToWithdraw}개를 인벤토리로 가져왔습니다.`);
+        
+   
         await GameData.updateOne({ user: player.user }, { $set: { inventory: player.inventory, petInventory: player.petInventory } });
+        
 
-        pushLog(player, `[계정금고] ${itemToMove.name} ${quantityToWithdraw}개를 인벤토리로 가져왔습니다.`);
+        const finalStorageState = await AccountStorage.findOne({ kakaoId: player.kakaoId });
+        const updatedInventory = finalStorageState ? finalStorageState.inventory : [];
 
-        const updatedStorage = await AccountStorage.findOne({ kakaoId: player.kakaoId });
-        const updatedInventory = updatedStorage ? updatedStorage.inventory : [];
-
-        for (const onlinePlayer of Object.values(onlinePlayers)) {
-            if (onlinePlayer.kakaoId === player.kakaoId && onlinePlayer.socket) {
-                onlinePlayer.socket.emit('accountStorage:update', updatedInventory);
+        for (const p of Object.values(onlinePlayers)) {
+            if (p.kakaoId === player.kakaoId && p.socket) {
+                p.socket.emit('accountStorage:update', updatedInventory);
             }
         }
+        
+   
         sendInventoryUpdate(player);
+
     } catch (error) {
         console.error(`[AccountStorage WITHDRAW] Error for ${player.username}:`, error);
-        pushLog(player, '[계정금고] 아이템을 가져오는 중 오류가 발생했습니다.');
+        pushLog(player, '[계정금고] 아이템을 가져오는 중 심각한 오류가 발생했습니다.');
     } finally {
-        if (player) player.isBusy = false;
+        storageTransactionLocks.delete(player.kakaoId);
     }
 })
  .on('research:upgrade', ({ specializationId, techId }) => {
