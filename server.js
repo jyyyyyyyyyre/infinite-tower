@@ -2492,10 +2492,10 @@ announceMysticDrop(onlinePlayer, newItem);
         if (player) player.isBusy = false;
     }
 })
-
 .on('accountStorage:withdraw', async ({ uid, quantity }) => {
     const player = onlinePlayers[socket.userId];
     if (!player || !player.kakaoId) return;
+
 
     if (storageTransactionLocks.has(player.kakaoId)) {
         return pushLog(player, '[계정금고] 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.');
@@ -2508,9 +2508,10 @@ announceMysticDrop(onlinePlayer, newItem);
 
     storageTransactionLocks.add(player.kakaoId);
     try {
+        
         const originalStorage = await AccountStorage.findOne(
             { kakaoId: player.kakaoId, 'inventory.uid': uid },
-            { 'inventory.$': 1 }
+            { 'inventory.$': 1 } // Projection to get only the matched item
         ).lean();
 
         if (!originalStorage || !originalStorage.inventory || originalStorage.inventory.length === 0) {
@@ -2526,19 +2527,20 @@ announceMysticDrop(onlinePlayer, newItem);
         }
 
         const itemToGive = { ...itemInStorage, quantity: quantityToWithdraw };
+        
 
         const updateResult = await AccountStorage.updateOne(
             { 
                 kakaoId: player.kakaoId, 
                 'inventory.uid': uid,
-                'inventory.quantity': { $gte: quantityToWithdraw } 
+                'inventory.quantity': { $gte: quantityToWithdraw } // The crucial atomic condition
             },
             {
                 $inc: { 'inventory.$.quantity': -quantityToWithdraw }
             }
         );
         
-    
+      
         if (updateResult.modifiedCount === 0) {
             pushLog(player, '[계정금고] 아이템을 가져오는 중 오류가 발생했습니다. (다른 곳에서 인출되었거나 수량 부족)');
             return;
@@ -2546,7 +2548,8 @@ announceMysticDrop(onlinePlayer, newItem);
         
 
         handleItemStacking(player, itemToGive);
-
+        
+      
         await AccountStorage.updateOne(
             { kakaoId: player.kakaoId },
             { $pull: { inventory: { quantity: 0 } } }
@@ -2554,7 +2557,7 @@ announceMysticDrop(onlinePlayer, newItem);
 
         pushLog(player, `[계정금고] ${itemToGive.name} ${quantityToWithdraw}개를 인벤토리로 가져왔습니다.`);
         
-   
+       
         await GameData.updateOne({ user: player.user }, { $set: { inventory: player.inventory, petInventory: player.petInventory } });
         
 
@@ -2567,7 +2570,7 @@ announceMysticDrop(onlinePlayer, newItem);
             }
         }
         
-   
+        // Update the current player's own inventory view as well
         sendInventoryUpdate(player);
 
     } catch (error) {
