@@ -2472,40 +2472,18 @@ announceMysticDrop(onlinePlayer, newItem);
             throw new Error('인벤토리에서 아이템을 차감하는 데 실패했습니다.');
         }
         
-        const itemToDeposit = { ...itemInInventory, quantity: quantityToDeposit, uid: new mongoose.Types.ObjectId().toString() };
-        const isStackable = !itemToDeposit.enhancement && itemToDeposit.grade !== 'Primal';
-        
-        let storageUpdateResult;
-        if (isStackable) {
-            storageUpdateResult = await AccountStorage.updateOne(
-                { kakaoId: player.kakaoId, "inventory": { "$elemMatch": { "id": itemToDeposit.id, "enhancement": { "$in": [0, null] }, "grade": { "$ne": "Primal" } } } },
-                { "$inc": { "inventory.$.quantity": quantityToDeposit } },
-                { session }
-            );
-        }
 
-        if (!isStackable || (storageUpdateResult && storageUpdateResult.modifiedCount === 0)) {
-            await AccountStorage.updateOne(
-                { kakaoId: player.kakaoId },
-                { "$push": { "inventory": itemToDeposit } },
-                { upsert: true, session }
-            );
-        }
+        const itemToDeposit = { ...itemInInventory, quantity: quantityToDeposit, uid: new mongoose.Types.ObjectId().toString() };
+
+        await AccountStorage.updateOne(
+            { kakaoId: player.kakaoId },
+            { "$push": { "inventory": itemToDeposit } },
+            { upsert: true, session }
+        );
         
         await session.commitTransaction();
 
-        const finalPlayerData = await GameData.findOne({ user: player.user });
-        player.inventory = finalPlayerData.inventory;
-        sendInventoryUpdate(player);
-        pushLog(player, `[계정금고] ${itemInInventory.name} ${quantityToDeposit}개를 보관했습니다.`);
 
-        const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId }).lean();
-        const updatedInventory = storage ? storage.inventory : [];
-        for (const p of Object.values(onlinePlayers)) {
-            if (p.kakaoId === player.kakaoId && p.socket) {
-                p.socket.emit('accountStorage:update', updatedInventory);
-            }
-        }
 
     } catch (error) {
         await session.abortTransaction();
