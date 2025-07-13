@@ -37,7 +37,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-
+const storageTransactionLocks = new Set();
 const app = express();
 const server = http.createServer(app);
 const researchConfig = require('./researchConfig');
@@ -2493,7 +2493,6 @@ announceMysticDrop(onlinePlayer, newItem);
     }
 })
 
-const storageTransactionLocks = new Set();
 .on('accountStorage:withdraw', async ({ uid, quantity }) => {
     const player = onlinePlayers[socket.userId];
     if (!player || !player.kakaoId) return;
@@ -2578,6 +2577,7 @@ const storageTransactionLocks = new Set();
         storageTransactionLocks.delete(player.kakaoId);
     }
 })
+
  .on('research:upgrade', ({ specializationId, techId }) => {
             const player = onlinePlayers[socket.userId];
             if (!player || !researchConfig[specializationId]) return;
