@@ -2421,49 +2421,31 @@ announceMysticDrop(onlinePlayer, newItem);
                 callback({ success: false, message: '금고 정보를 불러오는 중 오류가 발생했습니다.' });
             }
         })
+
+
 .on('accountStorage:deposit', async ({ uid, quantity }) => {
     const player = onlinePlayers[socket.userId];
     if (!player || !player.kakaoId) return;
-    if (player.isBusy) {
-        return pushLog(player, '[계정금고] 이전 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.');
-    }
 
-    const itemIndex = player.inventory.findIndex(i => i.uid === uid);
-    if (itemIndex === -1) return;
-
-    const itemInInventory = player.inventory[itemIndex];
-    if (itemInInventory.tradable === false) {
-        return pushLog(player, '[계정금고] 거래 불가 아이템은 보관할 수 없습니다.');
+    if (storageTransactionLocks.has(player.kakaoId)) {
+        return pushLog(player, '[계정금고] 다른 작업을 처리 중입니다. 잠시 후 다시 시도해주세요.');
     }
+    storageTransactionLocks.add(player.kakaoId);
 
-    const quantityToDeposit = parseInt(quantity, 10);
-    if (isNaN(quantityToDeposit) || quantityToDeposit <= 0 || quantityToDeposit > itemInInventory.quantity) {
-        return pushLog(player, '[계정금고] 잘못된 수량입니다.');
-    }
-    
-    player.isBusy = true;
     try {
-        const isStackableInStorage = (!itemInInventory.enhancement || itemInInventory.enhancement === 0) && itemInInventory.grade !== 'Primal';
-        let operationPerformed = false;
-        
-        if (isStackableInStorage) {
-            const result = await AccountStorage.updateOne(
-                { "kakaoId": player.kakaoId, "inventory": { "$elemMatch": { "id": itemInInventory.id, "$or": [{ "enhancement": 0 }, { "enhancement": { "$exists": false } }] } } },
-                { "$inc": { "inventory.$.quantity": quantityToDeposit } }
-            );
-            if (result.modifiedCount > 0) {
-                operationPerformed = true;
-            }
+        const itemIndex = player.inventory.findIndex(i => i.uid === uid);
+        if (itemIndex === -1) {
+            return pushLog(player, '[계정금고] 인벤토리에 해당 아이템이 없습니다.');
         }
 
-        if (!operationPerformed) {
-            const itemToPush = { ...itemInInventory, quantity: quantityToDeposit };
-            itemToPush.uid = new mongoose.Types.ObjectId().toString();
-            await AccountStorage.updateOne(
-                { kakaoId: player.kakaoId },
-                { "$push": { "inventory": itemToPush } },
-                { "upsert": true }
-            );
+        const itemInInventory = player.inventory[itemIndex];
+        const quantityToDeposit = parseInt(quantity, 10);
+
+        if (isNaN(quantityToDeposit) || quantityToDeposit <= 0 || quantityToDeposit > itemInInventory.quantity) {
+            return pushLog(player, '[계정금고] 잘못된 수량입니다.');
+        }
+        if (itemInInventory.tradable === false) {
+            return pushLog(player, '[계정금고] 거래 불가 아이템은 보관할 수 없습니다.');
         }
 
         if (itemInInventory.quantity > quantityToDeposit) {
@@ -2471,106 +2453,112 @@ announceMysticDrop(onlinePlayer, newItem);
         } else {
             player.inventory.splice(itemIndex, 1);
         }
+
+        const itemToDeposit = { ...itemInInventory, quantity: quantityToDeposit, uid: new mongoose.Types.ObjectId().toString() };
         
+        const isStackable = (itemToDeposit.enhancement || 0) === 0 && itemToDeposit.grade !== 'Primal';
+
+        if (isStackable) {
+            const upsertResult = await AccountStorage.updateOne(
+                {
+                    kakaoId: player.kakaoId,
+                    'inventory': { '$elemMatch': { 'id': itemToDeposit.id, 'enhancement': 0, 'grade': { '$ne': 'Primal' } } }
+                },
+                { '$inc': { 'inventory.$.quantity': quantityToDeposit } }
+            );
+
+            if (upsertResult.modifiedCount === 0) {
+                await AccountStorage.updateOne(
+                    { kakaoId: player.kakaoId },
+                    { '$push': { 'inventory': itemToDeposit } },
+                    { upsert: true }
+                );
+            }
+        } else {
+            await AccountStorage.updateOne(
+                { kakaoId: player.kakaoId },
+                { '$push': { 'inventory': itemToDeposit } },
+                { upsert: true }
+            );
+        }
+
         await GameData.updateOne({ user: player.user }, { $set: { inventory: player.inventory } });
         pushLog(player, `[계정금고] ${itemInInventory.name} ${quantityToDeposit}개를 보관했습니다.`);
 
-        const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId });
+        const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId }).lean();
         const updatedInventory = storage ? storage.inventory : [];
-
-        for (const onlinePlayer of Object.values(onlinePlayers)) {
-            if (onlinePlayer.kakaoId === player.kakaoId && onlinePlayer.socket) {
-                onlinePlayer.socket.emit('accountStorage:update', updatedInventory);
-            }
-        }
-        sendInventoryUpdate(player);
-    } catch (error) {
-        console.error(`[AccountStorage DEPOSIT] Error for ${player.username}:`, error);
-        pushLog(player, '[계정금고] 아이템 보관 중 오류가 발생했습니다.');
-        sendInventoryUpdate(player);
-    } finally {
-        if (player) player.isBusy = false;
-    }
-})
-.on('accountStorage:withdraw', async ({ uid, quantity }) => {
-    const player = onlinePlayers[socket.userId];
-    if (!player || !player.kakaoId) return;
-
-
-    if (storageTransactionLocks.has(player.kakaoId)) {
-        return pushLog(player, '[계정금고] 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.');
-    }
-
-    const quantityToWithdraw = parseInt(quantity, 10);
-    if (isNaN(quantityToWithdraw) || quantityToWithdraw <= 0) {
-        return;
-    }
-
-    storageTransactionLocks.add(player.kakaoId);
-    try {
-        
-        const originalStorage = await AccountStorage.findOne(
-            { kakaoId: player.kakaoId, 'inventory.uid': uid },
-            { 'inventory.$': 1 } // Projection to get only the matched item
-        ).lean();
-
-        if (!originalStorage || !originalStorage.inventory || originalStorage.inventory.length === 0) {
-            pushLog(player, '[계정금고] 해당 아이템을 금고에서 찾을 수 없습니다.');
-            return;
-        }
-        
-        const itemInStorage = originalStorage.inventory[0];
-        
-        if (itemInStorage.quantity < quantityToWithdraw) {
-            pushLog(player, '[계정금고] 요청한 수량이 금고에 있는 수량보다 많습니다.');
-            return;
-        }
-
-        const itemToGive = { ...itemInStorage, quantity: quantityToWithdraw };
-        
-
-        const updateResult = await AccountStorage.updateOne(
-            { 
-                kakaoId: player.kakaoId, 
-                'inventory.uid': uid,
-                'inventory.quantity': { $gte: quantityToWithdraw } // The crucial atomic condition
-            },
-            {
-                $inc: { 'inventory.$.quantity': -quantityToWithdraw }
-            }
-        );
-        
-      
-        if (updateResult.modifiedCount === 0) {
-            pushLog(player, '[계정금고] 아이템을 가져오는 중 오류가 발생했습니다. (다른 곳에서 인출되었거나 수량 부족)');
-            return;
-        }
-        
-
-        handleItemStacking(player, itemToGive);
-        
-      
-        await AccountStorage.updateOne(
-            { kakaoId: player.kakaoId },
-            { $pull: { inventory: { quantity: 0 } } }
-        );
-
-        pushLog(player, `[계정금고] ${itemToGive.name} ${quantityToWithdraw}개를 인벤토리로 가져왔습니다.`);
-        
-       
-        await GameData.updateOne({ user: player.user }, { $set: { inventory: player.inventory, petInventory: player.petInventory } });
-        
-
-        const finalStorageState = await AccountStorage.findOne({ kakaoId: player.kakaoId });
-        const updatedInventory = finalStorageState ? finalStorageState.inventory : [];
-
         for (const p of Object.values(onlinePlayers)) {
             if (p.kakaoId === player.kakaoId && p.socket) {
                 p.socket.emit('accountStorage:update', updatedInventory);
             }
         }
+        sendInventoryUpdate(player);
+
+    } catch (error) {
+        console.error(`[AccountStorage DEPOSIT] Error for ${player.username}:`, error);
+        pushLog(player, '[계정금고] 아이템 보관 중 오류가 발생했습니다.');
+    } finally {
+        storageTransactionLocks.delete(player.kakaoId);
+    }
+})
+
+.on('accountStorage:withdraw', async ({ uid, quantity }) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player || !player.kakaoId) return;
+
+    if (storageTransactionLocks.has(player.kakaoId)) {
+        return pushLog(player, '[계정금고] 다른 작업을 처리 중입니다. 잠시 후 다시 시도해주세요.');
+    }
+    storageTransactionLocks.add(player.kakaoId);
+
+    try {
+        const quantityToWithdraw = parseInt(quantity, 10);
+        if (isNaN(quantityToWithdraw) || quantityToWithdraw <= 0) {
+            return pushLog(player, '[계정금고] 잘못된 수량입니다.');
+        }
+
+        const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId, 'inventory.uid': uid }).lean();
+        if (!storage) {
+            return pushLog(player, '[계정금고] 해당 아이템을 금고에서 찾을 수 없습니다.');
+        }
         
-        // Update the current player's own inventory view as well
+        const itemInStorage = storage.inventory.find(i => i.uid === uid);
+        if (!itemInStorage || itemInStorage.quantity < quantityToWithdraw) {
+            return pushLog(player, '[계정금고] 요청한 수량이 금고에 있는 수량보다 많습니다.');
+        }
+
+        const itemToGive = { ...itemInStorage, quantity: quantityToWithdraw };
+
+        let updateResult;
+        if (itemInStorage.quantity > quantityToWithdraw) {
+            updateResult = await AccountStorage.updateOne(
+                { kakaoId: player.kakaoId, 'inventory.uid': uid, 'inventory.quantity': { '$gte': quantityToWithdraw } },
+                { '$inc': { 'inventory.$.quantity': -quantityToWithdraw } }
+            );
+        } else {
+            updateResult = await AccountStorage.updateOne(
+                { kakaoId: player.kakaoId, 'inventory.uid': uid, 'inventory.quantity': { '$gte': quantityToWithdraw } },
+                { '$pull': { inventory: { uid: uid } } }
+            );
+        }
+        
+        if (updateResult.modifiedCount === 0) {
+            pushLog(player, '[계정금고] 아이템 인출에 실패했습니다. (이미 인출되었거나 존재하지 않는 아이템)');
+            return;
+        }
+
+        handleItemStacking(player, itemToGive);
+
+        await GameData.updateOne({ user: player.user }, { $set: { inventory: player.inventory, petInventory: player.petInventory } });
+        pushLog(player, `[계정금고] ${itemToGive.name} ${quantityToWithdraw}개를 인벤토리로 가져왔습니다.`);
+
+        const finalStorageState = await AccountStorage.findOne({ kakaoId: player.kakaoId }).lean();
+        const updatedInventory = finalStorageState ? finalStorageState.inventory : [];
+        for (const p of Object.values(onlinePlayers)) {
+            if (p.kakaoId === player.kakaoId && p.socket) {
+                p.socket.emit('accountStorage:update', updatedInventory);
+            }
+        }
         sendInventoryUpdate(player);
 
     } catch (error) {
