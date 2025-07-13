@@ -2421,6 +2421,7 @@ announceMysticDrop(onlinePlayer, newItem);
                 callback({ success: false, message: '금고 정보를 불러오는 중 오류가 발생했습니다.' });
             }
         })
+
 .on('accountStorage:deposit', async ({ uid, quantity }) => {
     const player = onlinePlayers[socket.userId];
     if (!player || !player.kakaoId) return;
@@ -2472,9 +2473,10 @@ announceMysticDrop(onlinePlayer, newItem);
             throw new Error('인벤토리에서 아이템을 차감하는 데 실패했습니다.');
         }
         
-
+        // [핵심 수정] 항상 새로운 고유 ID를 가진 아이템 객체를 생성합니다.
         const itemToDeposit = { ...itemInInventory, quantity: quantityToDeposit, uid: new mongoose.Types.ObjectId().toString() };
-
+        
+        // [핵심 수정] 기존 스택에 더하는 로직을 완전히 제거하고, 항상 $push로 새 스택을 추가합니다.
         await AccountStorage.updateOne(
             { kakaoId: player.kakaoId },
             { "$push": { "inventory": itemToDeposit } },
@@ -2483,7 +2485,18 @@ announceMysticDrop(onlinePlayer, newItem);
         
         await session.commitTransaction();
 
+        const finalPlayerData = await GameData.findOne({ user: player.user });
+        player.inventory = finalPlayerData.inventory;
+        sendInventoryUpdate(player);
+        pushLog(player, `[계정금고] ${itemInInventory.name} ${quantityToDeposit}개를 보관했습니다.`);
 
+        const storage = await AccountStorage.findOne({ kakaoId: player.kakaoId }).lean();
+        const updatedInventory = storage ? storage.inventory : [];
+        for (const p of Object.values(onlinePlayers)) {
+            if (p.kakaoId === player.kakaoId && p.socket) {
+                p.socket.emit('accountStorage:update', updatedInventory);
+            }
+        }
 
     } catch (error) {
         await session.abortTransaction();
