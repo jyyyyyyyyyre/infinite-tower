@@ -125,10 +125,16 @@ var researchConfig = {
                 id: 'berserker_bloodthirst_1',
                 name: '[초급] 피의 갈망',
                 maxLevel: 10,
-                description: (level) => `공격 시 입힌 피해의 ${level * 0.1}%를 체력으로 흡수합니다.`,
+                description: function(level) {
+                    if (level === 0) return "공격 시 낮은 확률로 피의 갈망이 발동됩니다.";
+                    const effectValue = this.getBonus(level).bloodthirst;
+                    return `피의갈망 발동 확률이 ${effectValue.toFixed(1)}% 만큼 상승합니다.`;
+                },
                 cost: (level) => 30 + Math.floor(Math.pow(level, 2.5)),
-                getBonus: (level) => ({ bloodthirst: level * 0.001 }),
+                getBonus: (level) => ({ bloodthirst: level * 0.1 }),
             },
+
+
             {
                 id: 'berserker_low_hp_attack_1',
                 name: '[중급] 증오',

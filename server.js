@@ -212,7 +212,6 @@ const ChatMessageSchema = new mongoose.Schema({
     itemGrade: { type: String, default: null },
     timestamp: { type: Date, default: Date.now }
 });
-const AuctionItemSchema = new mongoose.Schema({ sellerId: { type: mongoose.Schema.Types.ObjectId, required: true }, sellerUsername: { type: String, required: true }, item: { type: Object, required: true }, price: { type: Number, required: true }, listedAt: { type: Date, default: Date.now } });
 const WorldBossStateSchema = new mongoose.Schema({
     uniqueId: { type: String, default: 'singleton' }, bossId: { type: String }, name: String, maxHp: Number, currentHp: Number, attack: Number, defense: Number, isActive: Boolean, spawnedAt: Date, participants: { type: Map, of: { username: String, damageDealt: Number } }
 });
@@ -268,7 +267,6 @@ const User = mongoose.model('User', UserSchema);
 const GameData = mongoose.model('GameData', GameDataSchema);
 const GlobalRecord = mongoose.model('GlobalRecord', GlobalRecordSchema);
 const ChatMessage = mongoose.model('ChatMessage', ChatMessageSchema);
-const AuctionItem = mongoose.model('AuctionItem', AuctionItemSchema);
 const WorldBossState = mongoose.model('WorldBossState', WorldBossStateSchema);
 const Post = mongoose.model('Post', PostSchema);
 const Comment = mongoose.model('Comment', CommentSchema);
@@ -376,6 +374,7 @@ const adminItemAlias = {
 };
 
 const itemData = {
+'spirit_essence': { name: '정령의 형상', type: 'Special', category: 'Material', grade: 'Mystic', description: '응축된 정령의 힘. 펫의 영혼을 변환하여 얻을 수 있으며, 뭉쳐지면 새로운 생명이 깃듭니다', image: 'spirit_essence.png', tradable: true },
    'primal_acc_necklace_01': { name: '찬란한 윤회의 성물', type: 'accessory', accessoryType: 'necklace', grade: 'Primal', description: '사망 시 2/3 지점 부활, 추가로 30% 확률로 현재 층에서 부활합니다.', image: 'primal_necklace.png', tradable: true, enchantable: true },
     'primal_acc_earring_01': { name: '시공의 각성 이어링', type: 'accessory', accessoryType: 'earring', grade: 'Primal', description: '공격 시 3% 확률로 15초간 각성 상태에 돌입합니다.', image: 'primal_earring.png', tradable: true, enchantable: true },
     'primal_acc_wristwatch_01': { name: '계시자의 크로노그래프', type: 'accessory', accessoryType: 'wristwatch', grade: 'Primal', description: '치명타 확률 30% 증가', image: 'primal_wristwatch.png', tradable: true, enchantable: true },
@@ -879,8 +878,6 @@ function handleItemStacking(player, item) {
 }
 function calculateTotalStats(player) {
     if (!player || !player.stats) return;
-
-    // --- 1단계: 연구를 제외한 모든 소스에서 스탯 합산 ---
     const base = player.stats.base;
     let weaponBonus = 0;
     let armorBonus = 0;
@@ -903,7 +900,7 @@ function calculateTotalStats(player) {
         if (titleEffects.petStatBonus) titlePetStatBonus += titleEffects.petStatBonus;
     }
 
-    // 스탯 초기화
+
     player.stats.critChance = 0;
     player.stats.critResistance = 0;
     player.focus = 0;
@@ -967,11 +964,11 @@ function calculateTotalStats(player) {
         }
     }
 
-    // --- 2단계: 연구 보너스 수치 집계 ---
+
     let researchBonuses = {
         attackPercent: 0, hpPercent: 0, defensePercent: 0, critChance: 0, critDamage: 0,
         penetration: 0, focus: 0, critResistance: 0, tenacity: 0, bloodthirst: 0,
-        lowHpAttackPercent: 0,
+        lowHpAttackPercent: 0, goldGainPercent: 0, itemDropRatePercent: 0, bonusClimbChance: 0
     };
     if (player.research) {
         for (const specializationId in player.research) {
@@ -993,14 +990,11 @@ function calculateTotalStats(player) {
         }
     }
     
-    // --- 3단계: 최종 스탯 계산 및 연구 보너스(곱연산) 적용 ---
-    
-    // 기본 + 장비 + 버프 + 기타 보너스로 중간 합산
+
     let totalHp = (base.hp * (1 + armorBonus)) * buffHpMultiplier * enchantHpPercent * enchantAllStatsPercent * titleHpBonus;
     let totalAttack = (base.attack * (1 + weaponBonus)) * artifactAttackMultiplier * buffAttackMultiplier * enchantAttackPercent * enchantAllStatsPercent * titleAttackBonus;
     let totalDefense = (base.defense * (1 + armorBonus)) * artifactDefenseMultiplier * buffDefenseMultiplier * enchantDefensePercent * enchantAllStatsPercent;
 
-    // 도감 보너스
     if (player.codexBonusActive) {
         totalHp *= 1.05;
         totalAttack *= 1.05;
@@ -1013,10 +1007,6 @@ function calculateTotalStats(player) {
         totalDefense *= 1.05;
     }
 
-    // 혈석 적용 (합산)
-    player.bloodthirst += (researchBonuses.bloodthirst || 0);
-
-    // 연구 보너스를 최종적으로 곱연산 적용
     totalHp *= (1 + researchBonuses.hpPercent);
     totalAttack *= (1 + researchBonuses.attackPercent);
     totalDefense *= (1 + researchBonuses.defensePercent);
@@ -1027,14 +1017,14 @@ function calculateTotalStats(player) {
     player.penetration = player.penetration * (1 + researchBonuses.penetration);
     player.tenacity = player.tenacity * (1 + researchBonuses.tenacity);
     
-    // 최종 스탯 저장
     player.stats.total = {
         hp: totalHp,
         attack: totalAttack,
         defense: totalDefense,
         defPenetration: petDefPenetration + enchantDefPenetration,
-        critDamage: researchBonuses.critDamage, // 치명타 피해는 합연산이 유리하므로 유지
-        lowHpAttackPercent: researchBonuses.lowHpAttackPercent, 
+        critDamage: researchBonuses.critDamage,
+        lowHpAttackPercent: researchBonuses.lowHpAttackPercent,
+        bloodthirst: (player.bloodthirst || 0) + (researchBonuses.bloodthirst || 0)
     };
 }
 
@@ -1555,47 +1545,7 @@ title: player.equippedTitle
         io.emit('chatMessage', chatMessage);
     }
 })
-        .on('getAuctionListings', async (callback) => {
-            try {
-                const allListings = await AuctionItem.find({}).sort({ listedAt: 'asc' }).lean();
-                const groupedItems = allListings.reduce((acc, listing) => {
-                    const item = listing.item;
-                    const groupKey = `${item.id}_${item.enhancement || 0}`;
-                    if (!acc[groupKey]) {
-                        acc[groupKey] = {
-                            key: groupKey,
-                            itemData: { ...item, quantity: 0 }, 
-                            listings: [],
-                            lowestPrice: Infinity,
-                            totalQuantity: 0,
-                        };
-                    }
-                    const group = acc[groupKey];
-                    group.listings.push(listing);
-                    group.totalQuantity += item.quantity;
-                    if (listing.price < group.lowestPrice) {
-                        group.lowestPrice = listing.price;
-                    }
-                    return acc;
-                }, {});
-                
-                const finalGroupedList = Object.values(groupedItems).map(group => ({
-                    key: group.key,
-                    item: group.itemData, 
-                    lowestPrice: group.lowestPrice,
-                    totalQuantity: group.totalQuantity
-                }));
-                finalGroupedList.sort((a, b) => a.item.name.localeCompare(b.item.name));
-                
-                callback({
-                    groupedList: finalGroupedList,
-                    allListings: allListings
-                });
-            } catch (e) {
-                console.error('거래소 목록 조회 오류:', e);
-                callback({ groupedList: [], allListings: [] });
-            }
-        })
+      
         .on('slotPetForFusion', ({ uid }) => {
             const player = onlinePlayers[socket.userId];
             if (!player || !uid) return;
@@ -1909,15 +1859,7 @@ title: player.equippedTitle
         if (player) player.isBusy = false;
     }
 })
-        .on('listOnAuction', async ({ uid, price, quantity }, callback) => { 
-            if (!onlinePlayers[socket.userId]) return;
-            const result = await listOnAuction(onlinePlayers[socket.userId], { uid, price, quantity });
-            if (callback) { 
-                callback(result);
-            }
-        })
-        .on('buyFromAuction', async ({ listingId, quantity }) => buyFromAuction(onlinePlayers[socket.userId], { listingId, quantity }))
-        .on('cancelAuctionListing', async (listingId) => cancelAuctionListing(onlinePlayers[socket.userId], listingId))
+       
         .on('codex:getData', (callback) => {
             try {
                 const player = onlinePlayers[socket.userId];
@@ -2137,16 +2079,16 @@ const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' |
                 callback(null);
             }
         })
-      .on('admin:searchUser', async (username, callback) => {
+ .on('admin:searchUser', async (username, callback) => {
             if (socket.role !== 'admin') return;
             try {
                 const user = await User.findOne({ username }).lean();
                 if (!user) return callback({ success: false, message: '유저를 찾을 수 없습니다.' });
 
                 const gameData = await GameData.findOne({ user: user._id }).lean();
-                const auctionListings = await AuctionItem.find({ sellerId: user._id }).sort({ listedAt: -1 }).lean();
 
-                callback({ success: true, data: { user, gameData, auctionListings } });
+
+                callback({ success: true, data: { user, gameData } }); 
             } catch (error) {
                  console.error('[관리자] 유저 검색 오류:', error);
                  callback({ success: false, message: '검색 중 오류가 발생했습니다.' });
@@ -2506,8 +2448,7 @@ function gameTick(player) {
         const raidBoss = player.raidState.monster;
         let pDmg = 0;
         let mDmg = 0;
-        
-        // [수정됨] 집중(Focus) 스탯을 비율 감소로 적용
+
         const effectiveDistortion = raidBoss.distortion * (1 - (player.focus || 0) / 100);
         const hitChance = 1 - Math.max(0, effectiveDistortion) / 100;
 
@@ -2533,7 +2474,7 @@ function gameTick(player) {
         
         player.currentHp -= mDmg;
 
-        if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
+if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
             const bloodthirstDamage = raidBoss.hp * 0.50;
             pDmg += bloodthirstDamage; 
             player.currentHp = player.stats.total.hp; 
@@ -2574,7 +2515,7 @@ function gameTick(player) {
     if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
         let pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
         
-        if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
+if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
             const bloodthirstDamage = worldBossState.maxHp * 0.003;
             pDmg += bloodthirstDamage;
             player.currentHp = player.stats.total.hp;
@@ -2615,7 +2556,6 @@ function gameTick(player) {
     }
     let pDmg = 0, mDmg = 0;
     
-    // [수정됨] 집중(Focus) 스탯을 비율 감소로 적용
     const effectiveDistortion = (m.distortion || 0) * (1 - (player.focus || 0) / 100);
     const hitChance = 1 - Math.max(0, effectiveDistortion) / 100;
 
@@ -2651,12 +2591,11 @@ function gameTick(player) {
     }
 
     player.currentHp -= mDmg;
-    if (player.bloodthirst > 0 && Math.random() < player.bloodthirst / 100) {
+if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
         const bloodthirstDamage = m.hp * 0.50;
         pDmg += bloodthirstDamage;
         player.currentHp = player.stats.total.hp;
-        pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
-    }
+        }
 
     if (pDmg > 0 || mDmg > 0) { player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg }); }
     if (pDmg > 0 && player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 10000);
@@ -2804,9 +2743,14 @@ function onClearFloor(p) {
         skippedGold = Math.floor(skippedGold * goldBonusPercent);
         skippedGold = Math.floor(skippedGold * titleGoldGainBonus);
         p.gold += skippedGold;
+        
+        if (isBossFloor(skippedFloor)) {
+            p.researchEssence = (p.researchEssence || 0) + 1;
+            pushLog(p, `[추가 등반] 보스 층(${skippedFloor}층)을 건너뛰어 <span class="Mystic">무한의 정수</span> 1개를 획득했습니다!`);
+        }
     }
     
-    const totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + extraClimbChanceFromEnchant + pioneerBonuses.bonusClimbChance;
+const totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + extraClimbChanceFromEnchant + pioneerBonuses.bonusClimbChance;
     if (Math.random() < totalExtraClimbChance) {
         const skippedFloor = p.level;
         p.level++;
@@ -2817,6 +2761,11 @@ function onClearFloor(p) {
         skippedGold = Math.floor(skippedGold * goldBonusPercent);
         skippedGold = Math.floor(skippedGold * titleGoldGainBonus); 
         p.gold += skippedGold;
+
+        if (isBossFloor(skippedFloor)) {
+            p.researchEssence = (p.researchEssence || 0) + 1;
+            pushLog(p, `[추가 등반] 보스 층(${skippedFloor}층)을 건너뛰어 <span class="Mystic">무한의 정수</span> 1개를 획득했습니다!`);
+        }
     }
     
     let zone = 1;
@@ -3309,75 +3258,127 @@ function unequipItem(player, slot) {
         if (player) player.isBusy = false;
     }
 }
-function sellItem(player, uid, sellAll) {
+
+async function sellItem(player, uid, sellAll) {
     if (!player) return;
     if (player.isBusy) {
         return pushLog(player, '이전 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.');
     }
     player.isBusy = true;
     try {
-        const itemIndex = player.inventory.findIndex(i => i.uid === uid);
-        if (itemIndex === -1) {
-            pushLog(player, '[판매] 인벤토리에서 아이템을 찾을 수 없습니다.');
+        let item = null;
+        let itemLocation = '';
+        let itemIndex = -1;
+
+        itemIndex = player.inventory.findIndex(i => i && i.uid === uid);
+        if (itemIndex > -1) {
+            item = player.inventory[itemIndex];
+            itemLocation = 'inventory';
+        } else {
+            itemIndex = player.petInventory.findIndex(i => i && i.uid === uid);
+            if (itemIndex > -1) {
+                item = player.petInventory[itemIndex];
+                itemLocation = 'petInventory';
+            }
+        }
+
+        if (!item) {
+            pushLog(player, '[판매] 아이템을 찾을 수 없습니다.');
             return;
         }
-        const item = player.inventory[itemIndex];
 
-        if (item.tradable === false) {
-            pushLog(player, '[판매] 해당 아이템은 상점에 판매할 수 없습니다.');
-            return;
+        let goldReward = 0;
+        let shardReward = 0;
+        let essenceReward = 0;
+        let isSellable = false;
+
+
+        if (item.type === 'weapon' || item.type === 'armor') {
+            const prices = { Common: 3000, Rare: 50000, Legendary: 400000, Epic: 2000000, Mystic: 3000000000, Primal: 120000000000 };
+            const shards = { Common: 1, Rare: 2, Legendary: 5, Epic: 50, Mystic: 1000, Primal: 10000 };
+            goldReward = prices[item.grade] || 0;
+            shardReward = shards[item.grade] || 0;
+            isSellable = true;
+        } else if (item.type === 'accessory') {
+            const prices = { Primal: 120000000000 };
+            const shards = { Mystic: 500, Primal: 10000 };
+            goldReward = prices[item.grade] || 0;
+            shardReward = shards[item.grade] || 0;
+            if (goldReward > 0 || shardReward > 0) isSellable = true;
+        } else if (item.type === 'pet') {
+            if (item.id === 'bahamut') { goldReward = 50000000000; essenceReward = 100; } 
+            else if (item.fused) { goldReward = 100000000; essenceReward = 20; } 
+            else if (item.grade === 'Epic') { goldReward = 50000000; essenceReward = 10; } 
+            else if (item.grade === 'Rare') { goldReward = 3000000; essenceReward = 3; }
+            if (goldReward > 0 || essenceReward > 0) isSellable = true;
         }
 
+        if (!isSellable) {
+            pushLog(player, '[판매] 해당 아이템은 판매할 수 없습니다.');
+            return;
+        }
+        
         const titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
-        let sellBonus = 1;
-        if (titleEffects && titleEffects.sellPriceBonus) {
-            sellBonus += titleEffects.sellPriceBonus;
-        }
+        const sellBonus = (titleEffects && titleEffects.sellPriceBonus) ? (1 + titleEffects.sellPriceBonus) : 1;
+        const itemName = item.enhancement > 0 ? `+${item.enhancement} ${item.name}` : item.name;
 
-        const basePrice = SELL_PRICES[item.grade] || 0;
-        let quantitySold = 0;
 
-        if (item.enhancement > 0 || !sellAll) {
-            let finalPrice = basePrice;
-            if (item.enhancement > 0) {
+        if (item.enhancement > 0 || !sellAll || itemLocation !== 'inventory') {
+
+            let finalGold = goldReward;
+            if (item.enhancement > 0) { 
                 const enhancementCost = getEnhancementCost(item.enhancement);
-                const priceWithEnhancement = basePrice + enhancementCost;
+                const priceWithEnhancement = goldReward + enhancementCost;
                 if (item.enhancement <= 8) {
-                    finalPrice = priceWithEnhancement;
+                    finalGold = priceWithEnhancement;
                 } else if (item.enhancement <= 10) {
-                    finalPrice = priceWithEnhancement + 10000;
+                    finalGold = priceWithEnhancement + 10000;
                 } else {
-                    finalPrice = Math.floor(priceWithEnhancement * 1.5);
+                    finalGold = Math.floor(priceWithEnhancement * 1.5);
                 }
             }
-            finalPrice = Math.floor(finalPrice * sellBonus);
+            finalGold = Math.floor(finalGold * sellBonus);
+
+            player.gold += finalGold;
+            if (shardReward > 0) handleItemStacking(player, createItemInstance('rift_shard', shardReward));
+            if (essenceReward > 0) handleItemStacking(player, createItemInstance('spirit_essence', essenceReward));
+
             if (item.quantity > 1) {
                 item.quantity--;
             } else {
-                player.inventory.splice(itemIndex, 1);
+                if (itemLocation === 'inventory') player.inventory.splice(itemIndex, 1);
+                else player.petInventory.splice(itemIndex, 1);
             }
-            player.gold += finalPrice;
-            quantitySold = 1;
-            const itemName = item.enhancement > 0 ? `+${item.enhancement} ${item.name}` : item.name;
-            pushLog(player, `[판매] ${itemName} 1개를 ${finalPrice.toLocaleString()} G에 판매했습니다.`);
+            
+            const rewardsLog = [];
+            if (finalGold > 0) rewardsLog.push(`${finalGold.toLocaleString()} G`);
+            if (shardReward > 0) rewardsLog.push(`균열 파편 ${shardReward.toLocaleString()}개`);
+            if (essenceReward > 0) rewardsLog.push(`정령의 형상 ${essenceReward.toLocaleString()}개`);
+            pushLog(player, `[판매] ${itemName} 1개를 판매하여 ${rewardsLog.join(', ')}를 획득했습니다.`);
         } else {
+
             const quantityToSell = item.quantity;
-            const totalPrice = Math.floor((basePrice * quantityToSell) * sellBonus);
+            const totalGold = Math.floor((goldReward * quantityToSell) * sellBonus);
+            const totalShards = shardReward * quantityToSell;
+
+            player.gold += totalGold;
+            if (totalShards > 0) handleItemStacking(player, createItemInstance('rift_shard', totalShards));
+            
             player.inventory.splice(itemIndex, 1);
-            player.gold += totalPrice;
-            quantitySold = quantityToSell;
-            pushLog(player, `[판매] ${item.name} ${quantityToSell}개를 ${totalPrice.toLocaleString()} G에 판매했습니다.`);
+            
+            const rewardsLog = [];
+            if (totalGold > 0) rewardsLog.push(`${totalGold.toLocaleString()} G`);
+            if (totalShards > 0) rewardsLog.push(`균열 파편 ${totalShards.toLocaleString()}개`);
+            pushLog(player, `[판매] ${itemName} ${quantityToSell}개를 판매하여 ${rewardsLog.join(', ')}를 획득했습니다.`);
         }
 
-        if (player.titleCounters) {
-            player.titleCounters.sellCount = (player.titleCounters.sellCount || 0) + quantitySold;
-            if (player.titleCounters.sellCount >= 1000) {
-                grantTitle(player, '[대장간]');
-            }
-        }
-
+        if (player.titleCounters) player.titleCounters.sellCount = (player.titleCounters.sellCount || 0) + 1;
         sendState(player.socket, player, calcMonsterStats(player));
         sendInventoryUpdate(player);
+
+    } catch (e) {
+        console.error(`[sellItem] 심각한 오류 발생:`, e);
+        pushLog(player, '[판매] 아이템 판매 중 오류가 발생했습니다.');
     } finally {
         if (player) player.isBusy = false;
     }
@@ -3887,156 +3888,6 @@ io.emit('chatMessage', { isSystem: true, message: "전원에게 기여도에 따
     io.emit('worldBossDefeated');
     worldBossState = null;
 }
-async function listOnAuction(player, { uid, price, quantity }) {
-    if (player.isBusy) {
-        return { success: false, message: '이전 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.' };
-    }
-    if (!player || !uid || !price || !quantity) {
-        return { success: false, message: '잘못된 요청입니다.' };
-    }
-    player.isBusy = true;
-    try {
-        const nPrice = parseInt(price, 10);
-        const nQuantity = parseInt(quantity, 10);
-
-        if (isNaN(nPrice) || nPrice <= 0 || isNaN(nQuantity) || nQuantity <= 0) {
-            const message = '[거래소] 올바른 가격과 수량을 입력하세요.';
-            pushLog(player, message);
-            return { success: false, message: message };
-        }
-
-        const itemIndex = player.inventory.findIndex(i => i.uid === uid);
-        if (itemIndex === -1) {
-            const message = '[거래소] 인벤토리에 없는 아이템입니다.';
-            pushLog(player, message);
-            return { success: false, message: message };
-        }
-
-        const itemInInventory = player.inventory[itemIndex];
-        if (itemInInventory.tradable === false) {
-            const message = '[거래소] 해당 아이템은 거래소에 등록할 수 없습니다.';
-            pushLog(player, message);
-            return { success: false, message: message };
-        }
-        if (itemInInventory.quantity < nQuantity) {
-            const message = '[거래소] 보유한 수량보다 많이 등록할 수 없습니다.';
-            pushLog(player, message);
-            return { success: false, message: message };
-        }
-
-        const itemForAuction = { ...itemInInventory, quantity: nQuantity };
-
-        const auctionItem = new AuctionItem({
-            sellerId: player.user,
-            sellerUsername: player.username,
-            item: itemForAuction,
-            price: nPrice
-        });
-
-        await auctionItem.save();
-        if (itemInInventory.quantity === nQuantity) {
-            player.inventory.splice(itemIndex, 1);
-        } else {
-            itemInInventory.quantity -= nQuantity;
-        }
-
-        pushLog(player, `[거래소] ${itemForAuction.name} (${nQuantity}개) 을(를) 개당 ${nPrice.toLocaleString()} G에 등록했습니다.`);
-        const itemNameHTML = `<span class="${itemForAuction.grade}">${itemForAuction.name}</span>`;
-        const announcementMessage = `[거래소] ${player.username}님이 ${itemNameHTML} 아이템을 등록했습니다.`;
-        io.emit('chatMessage', { isSystem: true, message: announcementMessage });
-        io.emit('auctionUpdate');
-        sendInventoryUpdate(player);
-        return { success: true, message: '등록에 성공했습니다.' };
-
-    } catch (e) {
-        console.error('거래소 등록 오류:', e);
-        const message = '[거래소] 아이템 등록에 실패했습니다. 아이템이 인벤토리로 반환됩니다.';
-        pushLog(player, message);
-        sendInventoryUpdate(player);
-        return { success: false, message: '서버 오류로 등록에 실패했습니다.' };
-    } finally {
-        if (player) player.isBusy = false;
-    }
-}
-async function buyFromAuction(player, { listingId, quantity }) {
-    if (!player || !listingId || !quantity) return;
-    if (player.isBusy) {
-        return pushLog(player, '이전 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.');
-    }
-    player.isBusy = true;
-    try {
-        const amountToBuy = parseInt(quantity, 10);
-        if (isNaN(amountToBuy) || amountToBuy <= 0) {
-            player.socket.emit('serverAlert', '유효한 구매 수량을 입력해주세요.');
-            return;
-        }
-
-        const listing = await AuctionItem.findOneAndUpdate(
-            { _id: listingId, "item.quantity": { $gte: amountToBuy } },
-            { $inc: { "item.quantity": -amountToBuy } },
-            { new: false }
-        );
-
-        if (!listing) {
-            pushLog(player, '[거래소] 이미 판매되었거나 재고가 부족한 물품입니다.');
-            io.emit('auctionUpdate');
-            return;
-        }
-
-        if (listing.sellerId.toString() === player.user.toString()) {
-            await AuctionItem.findByIdAndUpdate(listingId, { $inc: { "item.quantity": amountToBuy } });
-            player.socket.emit('serverAlert', '자신이 등록한 물품은 구매할 수 없습니다.');
-            return;
-        }
-
-        const totalPrice = listing.price * amountToBuy;
-        if (player.gold < totalPrice) {
-            await AuctionItem.findByIdAndUpdate(listingId, { $inc: { "item.quantity": amountToBuy } });
-            const feedbackMsg = `골드가 부족하여 구매에 실패했습니다.\n\n필요 골드: ${totalPrice.toLocaleString()} G\n보유 골드: ${player.gold.toLocaleString()} G`;
-            player.socket.emit('serverAlert', feedbackMsg);
-            return;
-        }
-
-        player.gold -= totalPrice;
-        await GameData.updateOne({ user: player.user }, { $inc: { gold: -totalPrice } });
-
-        const itemForBuyer = { ...listing.item, quantity: amountToBuy };
-        await sendMail(player.user, '거래소', {
-            item: itemForBuyer,
-            description: `'${listing.item.name}' ${amountToBuy}개를 구매했습니다.`
-        });
-
-        await sendMail(listing.sellerId, '거래소', {
-            gold: totalPrice,
-            description: `'${listing.item.name}' ${amountToBuy}개 판매 대금이 도착했습니다.`
-        });
-
-        const finalListingCheck = await AuctionItem.findById(listingId);
-        if (finalListingCheck && finalListingCheck.item.quantity <= 0) {
-            await AuctionItem.findByIdAndDelete(listingId);
-        }
-
-        const itemNameHTML = `<span class="${listing.item.grade}">${listing.item.name}</span>`;
-        const announcementMessage = `[거래소] ${listing.sellerUsername}님이 등록한 ${itemNameHTML} 아이템을 ${player.username}님이 구매했습니다.`;
-        io.emit('chatMessage', { isSystem: true, message: announcementMessage });
-        pushLog(player, `[거래소] ${listing.item.name} ${amountToBuy}개를 ${totalPrice.toLocaleString()} G에 구매하여 우편으로 받았습니다.`);
-
-        if (player.titleCounters) {
-            player.titleCounters.ahBuyCount = (player.titleCounters.ahBuyCount || 0) + amountToBuy;
-            if (player.titleCounters.ahBuyCount >= 100) {
-                grantTitle(player, '[큰손]');
-            }
-        }
-
-        sendState(player.socket, player, calcMonsterStats(player));
-        io.emit('auctionUpdate');
-    } catch (e) {
-        console.error('거래소 구매 오류:', e);
-        pushLog(player, '[거래소] 아이템 구매에 실패했습니다.');
-    } finally {
-        if (player) player.isBusy = false;
-    }
-}
 
 async function spawnWorldBoss() {
     if (worldBossState && worldBossState.isActive) return;
@@ -4062,46 +3913,7 @@ async function spawnWorldBoss() {
     io.emit('chatMessage', { isSystem: true, message: `[월드보스] 거대한 악의 기운과 함께 파멸의 군주가 모습을 드러냈습니다!` });
     io.emit('globalAnnouncement', `[월드보스] ${worldBossState.name}가 출현했습니다!`);
 }
-async function cancelAuctionListing(player, listingId) {
-    if (!player || !listingId) return;
-    if (player.isBusy) {
-        return pushLog(player, '이전 요청을 처리 중입니다. 잠시 후 다시 시도해주세요.');
-    }
-    player.isBusy = true;
-    try {
-        const listing = await AuctionItem.findById(listingId);
 
-        if (!listing) {
-            pushLog(player, '[거래소] 존재하지 않는 물품입니다.');
-            io.emit('auctionUpdate');
-            return;
-        }
-
-        if (listing.sellerId.toString() !== player.user.toString()) {
-            pushLog(player, '[거래소] 자신이 등록한 물품만 취소할 수 있습니다.');
-            return;
-        }
-
-        const removedListing = await AuctionItem.findByIdAndDelete(listingId);
-        if (!removedListing) {
-            pushLog(player, '[거래소] 등록 취소 중 문제가 발생했습니다. 아이템이 이미 처리되었을 수 있습니다.');
-            return io.emit('auctionUpdate');
-        }
-
-        await sendMail(player.user, '거래소', {
-            item: removedListing.item,
-            description: `등록 취소한 '${removedListing.item.name}' 아이템이 반환되었습니다.`
-        });
-
-        pushLog(player, `[거래소] ${removedListing.item.name} 등록을 취소하고 아이템을 우편으로 회수했습니다.`);
-        io.emit('auctionUpdate');
-    } catch (e) {
-        console.error(`[거래소 취소 심각한 오류] User: ${player.username}, ListingID: ${listingId}`, e);
-        pushLog(player, '[거래소] 시스템 오류로 등록 취소에 실패했습니다. 운영자에게 문의해주세요.');
-    } finally {
-        if (player) player.isBusy = false;
-    }
-}
 
 const AUTO_SAVE_INTERVAL = 10000;
 setInterval(() => {

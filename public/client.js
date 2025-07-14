@@ -497,8 +497,7 @@ function initializeGame(socket) {
         },
         modals: {
             board: { button: document.getElementById('board-button'), overlay: document.getElementById('board-modal') },
-            auction: { button: document.getElementById('auction-button'), overlay: document.getElementById('auction-modal'), grid: document.getElementById('auction-grid'), detail: document.getElementById('auction-item-detail'), refreshBtn: document.getElementById('auction-refresh-btn'), },
-            ranking: { button: document.getElementById('ranking-button'), overlay: document.getElementById('ranking-modal'), list: document.getElementById('ranking-list'), },
+              ranking: { button: document.getElementById('ranking-button'), overlay: document.getElementById('ranking-modal'), list: document.getElementById('ranking-list'), },
             loot: { button: document.getElementById('loot-record-button'), overlay: document.getElementById('loot-record-modal'), display: document.getElementById('loot-record-display'), },
             enhancement: { button: document.getElementById('enhancement-record-button'), overlay: document.getElementById('enhancement-record-modal'), display: document.getElementById('enhancement-record-display'), },
             online: { button: document.getElementById('online-users-button'), overlay: document.getElementById('online-users-modal'), list: document.getElementById('online-users-list'), title: document.getElementById('online-users-title'), },
@@ -809,158 +808,7 @@ if(accountStorageTabBtn) {
         });
     });
   
-    let auctionDataCache = { groupedList: [], allListings: [] };
-    let selectedAuctionGroupKey = null;
-
-    elements.modals.auction.button.addEventListener('click', () => {
-	selectedInventoryItemUid = null;
-        fetchAuctionListings();
-        elements.modals.auction.overlay.style.display = 'flex';
-    });
-
-    elements.modals.auction.refreshBtn.addEventListener('click', fetchAuctionListings);
-
-    function renderAuctionGroupedList() {
-        const grid = document.getElementById('auction-grouped-grid');
-        const searchKeyword = document.getElementById('auction-search-input').value.toLowerCase();
-        const selectedGrade = document.getElementById('auction-grade-filter').value;
-        
-        const filteredList = auctionDataCache.groupedList.filter(group => {
-            const nameMatch = group.item.name.toLowerCase().includes(searchKeyword);
-            const gradeMatch = selectedGrade === '전체' || group.item.grade === selectedGrade;
-            return nameMatch && gradeMatch;
-        });
-
-        if (!filteredList || filteredList.length === 0) {
-            grid.innerHTML = '<p class="inventory-tip">표시할 물품이 없습니다.</p>';
-            return;
-        }
-        
-        grid.innerHTML = filteredList.map(group => {
-            const item = group.item;
-            let effectText = '';
-            if (item.type === 'weapon') {
-                let bonus = item.baseEffect || 0; 
-                for (let i = 1; i <= (item.enhancement || 0); i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
-                effectText = `⚔️공격력 +${(bonus * 100).toFixed(1)}%`;
-            } else if (item.type === 'armor') {
-                let bonus = item.baseEffect || 0; 
-                for (let i = 1; i <= (item.enhancement || 0); i++) { bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); }
-                effectText = `❤️🛡️체/방 +${(bonus * 100).toFixed(1)}%`;
-            } else if (item.type === 'accessory') {
-                effectText = item.description || '';
-            }
-            const infoHTML = `
-                <div class="item-name ${item.grade}">${item.enhancement > 0 ? `+${item.enhancement} ` : ''}${item.name}</div>
-                ${effectText ? `<div class="item-effect" style="font-size: 0.9em; color: var(--success-color); padding: 2px 0;">${effectText}</div>` : ''}
-                <div class="item-effect" style="font-size: 0.9em;">
-                    최저가: <span class="gold-text">${group.lowestPrice.toLocaleString()} G</span><br>
-                    총 수량: ${group.totalQuantity.toLocaleString()} 개
-                </div>`;
-            return `
-                <div class="inventory-item auction-item ${getEnhanceClass(item.enhancement)} ${group.key === selectedAuctionGroupKey ? 'selected' : ''}" data-group-key="${group.key}">
-                    <div class="item-image"><img src="/image/${item.image}" alt="${item.name}" draggable="false"></div>
-                    <div class="item-info">${infoHTML}</div>
-                </div>`;
-        }).join('');
-    }
-
-    function fetchAuctionListings() {
-        socket.emit('getAuctionListings', (data) => {
-            if (data) {
-                auctionDataCache = data;
-                renderAuctionGroupedList();
-                if (selectedAuctionGroupKey) {
-                    renderAuctionDetailList(selectedAuctionGroupKey);
-                } else {
-                    document.getElementById('auction-detail-list').innerHTML = `<p class="inventory-tip" style="text-align: center; margin-top: 50px;">왼쪽에서 아이템을 선택하세요.</p>`;
-                }
-            }
-        });
-    }
-
-    function renderAuctionDetailList(groupKey) {
-        const detailList = document.getElementById('auction-detail-list');
-        const listingsForGroup = auctionDataCache.allListings.filter(listing => {
-            const item = listing.item;
-            return `${item.id}_${item.enhancement || 0}` === groupKey;
-        });
-        listingsForGroup.sort((a, b) => {
-            if (a.price !== b.price) return a.price - b.price;
-            return new Date(a.listedAt) - new Date(b.listedAt);
-        });
-        if (listingsForGroup.length === 0) {
-            detailList.innerHTML = '<p class="inventory-tip">해당 아이템의 판매 목록이 없습니다.</p>';
-            return;
-        }
-        detailList.innerHTML = listingsForGroup.map(listing => {
-            const isMyItem = listing.sellerUsername === window.myUsername;
-            const item = listing.item;
-            const buttonHTML = isMyItem
-                ? `<button class="action-btn cancel-auction-btn small-btn" data-listing-id="${listing._id}">취소</button>`
-                : `<button class="action-btn buy-auction-btn small-btn" data-listing-id="${listing._id}" data-max-quantity="${listing.item.quantity}">구매</button>`;
-            return `
-                <div class="auction-detail-entry ${isMyItem ? 'my-listing-highlight' : ''}">
-                    <div class="seller-info">
-                        <img src="/image/${item.image}" alt="${item.name}" class="auction-detail-item-image">
-                        <span class="seller-name">${listing.sellerUsername}</span>
-                    </div>
-                    <div class="item-price-info">
-                        <span class="price">${listing.price.toLocaleString()} G</span>
-                        <span class="quantity">(${listing.item.quantity.toLocaleString()}개)</span>
-                    </div>
-                    <div class="auction-actions">
-                        ${buttonHTML}
-                    </div>
-                </div>`;
-        }).join('');
-    }
-
-    document.getElementById('auction-search-input').addEventListener('input', renderAuctionGroupedList);
-    document.getElementById('auction-grade-filter').addEventListener('change', renderAuctionGroupedList);
-
-    document.getElementById('auction-grouped-grid').addEventListener('click', (e) => {
-        const card = e.target.closest('.auction-item');
-        if (!card) return;
-        
-        selectedAuctionGroupKey = card.dataset.groupKey;
-        document.querySelectorAll('#auction-grouped-grid .auction-item').forEach(el => el.classList.remove('selected'));
-        card.classList.add('selected');
-        
-        renderAuctionDetailList(selectedAuctionGroupKey);
-    });
-
-    document.getElementById('auction-detail-list').addEventListener('click', (e) => {
-        const target = e.target;
-        const listingId = target.dataset.listingId;
-        if (!listingId) return;
-        if (target.classList.contains('buy-auction-btn')) {
-e.stopPropagation();
-            const maxQuantity = parseInt(target.dataset.maxQuantity, 10);
-            let quantity = 1;
-            if (maxQuantity > 1) {
-                const input = prompt(`구매할 수량을 입력하세요. (최대 ${maxQuantity}개)`, "1");
-                if (input === null) return;
-                quantity = parseInt(input, 10);
-                if (isNaN(quantity) || quantity <= 0 || quantity > maxQuantity) {
-                    return alert("올바른 수량을 입력해주세요.");
-                }
-            }
-            if (confirm(`${quantity}개를 구매하시겠습니까?`)) {
-                socket.emit('buyFromAuction', { listingId, quantity });
-            }
-        } else if (target.classList.contains('cancel-auction-btn')) {
-            if (confirm('등록을 취소하시겠습니까?')) {
-                socket.emit('cancelAuctionListing', listingId);
-            }
-        }
-    });
-
-    socket.on('auctionUpdate', () => {
-        if (document.getElementById('auction-modal').style.display === 'flex') {
-            fetchAuctionListings();
-        }
-    });
+     
 
     socket.on('rankingData', ({ topLevel, topGold, topWeapon, topArmor }) => {
         const list = elements.modals.ranking.list;
@@ -1162,14 +1010,14 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
             elements.monster.leaveRaidBtn.style.display = 'none';
         }
         
-        if (elements.player.specialStatsGrid) {
+         if (elements.player.specialStatsGrid) {
             elements.player.specialStatsGrid.innerHTML = `
                 <div>💥 치명타: <strong>${(player.stats.critChance * 100).toFixed(2)}%</strong></div>
                 <div>🔰 치명 저항: <strong>${(player.stats.critResistance * 100).toFixed(2)}%</strong></div>
                 <div>🎯 집 중: <strong style="color: var(--primal-color);">${(player.focus || 0).toFixed(2)}%</strong></div>
                 <div>💎 관 통: <strong style="color: var(--primal-color);">${(player.penetration || 0).toFixed(2)}%</strong></div>
                 <div>🛡️ 강 인 함: <strong style="color: var(--primal-color);">${(player.tenacity || 0).toFixed(2)}%</strong></div>
-                <div>🩸 피의 갈망: <strong style="color: #c0392b;">${(player.bloodthirst || 0).toFixed(1)}%</strong></div>
+                <div>🩸 피의 갈망: <strong style="color: #c0392b;">${((player.stats.total.bloodthirst || 0)).toFixed(1)}%</strong></div>
             `;
         }
 
@@ -1254,7 +1102,7 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
 
    const activeTab = document.querySelector('.tab-button.active');
     if (activeTab && activeTab.dataset.tab === 'research-tab') {
-        renderResearchTab(player); // 연구소 UI를 다시 그립니다.
+        renderResearchTab(player); 
     }
     };
 
@@ -1478,7 +1326,7 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
         const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
 
         if (!item) {
-            slot.innerHTML = '강화할 아이템을<br>인벤토리/장비창에서 선택하세요';
+            slot.innerHTML = '강화 또는 판매할 아이템을<br>인벤토리/장비창에서 선택하세요';
             details.style.display = 'none';
             button.style.display = 'none';
             checkboxes.style.display = 'none';
@@ -1488,14 +1336,12 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
         }
 
         selectedInventoryItemUid = item.uid;
-
         document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
         const visibleCard = document.querySelector(`.inventory-item[data-uid="${item.uid}"]`);
-        if (visibleCard) {
-            visibleCard.classList.add('selected');
-        }
+        if (visibleCard) visibleCard.classList.add('selected');
 
         const isEnhanceable = item.type === 'weapon' || item.type === 'armor';
+
         slot.innerHTML = createEnhancementItemHTML(item);
         details.style.display = isEnhanceable ? 'flex' : 'none';
         button.style.display = isEnhanceable ? 'block' : 'none';
@@ -1504,43 +1350,32 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
         let infoContentHTML = '';
         let buttonsHTML = '<div class="interaction-buttons" style="justify-content: center; width: 100%; flex-wrap: wrap; gap: 10px;">';
 
+
         if (isEnhanceable) {
             const isPrimal = item.grade === 'Primal';
             let rates = null;
             if (enhancementRates) {
-                if (isPrimal && item.enhancement >= 10) {
-                    rates = { success: 0.10, maintain: 0.00, fail: 0.00, destroy: 0.90 };
-                } else {
-                    rates = enhancementRates.enhancementTable[item.enhancement + 1] || enhancementRates.highEnhancementRate;
-                }
+                if (isPrimal && item.enhancement >= 10) rates = { success: 0.10, maintain: 0.00, fail: 0.00, destroy: 0.90 };
+                else rates = enhancementRates.enhancementTable[item.enhancement + 1] || enhancementRates.highEnhancementRate;
             }
-
             const hasHammer = currentPlayerState.inventory.some(i => i.id === 'hammer_hephaestus');
             const hasTicket = currentPlayerState.inventory.some(i => i.id === 'prevention_ticket');
-
             useHammerCheck.disabled = !hasHammer || isPrimal;
-            if (isPrimal) useHammerCheck.parentElement.title = "태초 장비에는 사용할 수 없습니다.";
-            else useHammerCheck.parentElement.title = "";
-            
+            useHammerCheck.parentElement.title = isPrimal ? "태초 장비에는 사용할 수 없습니다." : "";
             const canBeDestroyed = rates ? rates.destroy > 0 : false;
             useTicketCheck.disabled = !(item.enhancement >= 10 && hasTicket && canBeDestroyed);
-            if (item.enhancement >= 10 && !canBeDestroyed) useTicketCheck.parentElement.title = "이 아이템은 현재 강화 단계에서 파괴되지 않습니다.";
-            else useTicketCheck.parentElement.title = "";
-
+            useTicketCheck.parentElement.title = (item.enhancement >= 10 && !canBeDestroyed) ? "이 아이템은 현재 강화 단계에서 파괴되지 않습니다." : "";
+            
             let baseBonus = item.baseEffect;
             if (item.grade === 'Primal' && item.randomizedValue) baseBonus += (item.randomizedValue / 100);
-            
             const enhancementBonusArr = Array.from({ length: item.enhancement }, (_, i) => item.baseEffect * (i < 10 ? 0.1 : 0.5));
             const currentEnhancementBonus = enhancementBonusArr.reduce((s, v) => s + v, 0);
             const currentTotalBonus = baseBonus + currentEnhancementBonus;
             const nextTotalBonus = currentTotalBonus + item.baseEffect * (item.enhancement < 10 ? 0.1 : 0.5);
-
             before.innerHTML = `<b>+${item.enhancement}</b><br>${(currentTotalBonus * 100).toFixed(1)}%`;
             after.innerHTML = `<b>+${item.enhancement + 1}</b><br>${(nextTotalBonus * 100).toFixed(1)}%`;
-
-            let cost, riftShardCost = 0;
-            let costText = '';
-
+            
+            let cost, riftShardCost = 0, costText = '';
             if (isPrimal) {
                 const nextLevel = item.enhancement + 1;
                 cost = nextLevel * 1000000000;
@@ -1556,28 +1391,70 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
             }
 
             if (rates) {
-                let displaySuccess = rates.success, displayMaintain = rates.maintain, displayFail = rates.fail, displayDestroy = rates.destroy;
+                let { success, maintain, fail, destroy } = rates;
                 if (useHammerCheck.checked && !useHammerCheck.disabled) {
-                    let bonusToApply = 0.15;
-                    const fromDestroy = Math.min(bonusToApply, displayDestroy); displayDestroy -= fromDestroy; bonusToApply -= fromDestroy;
-                    if (bonusToApply > 0) { const fromFail = Math.min(bonusToApply, displayFail); displayFail -= fromFail; bonusToApply -= fromFail; }
-                    if (bonusToApply > 0) { const fromMaintain = Math.min(bonusToApply, displayMaintain); displayMaintain -= fromMaintain; bonusToApply -= fromMaintain; }
-                    displaySuccess += (0.15 - bonusToApply);
+                    let bonus = 0.15;
+                    let fromDestroy = Math.min(bonus, destroy); destroy -= fromDestroy; bonus -= fromDestroy;
+                    if (bonus > 0) { let fromFail = Math.min(bonus, fail); fail -= fromFail; bonus -= fromFail; }
+                    if (bonus > 0) { let fromMaintain = Math.min(bonus, maintain); maintain -= fromMaintain; bonus -= fromMaintain; }
+                    success += (0.15 - bonus);
                 }
-                const probText = `<span style="color:var(--success-color)">성공: ${(displaySuccess * 100).toFixed(1)}%</span> | <span>유지: ${(displayMaintain * 100).toFixed(1)}%</span> | <span style="color:var(--fail-color)">하락: ${(displayFail * 100).toFixed(1)}%</span> | <span style="color:var(--fail-color); font-weight:bold;">파괴: ${(displayDestroy * 100).toFixed(1)}%</span>`;
-                infoContentHTML += `<div style="text-align: center; margin-bottom: 10px; font-size: 0.9em;">${probText}</div>`;
+                infoContentHTML += `<div style="text-align: center; margin-bottom: 10px; font-size: 0.9em;"><span style="color:var(--success-color)">성공: ${(success * 100).toFixed(1)}%</span> | <span>유지: ${(maintain * 100).toFixed(1)}%</span> | <span style="color:var(--fail-color)">하락: ${(fail * 100).toFixed(1)}%</span> | <span style="color:var(--fail-color); font-weight:bold;">파괴: ${(destroy * 100).toFixed(1)}%</span></div>`;
             }
             infoContentHTML += `<div style="width: 100%; text-align: center;">${costText}</div>`;
+        }
+
+        const isEquipped = Object.values(currentPlayerState.equipment).some(eq => eq && eq.uid === item.uid) || (currentPlayerState.equippedPet && currentPlayerState.equippedPet.uid === item.uid);
         
-        } else {
+
+        if (!isEquipped) {
+            let rewards = { gold: 0, shards: 0, essence: 0 };
+            let isSellable = false;
+
+            if (item.type === 'weapon' || item.type === 'armor') {
+                rewards.gold = getSellPrice(item);
+                const shardMap = { Common: 1, Rare: 2, Legendary: 5, Epic: 50, Mystic: 1000, Primal: 10000 };
+                rewards.shards = shardMap[item.grade] || 0;
+                isSellable = true;
+            } else if (item.type === 'accessory') {
+                const goldMap = { Primal: 120000000000 };
+                const shardMap = { Mystic: 500, Primal: 10000 };
+                rewards.gold = goldMap[item.grade] || 0;
+                rewards.shards = shardMap[item.grade] || 0;
+                if (rewards.gold > 0 || rewards.shards > 0) isSellable = true;
+            } else if (item.type === 'pet') {
+                if (item.id === 'bahamut') { rewards.gold = 50000000000; rewards.essence = 100; }
+                else if (item.fused) { rewards.gold = 100000000; rewards.essence = 20; }
+                else if (item.grade === 'Epic') { rewards.gold = 50000000; rewards.essence = 10; }
+                else if (item.grade === 'Rare') { rewards.gold = 3000000; rewards.essence = 3; }
+                if (rewards.gold > 0 || rewards.essence > 0) isSellable = true;
+            }
+
+            if (isSellable) {
+                const rewardsText = [];
+                if (rewards.gold > 0) rewardsText.push(`${rewards.gold.toLocaleString()} G`);
+                if (rewards.shards > 0) rewardsText.push(`파편 ${rewards.shards.toLocaleString()}개`);
+                if (rewards.essence > 0) rewardsText.push(`형상 ${rewards.essence.toLocaleString()}개`);
+                
+                buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="false">판매 (${rewardsText.join(', ')})</button>`;
+                
+                if (item.enhancement === 0 && item.quantity > 1 && (item.type === 'weapon' || item.type === 'armor')) {
+                    const allRewardsText = [];
+                    if (rewards.gold > 0) allRewardsText.push(`${(rewards.gold * item.quantity).toLocaleString()} G`);
+                    if (rewards.shards > 0) allRewardsText.push(`파편 ${(rewards.shards * item.quantity).toLocaleString()}개`);
+                    buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="true">전체 판매 (${allRewardsText.join(', ')})</button>`;
+                }
+            }
+        }
+        
+        if (!isEnhanceable && item.type !== 'accessory' && item.type !== 'pet') {
             if (item.id === 'hammer_hephaestus' || item.id === 'prevention_ticket') {
-                buttonsHTML += `<div style="text-align:center; color: var(--text-muted);">강화 탭에서 체크하여 사용합니다.</div>`;
+                infoContentHTML += `<div style="text-align:center; color: var(--text-muted);">강화 탭에서 체크하여 사용합니다.</div>`;
             } else {
                 const isEgg = item.category === 'Egg' || item.type === 'egg';
                 if (isEgg) {
                     buttonsHTML += `<button class="action-btn use-item-btn" data-action="hatch">부화하기</button>`;
-                } 
-                else if (['Tome', 'Consumable'].includes(item.category) || item.id === 'pure_blood_crystal'){
+                } else if (['Tome', 'Consumable'].includes(item.category) || item.id === 'pure_blood_crystal') {
                     buttonsHTML += `<button class="action-btn use-item-btn" data-action="use">사용하기</button>`;
                     if (item.id === 'gold_pouch' && item.quantity > 1) {
                         buttonsHTML += `<button class="action-btn use-item-btn" data-action="use-all">모두 사용</button>`;
@@ -1585,19 +1462,10 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
                 }
             }
         }
-        
-        const isEquipped = currentPlayerState.equipment.weapon?.uid === item.uid || currentPlayerState.equipment.armor?.uid === item.uid;
-        if (!isEquipped && (item.type === 'weapon' || item.type === 'armor')) {
-            const sellPrice = getSellPrice(item);
-            buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="false">1개 판매 (${sellPrice.toLocaleString()} G)</button>`;
-            if (item.enhancement === 0 && item.quantity > 1) {
-                buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="true">전체 판매 (${(sellPrice * item.quantity).toLocaleString()} G)</button>`;
-            }
-        }
+
         if (item.tradable !== false) {
-            buttonsHTML += `<button class="action-btn list-auction-btn" data-action="list-auction">거래소 등록</button>`;
         }
-        
+
         buttonsHTML += '</div>';
         info.innerHTML = infoContentHTML + buttonsHTML;
     }
@@ -1932,6 +1800,14 @@ if (!card || card.closest('#auction-grid') || card.closest('#account-storage-gri
         showOffAction.dataset.action = 'show-off';
         buttons.appendChild(showOffAction);
 
+if (item.type === 'pet') {
+            const enhanceAction = document.createElement('button');
+            enhanceAction.className = 'action-btn';
+            enhanceAction.textContent = '대장간가기';
+            enhanceAction.dataset.action = 'go-enhance';
+            buttons.appendChild(enhanceAction);
+        }
+
         if (item.type === 'pet' && item.grade === 'Epic' && !item.fused) {
             const fusionAction = document.createElement('button');
             fusionAction.className = 'action-btn list-auction-btn';
@@ -2014,38 +1890,13 @@ case 'deposit-storage':
 
         switch (action) {
             case 'sell':
-                if (confirm("상점에 판매하면 거래소보다 낮은 가격을 받습니다. 정말 판매하시겠습니까?")) {
+                if (confirm("정말 판매하시겠습니까?")) {
                     socket.emit('sellItem', { uid: selectedInventoryItemUid, sellAll: target.dataset.sellAll === 'true' });
                     selectedInventoryItemUid = null;
                     updateEnhancementPanel(null); 
                 }
                 break;
-            case 'list-auction':
-                let quantity = 1;
-                if (item.quantity > 1) {
-                    const inputQty = prompt(`등록할 수량을 입력하세요. (최대 ${item.quantity}개)`, item.quantity);
-                    if (inputQty === null) return;
-                    quantity = parseInt(inputQty, 10);
-                    if (isNaN(quantity) || quantity <= 0 || quantity > item.quantity) {
-                        return alert("올바른 수량을 입력해주세요.");
-                    }
-                }
-
-                const price = prompt("개당 판매할 가격(골드)을 숫자로만 입력하세요:");
-                if (price && !isNaN(price) && parseInt(price, 10) > 0) {
-                    socket.emit('listOnAuction', { uid: selectedInventoryItemUid, price: parseInt(price, 10), quantity }, (response) => {
-                        if (response.success) {
-                            alert('거래소에 아이템을 등록했습니다.');
-                            selectedInventoryItemUid = null;
-                            updateEnhancementPanel(null);
-                        } else {
-                            alert(`등록 실패!: ${response.message}`);
-                        }
-                    });
-                } else if (price !== null) {
-                    alert("올바른 가격을 입력해주세요.");
-                }
-                break;
+           
             case 'use': { 
                 const itemToUse = findItemInState(selectedInventoryItemUid);
                 if (itemToUse && itemToUse.id === 'return_scroll') {
@@ -2494,8 +2345,8 @@ if (researchTab) {
             const specId = node.dataset.specId;
             const techId = node.dataset.techId;
 
-if (specId && techId && currentPlayerState) { // Added a check for currentPlayerState
-            // Pass the currentPlayerState object as the first argument
+if (specId && techId && currentPlayerState) { 
+
             openResearchDetailModal(currentPlayerState, specId, techId); 
         }
     }
@@ -2513,10 +2364,10 @@ function renderResearchTab(playerData) {
     const researchTab = document.getElementById('research-tab');
     if (!researchTab || !window.researchConfig) return;
 
-    // 1. 연구소 UI가 아직 생성되지 않았다면 전체 구조를 만듭니다.
+
     let container = researchTab.querySelector('.research-container');
     if (!container) {
-        // 전체 기본 틀 생성
+
         researchTab.innerHTML = `
             <div class="research-header">
                 <h3>연구소</h3>
@@ -2528,7 +2379,7 @@ function renderResearchTab(playerData) {
         `;
         container = researchTab.querySelector('.research-container');
 
-        // 각 연구 계열의 노드(칸)들을 미리 생성
+
         for (const specializationId in window.researchConfig) {
             const specialization = window.researchConfig[specializationId];
             const column = document.createElement('div');
@@ -2539,7 +2390,7 @@ function renderResearchTab(playerData) {
 
             specialization.researches.forEach((tech, index) => {
                 const node = document.createElement('div');
-                node.className = 'research-node'; // 기본 클래스만 설정
+                node.className = 'research-node'; 
                 node.dataset.techId = tech.id;
                 node.dataset.specId = specializationId;
                 const tierClass = getResearchTierClassName(tech.name);
@@ -2559,8 +2410,7 @@ function renderResearchTab(playerData) {
         }
     }
 
-    // 2. 이미 생성된 구조에서 내용(값)만 업데이트합니다.
-    // 이렇게 하면 스크롤 위치가 유지됩니다.
+
     const essenceDisplay = researchTab.querySelector('.research-essence-display span');
     if (essenceDisplay) {
         essenceDisplay.textContent = (playerData.researchEssence || 0).toLocaleString();
@@ -2584,11 +2434,10 @@ function renderResearchTab(playerData) {
                 status = currentLevel >= tech.maxLevel ? 'maxed' : 'unlocked';
             }
 
-            // 클래스 업데이트
             node.classList.remove('locked', 'unlocked', 'maxed');
             node.classList.add(status);
 
-            // 레벨 텍스트 업데이트
+
             const levelDiv = node.querySelector('.research-node-level');
             if (levelDiv) {
                 levelDiv.textContent = `Lv. ${currentLevel}`;
