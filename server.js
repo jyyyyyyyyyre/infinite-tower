@@ -67,8 +67,8 @@ const RIFT_ENCHANT_COST = {
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 50000000, ATTACK: 0, DEFENSE: 0,
-    REWARDS: { GOLD: 50000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 30000000, ATTACK: 0, DEFENSE: 0,
+    REWARDS: { GOLD: 800000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
 const MailSchema = new mongoose.Schema({
@@ -562,6 +562,8 @@ let globalRecordsCache = {};
 let worldBossState = null;
 let worldBossTimer = null;
 let isBossSpawning = false;
+let activeEvents = {}; 
+let eventEndTimer = null; 
 
 
 async function loadWorldBossState() {
@@ -1267,6 +1269,7 @@ socket.emit('enhancementData', {
         player: playerForClient, 
         monster: calcMonsterStats(player)
     });
+socket.emit('eventStatusUpdate', activeEvents);
 
     socket
         .on('upgradeStat', data => upgradeStat(onlinePlayers[socket.userId], data))
@@ -2398,7 +2401,48 @@ announceMysticDrop(onlinePlayer, newItem);
 
             sendState(socket, player, calcMonsterStats(player));
         })
+ .on('admin:startEvent', (eventData) => {
+            if (socket.role !== 'admin') return;
 
+            const { type, multiplier, duration, unit, description } = eventData;
+            const durationInMs = (duration || 1) * (unit === 'hours' ? 3600000 : 60000);
+
+            activeEvents[type] = {
+                type,
+                multiplier: parseFloat(multiplier) || 1,
+                endTime: new Date(Date.now() + durationInMs),
+                description
+            };
+
+            console.log('[이벤트 시작/갱신]', activeEvents[type]);
+            
+
+            io.emit('eventStarted', activeEvents[type]);
+
+            io.emit('chatMessage', { 
+                isSystem: true, 
+                message: `[이벤트] ${description}` 
+            });
+
+            io.emit('eventStatusUpdate', activeEvents);
+        })
+
+        .on('admin:endEvent', (eventType) => {
+            if (socket.role !== 'admin' || !activeEvents[eventType]) return;
+            
+            console.log(`[이벤트 강제 종료] 관리자(${socket.username})가 ${eventType} 이벤트를 종료했습니다.`);
+            
+            delete activeEvents[eventType];
+
+
+            io.emit('eventStatusUpdate', activeEvents);
+        })
+        .on('admin:joinRoom', () => {
+            if (socket.role !== 'admin') return;
+            socket.join('admin_room');
+
+            socket.emit('eventStatusUpdate', activeEvents);
+        })
 
         .on('disconnect', () => {
             console.log(`[연결 해제] 유저: ${socket.username}`);
@@ -2652,12 +2696,28 @@ setInterval(() => {
         io.emit('worldBossUpdate', lightWeightState);
     }
 }, 2000);
-
 function onClearFloor(p) {
     const titleEffects = p.equippedTitle ? titleData[p.equippedTitle]?.effect : null;
     let titleGoldGainBonus = 1;
     let titleItemDropRateBonus = 1;
     let titleRiftShardDropRateBonus = 1;
+
+    let eventGoldMultiplier = 1;
+    let eventDropMultiplier = 1;
+    let isPrimalEventActive = false;
+
+    for (const eventType in activeEvents) {
+        const event = activeEvents[eventType];
+        if (event.type === 'gold') {
+            eventGoldMultiplier *= event.multiplier;
+        }
+        if (event.type === 'drop') {
+            eventDropMultiplier *= event.multiplier;
+        }
+        if (event.type === 'primal') {
+            isPrimalEventActive = true;
+        }
+    }
 
     if (titleEffects) {
         if (titleEffects.goldGain) titleGoldGainBonus += titleEffects.goldGain;
@@ -2708,16 +2768,16 @@ function onClearFloor(p) {
     if (p.codexBonusActive) goldEarned = Math.floor(goldEarned * 1.05);
     goldEarned = Math.floor(goldEarned * goldBonusPercent);
     goldEarned = Math.floor(goldEarned * titleGoldGainBonus);
+    
+    goldEarned = Math.floor(goldEarned * eventGoldMultiplier);
 
     p.gold += goldEarned;
-    
-  
     
     if (isBoss) { 
         pushLog(p, `[${clearedFloor}층 보스] 클리어! (+${goldEarned.toLocaleString()} G)`); 
     }
     
-  let essenceGained = 0;
+    let essenceGained = 0;
     if (isBoss) {
         essenceGained = 1; 
         p.researchEssence = (p.researchEssence || 0) + essenceGained;
@@ -2731,7 +2791,6 @@ function onClearFloor(p) {
         }
     }
   
-
     if (p.unlockedArtifacts[0] && clearedFloor > 0 && clearedFloor % 10 === 0) {
         const skippedFloor = p.level;
         p.level++;
@@ -2742,6 +2801,7 @@ function onClearFloor(p) {
         if (p.codexBonusActive) skippedGold = Math.floor(skippedGold * 1.05);
         skippedGold = Math.floor(skippedGold * goldBonusPercent);
         skippedGold = Math.floor(skippedGold * titleGoldGainBonus);
+        skippedGold = Math.floor(skippedGold * eventGoldMultiplier);
         p.gold += skippedGold;
         
         if (isBossFloor(skippedFloor)) {
@@ -2750,7 +2810,7 @@ function onClearFloor(p) {
         }
     }
     
-const totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + extraClimbChanceFromEnchant + pioneerBonuses.bonusClimbChance;
+    const totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + extraClimbChanceFromEnchant + pioneerBonuses.bonusClimbChance;
     if (Math.random() < totalExtraClimbChance) {
         const skippedFloor = p.level;
         p.level++;
@@ -2760,6 +2820,7 @@ const totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + 
         if (p.codexBonusActive) skippedGold = Math.floor(skippedGold * 1.05);
         skippedGold = Math.floor(skippedGold * goldBonusPercent);
         skippedGold = Math.floor(skippedGold * titleGoldGainBonus); 
+        skippedGold = Math.floor(skippedGold * eventGoldMultiplier);
         p.gold += skippedGold;
 
         if (isBossFloor(skippedFloor)) {
@@ -2784,7 +2845,7 @@ const totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + 
             if (itemId === 'rift_shard' && titleRiftShardDropRateBonus > 1) {
                 finalChance *= titleRiftShardDropRateBonus;
             }
-            if (Math.random() < finalChance) {
+            if (Math.random() < finalChance * eventDropMultiplier) {
                 const droppedItem = createItemInstance(itemId);
                 if (droppedItem) {
                     handleItemStacking(p, droppedItem);
@@ -2795,8 +2856,9 @@ const totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + 
             }
         }
     }
-    
-    const dropChance = (isBoss ? 0.10 : 0.02) * titleItemDropRateBonus * (1 + pioneerBonuses.itemDropRatePercent);
+
+    const dropChance = (isBoss ? 0.10 : 0.02) * titleItemDropRateBonus * (1 + pioneerBonuses.itemDropRatePercent) * eventDropMultiplier;
+
     if (Math.random() < dropChance) {
         let grade, acc = 0, r = Math.random();
         for (const g in tbl.rates) { acc += tbl.rates[g]; if (r < acc) { grade = g; break; } }
@@ -2817,12 +2879,27 @@ const totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + 
         }
     }
 
-    for (const itemInfo of gameSettings.globalLootTable) {
+    let effectiveGlobalLootTable = [...gameSettings.globalLootTable];
+    if (isPrimalEventActive) {
+
+        const primalWeaponsArmors = ['primal_w01', 'primal_a01'];
+        const primalAccessories = ['primal_acc_necklace_01', 'primal_acc_earring_01', 'primal_acc_wristwatch_01'];
+        
+
+        const primalWeaponArmorChance = gameSettings.dropTable[5].rates.Primal || 0.0000005;
+        const primalAccessoryChance = (gameSettings.dropTable[6].rates.Primal - gameSettings.dropTable[5].rates.Primal) / 3 || 0.0000005;
+
+        primalWeaponsArmors.forEach(id => effectiveGlobalLootTable.push({ id, chance: primalWeaponArmorChance }));
+        primalAccessories.forEach(id => effectiveGlobalLootTable.push({ id, chance: primalAccessoryChance }));
+    }
+
+    for (const itemInfo of effectiveGlobalLootTable) {
         let finalChance = itemInfo.chance;
         if (titleEffects && titleEffects.itemDropRate) {
             finalChance *= (1 + titleEffects.itemDropRate);
         }
-        if (Math.random() < finalChance) {
+
+        if (Math.random() < finalChance * eventDropMultiplier) {
             const droppedItem = createItemInstance(itemInfo.id);
             if (droppedItem) {
                 handleItemStacking(p, droppedItem);
@@ -2833,6 +2910,7 @@ const totalExtraClimbChance = (p.equippedPet?.effects?.extraClimbChance || 0) + 
         }
     }
 }
+
 async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
     if (!p) return;
     if (p.isBusy) {
@@ -4099,4 +4177,41 @@ function onPersonalRaidFloorClear(player) {
 }
 
 scheduleDailyReset(io); 
+function startEventCheckInterval() {
+    if (eventEndTimer) clearInterval(eventEndTimer);
+
+    eventEndTimer = setInterval(() => {
+        let eventsChanged = false;
+        const now = new Date();
+
+        for (const eventType in activeEvents) {
+            if (now >= new Date(activeEvents[eventType].endTime)) {
+                console.log(`[이벤트 종료] ${eventType} 이벤트가 종료되었습니다.`);
+                delete activeEvents[eventType];
+                eventsChanged = true;
+            }
+        }
+
+        if (eventsChanged) {
+
+            io.emit('eventStatusUpdate', activeEvents);
+        }
+    }, 1000);
+}
+
+startEventCheckInterval();
+
+function triggerEventAnnouncement(eventDescription) {
+   
+    io.emit('globalAnnouncement', eventDescription, { style: 'event' });
+
+    const eventChatMessage = { 
+        isSystem: true, 
+        message: `[이벤트] ${eventDescription}` 
+    };
+    io.emit('chatMessage', eventChatMessage);
+
+    // new ChatMessage(eventChatMessage).save();
+}
+
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));

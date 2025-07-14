@@ -2135,7 +2135,12 @@ function addChatMessage(data) {
 
     if (isSystem) {
         item.classList.add('system-message');
-        item.innerHTML = message;
+        if (message.includes('[이벤트]')) {
+            item.classList.add('event-chat');
+            item.innerHTML = message.replace('[이벤트]', '<span class="event-tag">[이벤트]</span>');
+        } else {
+            item.innerHTML = message;
+        }
     } else if (type === 'item_show_off' && itemData) {
         const userHtml = createFameUserHtml(username, fameScore || 0);
         const itemLink = `<span class="item-link ${itemData.grade}" data-iteminfo='${JSON.stringify(itemData)}'>[${itemData.name}]</span>`;
@@ -2186,7 +2191,7 @@ function addChatMessage(data) {
 
     elements.chat.messages.appendChild(item);
 
-    const MAX_CHAT_MESSAGES = 25;
+    const MAX_CHAT_MESSAGES = 40;
 
     if (elements.chat.messages.children.length > MAX_CHAT_MESSAGES) {
         elements.chat.messages.firstChild.remove();
@@ -2333,6 +2338,75 @@ function addChatMessage(data) {
             socket.emit('client-heartbeat');
         }
     }, 45000);
+
+
+    let eventTimerUpdater = null;
+ socket.on('eventStarted', (eventData) => {
+
+        const banner = elements.announcementBanner;
+        if (banner) {
+            if (window.announcementTimer) clearTimeout(window.announcementTimer);
+
+            banner.className = 'announcement-banner event';
+            banner.innerHTML = `📢 <span>${eventData.description}</span> <span id="announcement-close-btn">&times;</span>`;
+
+            banner.classList.add('active');
+
+            window.announcementTimer = setTimeout(() => {
+                banner.classList.remove('active');
+            }, 15000);
+        }
+    });
+
+    socket.on('eventStatusUpdate', (activeEvents) => {
+        const timersContainer = document.getElementById('player-event-timers');
+
+        updateAdminEventStatus(activeEvents);
+
+        if (eventTimerUpdater) cancelAnimationFrame(eventTimerUpdater);
+        
+        const updateTimers = () => {
+            if (!timersContainer) {
+                cancelAnimationFrame(eventTimerUpdater);
+                return;
+            }
+
+            timersContainer.innerHTML = '';
+            const eventTypes = Object.keys(activeEvents);
+
+            if (eventTypes.length === 0) {
+                timersContainer.style.display = 'none';
+                cancelAnimationFrame(eventTimerUpdater);
+                return;
+            }
+            
+            timersContainer.style.display = 'flex';
+
+            for (const type of eventTypes) {
+                const event = activeEvents[type];
+                const remaining = new Date(event.endTime) - new Date();
+
+                if (remaining <= 0) continue;
+
+                const hours = String(Math.floor(remaining / 3600000)).padStart(2, '0');
+                const minutes = String(Math.floor((remaining % 3600000) / 60000)).padStart(2, '0');
+                const seconds = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+                
+                const timerEl = document.createElement('div');
+                timerEl.className = `event-timer-item ${type}`;
+                let text = `🎉 <b>${type.toUpperCase()}</b> ${hours}:${minutes}:${seconds}`;
+                if (type !== 'primal') {
+                    text += ` (${event.multiplier}x)`;
+                }
+                timerEl.innerHTML = text;
+                timersContainer.appendChild(timerEl);
+            }
+            
+            eventTimerUpdater = requestAnimationFrame(updateTimers);
+        };
+        
+        eventTimerUpdater = requestAnimationFrame(updateTimers);
+    });
 
 const researchTab = document.getElementById('research-tab');
 
@@ -2769,7 +2843,6 @@ function updateTopBarInfo(player) {
         }
     }
 }
-
 function initializeAdminPanel() {
     const adminModal = document.getElementById('admin-panel-modal');
     if (!adminModal) return;
@@ -2789,6 +2862,8 @@ function initializeAdminPanel() {
                     if (targetTabId === 'admin-dashboard') socket.emit('admin:getDashboardData', renderAdminDashboard);
                     else if (targetTabId === 'admin-chat-log') socket.emit('admin:getChatLog', renderChatLog);
                     else if (targetTabId === 'admin-settings') socket.emit('admin:getGameSettings', renderGameSettings);
+
+                    else if (targetTabId === 'admin-event-mgmt') socket.emit('admin:joinRoom');
                 }
             });
         });
@@ -2807,112 +2882,110 @@ function initializeAdminPanel() {
         }
     });
 
- adminModal.addEventListener('click', (e) => {
-    const target = e.target;
-    const userId = document.getElementById('admin-target-userId').value;
-    const username = document.getElementById('admin-target-username').value;
-    
-    if (target.classList.contains('admin-sub-tab-button')) {
-        const parent = target.closest('.admin-detail-card');
-        parent.querySelectorAll('.admin-sub-tab-button').forEach(btn => btn.classList.remove('active'));
-        target.classList.add('active');
-        parent.querySelectorAll('.admin-sub-tab-content').forEach(content => {
-            content.classList.toggle('active', content.id === target.dataset.tab);
-        });
-    }
-
-
-    if (target.classList.contains('admin-equipped-delete-btn')) {
-        const slotType = target.dataset.slotType;
-        if (confirm(`[${username}] 유저의 ${slotType} 슬롯 아이템을 정말로 삭제(장착해제)하시겠습니까?`)) {
-            socket.emit('admin:deleteEquippedItem', { userId, username, slotType }, (res) => {
-                if (res.success) {
-                    alert('장착 아이템이 삭제되었습니다.');
-                    target.closest('.slot').innerHTML = '';
-                } else {
-                    alert(res.message || '삭제에 실패했습니다.');
-                }
+    adminModal.addEventListener('click', (e) => {
+        const target = e.target;
+        const userId = document.getElementById('admin-target-userId').value;
+        const username = document.getElementById('admin-target-username').value;
+        
+        if (target.classList.contains('admin-sub-tab-button')) {
+            const parent = target.closest('.admin-detail-card');
+            parent.querySelectorAll('.admin-sub-tab-button').forEach(btn => btn.classList.remove('active'));
+            target.classList.add('active');
+            parent.querySelectorAll('.admin-sub-tab-content').forEach(content => {
+                content.classList.toggle('active', content.id === target.dataset.tab);
             });
         }
-    }
 
+        if (target.classList.contains('admin-equipped-delete-btn')) {
+            const slotType = target.dataset.slotType;
+            if (confirm(`[${username}] 유저의 ${slotType} 슬롯 아이템을 정말로 삭제(장착해제)하시겠습니까?`)) {
+                socket.emit('admin:deleteEquippedItem', { userId, username, slotType }, (res) => {
+                    if (res.success) {
+                        alert('장착 아이템이 삭제되었습니다.');
+                        target.closest('.slot').innerHTML = '';
+                    } else {
+                        alert(res.message || '삭제에 실패했습니다.');
+                    }
+                });
+            }
+        }
 
-    if (target.classList.contains('admin-item-delete-btn') && !target.classList.contains('admin-equipped-delete-btn')) {
-        const itemUid = target.dataset.uid;
-        const inventoryType = target.dataset.inventoryType;
-        const currentQuantity = parseInt(target.dataset.quantity, 10);
-        
-        let quantityToDelete = null;
-        if (currentQuantity > 1) {
-            const input = prompt(`삭제할 수량을 입력하세요. (최대 ${currentQuantity}개)\n전체 삭제를 원하시면 '전체'라고 입력하세요.`);
-            if (input === null) return;
-            if (input.toLowerCase() === '전체') {
-                quantityToDelete = currentQuantity;
-            } else {
-                quantityToDelete = parseInt(input, 10);
-                if (isNaN(quantityToDelete) || quantityToDelete <= 0 || quantityToDelete > currentQuantity) {
-                    return alert('올바른 수량을 입력하세요.');
+        if (target.classList.contains('admin-item-delete-btn') && !target.classList.contains('admin-equipped-delete-btn')) {
+            const itemUid = target.dataset.uid;
+            const inventoryType = target.dataset.inventoryType;
+            const currentQuantity = parseInt(target.dataset.quantity, 10);
+            
+            let quantityToDelete = null;
+            if (currentQuantity > 1) {
+                const input = prompt(`삭제할 수량을 입력하세요. (최대 ${currentQuantity}개)\n전체 삭제를 원하시면 '전체'라고 입력하세요.`);
+                if (input === null) return;
+                if (input.toLowerCase() === '전체') {
+                    quantityToDelete = currentQuantity;
+                } else {
+                    quantityToDelete = parseInt(input, 10);
+                    if (isNaN(quantityToDelete) || quantityToDelete <= 0 || quantityToDelete > currentQuantity) {
+                        return alert('올바른 수량을 입력하세요.');
+                    }
                 }
+            }
+            
+            if (confirm(`[${username}] 유저의 이 아이템을 ${quantityToDelete ? quantityToDelete + '개' : '전체'} 삭제하시겠습니까?`)) {
+                socket.emit('admin:deleteInventoryItem', { userId, username, itemUid, inventoryType, quantity: quantityToDelete }, (res) => {
+                    if (res.success) {
+                        alert('아이템이 삭제되었습니다.');
+                        document.getElementById('admin-user-search-btn').click();
+                    } else {
+                        alert(res.message || '아이템 삭제에 실패했습니다.');
+                    }
+                });
             }
         }
         
-        if (confirm(`[${username}] 유저의 이 아이템을 ${quantityToDelete ? quantityToDelete + '개' : '전체'} 삭제하시겠습니까?`)) {
-            socket.emit('admin:deleteInventoryItem', { userId, username, itemUid, inventoryType, quantity: quantityToDelete }, (res) => {
-                if (res.success) {
-                    alert('아이템이 삭제되었습니다.');
-                    document.getElementById('admin-user-search-btn').click();
-                } else {
-                    alert(res.message || '아이템 삭제에 실패했습니다.');
-                }
-            });
-        }
-    }
-    
-    if (target.dataset.action === 'delete-auction') {
-        const listingId = target.dataset.listingId;
-        if (confirm(`[${username}] 유저의 이 경매 목록을 정말로 취소하시겠습니까?`)) {
-            socket.emit('admin:deleteAuctionListing', { listingId, username }, (res) => {
-                 if (res.success) {
-                    alert('경매가 취소되었습니다.');
-                    target.closest('tr').remove();
-                } else {
-                    alert(res.message || '경매 취소에 실패했습니다.');
-                }
-            });
-        }
-    }
-
-    if (target.id === 'admin-save-settings-btn') {
-        const container = document.getElementById('admin-game-settings-container');
-        const inputs = container.querySelectorAll('input[data-path], textarea[data-path]'); 
-        const newSettings = {};
-        
-        const parseValue = (value) => {
-            try {
-                return JSON.parse(value);
-            } catch (e) {
-                return value;
+        if (target.dataset.action === 'delete-auction') {
+            const listingId = target.dataset.listingId;
+            if (confirm(`[${username}] 유저의 이 경매 목록을 정말로 취소하시겠습니까?`)) {
+                socket.emit('admin:deleteAuctionListing', { listingId, username }, (res) => {
+                     if (res.success) {
+                        alert('경매가 취소되었습니다.');
+                        target.closest('tr').remove();
+                    } else {
+                        alert(res.message || '경매 취소에 실패했습니다.');
+                    }
+                });
             }
-        };
-
-        inputs.forEach(input => {
-            const path = input.dataset.path.split('.');
-            let current = newSettings;
-            for(let i = 0; i < path.length - 1; i++) {
-                current = current[path[i]] = current[path[i]] || {};
-            }
-            const rawValue = input.value;
-            current[path[path.length-1]] = input.tagName === 'TEXTAREA' ? parseValue(rawValue) : rawValue;
-        });
-
-        socket.emit('admin:updateGameSettings', newSettings, (response) => alert(response.message));
-
-    } else if (target.id === 'admin-reload-settings-btn') {
-        if(confirm('서버 설정을 새로고침 하시겠습니까? 모든 온라인 유저에게 실시간으로 적용됩니다.')) {
-            socket.emit('admin:reloadGameSettings', (response) => alert(response.message));
         }
-    }
-});
+
+        if (target.id === 'admin-save-settings-btn') {
+            const container = document.getElementById('admin-game-settings-container');
+            const inputs = container.querySelectorAll('input[data-path], textarea[data-path]'); 
+            const newSettings = {};
+            
+            const parseValue = (value) => {
+                try {
+                    return JSON.parse(value);
+                } catch (e) {
+                    return value;
+                }
+            };
+
+            inputs.forEach(input => {
+                const path = input.dataset.path.split('.');
+                let current = newSettings;
+                for(let i = 0; i < path.length - 1; i++) {
+                    current = current[path[i]] = current[path[i]] || {};
+                }
+                const rawValue = input.value;
+                current[path[path.length-1]] = input.tagName === 'TEXTAREA' ? parseValue(rawValue) : rawValue;
+            });
+
+            socket.emit('admin:updateGameSettings', newSettings, (response) => alert(response.message));
+
+        } else if (target.id === 'admin-reload-settings-btn') {
+            if(confirm('서버 설정을 새로고침 하시겠습니까? 모든 온라인 유저에게 실시간으로 적용됩니다.')) {
+                socket.emit('admin:reloadGameSettings', (response) => alert(response.message));
+            }
+        }
+    });
 
     document.getElementById('admin-user-save-btn').addEventListener('click', () => {
         const userId = document.getElementById('admin-target-userId').value;
@@ -2985,6 +3058,45 @@ function initializeAdminPanel() {
         adminModal.querySelector('.admin-tab-button[data-tab="admin-user-mgmt"]').click();
         document.getElementById('admin-user-search-input').value = row.dataset.username;
         document.getElementById('admin-user-search-btn').click();
+    });
+
+    const eventTypeSelect = document.getElementById('admin-event-type');
+    const multiplierInput = document.getElementById('admin-event-multiplier');
+    const startEventBtn = document.getElementById('admin-start-event-btn');
+
+    socket.emit('admin:joinRoom');
+
+    eventTypeSelect.addEventListener('change', () => {
+        multiplierInput.disabled = eventTypeSelect.value === 'primal';
+    });
+
+    startEventBtn.addEventListener('click', () => {
+        const type = eventTypeSelect.value;
+        const multiplier = parseFloat(multiplierInput.value);
+        const duration = parseInt(document.getElementById('admin-event-duration').value);
+        const unit = document.getElementById('admin-event-duration-unit').value;
+
+        if (!duration || duration <= 0) {
+            return alert('지속 시간을 올바르게 입력하세요.');
+        }
+        if (type !== 'primal' && (!multiplier || multiplier <= 0)) {
+            return alert('배율을 올바르게 입력하세요.');
+        }
+
+        const durationText = `${duration}${unit === 'hours' ? '시간' : '분'}`;
+        const descriptions = {
+            gold: `지금부터 ${durationText} 동안 골드 획득량이 ${multiplier}배 증가합니다!`,
+            drop: `지금부터 ${durationText} 동안 아이템 드롭률이 ${multiplier}배 증가합니다!`,
+            primal: `지금부터 ${durationText} 동안 모든 지역에서 프라이멀 아이템이 드롭될 수 있습니다!`
+        };
+
+        socket.emit('admin:startEvent', {
+            type,
+            multiplier,
+            duration,
+            unit,
+            description: descriptions[type]
+        });
     });
 }
 
@@ -3160,4 +3272,64 @@ function renderChatLog(logs) {
         const date = new Date(log.timestamp).toLocaleString();
         return `<li>[${date}] <strong>${log.username}:</strong> ${log.message}</li>`;
     }).join('');
+}
+
+function updateAdminEventStatus(activeEvents) {
+    const statusDiv = document.getElementById('admin-current-event-status');
+    if (!statusDiv) return;
+
+    if (window.adminEventTimers) {
+        window.adminEventTimers.forEach(timer => clearInterval(timer));
+    }
+    window.adminEventTimers = [];
+
+    const eventTypes = Object.keys(activeEvents);
+
+    if (eventTypes.length === 0) {
+        statusDiv.innerHTML = '<p>현재 진행중인 이벤트가 없습니다.</p>';
+        return;
+    }
+
+    statusDiv.innerHTML = eventTypes.map(type => {
+        const event = activeEvents[type];
+        let text = `<strong>${type.toUpperCase()}</strong>`;
+        if (type !== 'primal') text += ` (${event.multiplier}x)`;
+        return `<div class="admin-event-item" id="admin-event-${type}">
+                    <span>${text} - 남은 시간: <span class="timer"></span></span>
+                    <button class="end-btn" data-event-type="${type}">종료</button>
+                </div>`;
+    }).join('');
+
+    statusDiv.querySelectorAll('.end-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const typeToEnd = e.target.dataset.eventType;
+            if (confirm(`정말로 '${typeToEnd.toUpperCase()}' 이벤트를 강제 종료하시겠습니까?`)) {
+                socket.emit('admin:endEvent', typeToEnd);
+            }
+        });
+    });
+
+
+    eventTypes.forEach(type => {
+        const event = activeEvents[type];
+        const timerSpan = document.querySelector(`#admin-event-${type} .timer`);
+        
+        const update = () => {
+            const remaining = new Date(event.endTime) - new Date();
+            if (remaining <= 0) {
+                timerSpan.textContent = "종료됨";
+                const itemDiv = document.getElementById(`admin-event-${type}`);
+                if (itemDiv) itemDiv.style.opacity = '0.5';
+                return;
+            }
+            const hours = String(Math.floor(remaining / 3600000)).padStart(2, '0');
+            const minutes = String(Math.floor((remaining % 3600000) / 60000)).padStart(2, '0');
+            const seconds = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+            timerSpan.textContent = `${hours}:${minutes}:${seconds}`;
+        };
+        
+        update();
+        const intervalId = setInterval(update, 1000); 
+        window.adminEventTimers.push(intervalId); 
+    });
 }

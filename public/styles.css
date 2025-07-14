@@ -2430,4 +2430,55 @@ body.auth-view {
     font-size: 1.2em;
 }
 
-/* 끝 */
+#announcement-banner.event {
+    background: linear-gradient(-45deg, #ff3c00, #ff2d55, #d43cff, #5856d6, #007aff, #33abf3, #ffc900);
+    background-size: 600% 600%;
+    animation: primal-gradient-flow 8s ease infinite;
+    color: #fff;
+    text-shadow: 0 0 4px #000, 0 0 8px #000;
+    border-bottom: 3px solid #ffd700;
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
+}
+
+@keyframes primal-gradient-flow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.system-message.event-chat {
+    background: linear-gradient(-45deg, #000000, #2d004d, #00e6d2, #ffd700, #000000);
+    background-size: 400% 400%;
+    border: 1px solid #ffd700;
+    border-radius: 8px;
+    padding: 10px 15px;
+    margin: 8px 0 !important;
+    box-shadow: 0 0 10px 2px rgba(0, 230, 210, 0.6);
+    animation: primal-gradient-flow 5s ease infinite;
+    text-align: center;
+    line-height: 1.6;
+    color: #fff;
+    font-size: 1.1em;
+    text-shadow: 0 0 5px #000;
+}
+
+/* 채팅창 이벤트 태그 전용 반짝임 효과 */
+.event-chat .event-tag {
+    font-weight: 900;
+    animation: text-flicker 3s linear infinite;
+}
+
+/* Primal 공지에서 사용하는 반짝임 애니메이션 */
+@keyframes text-flicker {
+    0%, 18%, 22%, 25%, 53%, 57%, 100% {
+        text-shadow:
+            0 0 4px #fff,
+            0 0 11px #00e6d2,
+            0 0 19px #00e6d2,
+            0 0 40px #00e6d2,
+            0 0 80px #00e6d2;
+    }
+    20%, 24%, 55% {
+        text-shadow: none;
+    }
+}

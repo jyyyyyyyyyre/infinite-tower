@@ -72,6 +72,7 @@
 <button id="title-codex-button">📜 칭호</button>
             </div>
             <div class="top-bar-right">
+<div id="player-event-timers"></div>
                 <div id="zoom-controls">
                     <button id="zoom-out-btn" class="zoom-button">-</button>
                     <button id="zoom-in-btn" class="zoom-button">+</button>
@@ -591,6 +592,7 @@
                     <button class="admin-tab-button" data-tab="admin-user-mgmt">유저 관리</button>
                     <button class="admin-tab-button" data-tab="admin-chat-log">채팅 로그</button>
                     <button class="admin-tab-button" data-tab="admin-settings">게임 설정</button>
+<button class="admin-tab-button" data-tab="admin-event-mgmt">이벤트 관리</button>
                 </div>
 
                 <div class="admin-tab-content active" id="admin-dashboard">
@@ -750,6 +752,40 @@
                     </div>
                     <div id="admin-game-settings-container">
                         </div>
+                </div>
+<div class="admin-tab-content" id="admin-event-mgmt">
+                    <h3>실시간 이벤트 제어</h3>
+                    <div class="admin-section">
+                        <h4>현재 진행중인 이벤트</h4>
+                        <div id="admin-current-event-status">
+                            <p>현재 진행중인 이벤트가 없습니다.</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-section">
+                        <h4>신규 이벤트 시작/갱신</h4>
+                        <div class="admin-form-grid" style="grid-template-columns: 150px 1fr 1fr; gap: 15px;">
+                            <label for="admin-event-type">이벤트 종류:</label>
+                            <select id="admin-event-type">
+                                <option value="gold">골드 획득량</option>
+                                <option value="drop">아이템 드롭률</option>
+                                <option value="primal">프라이멀 전역 해금</option>
+                            </select>
+                            <span></span>
+
+                            <label for="admin-event-multiplier">적용 배율 (배):</label>
+                            <input type="number" id="admin-event-multiplier" value="2" step="0.1">
+                            <small>'프라이멀 해금' 선택 시 비활성화됩니다.</small>
+                            
+                            <label for="admin-event-duration">지속 시간:</label>
+                            <input type="number" id="admin-event-duration" value="1">
+                            <select id="admin-event-duration-unit">
+                                <option value="minutes">분</option>
+                                <option value="hours">시간</option>
+                            </select>
+                        </div>
+                        <button id="admin-start-event-btn" class="action-btn" style="margin-top: 20px;">이벤트 시작/갱신</button>
+                    </div>
                 </div>
                         
                         <div id="admin-user-details-section" style="display: none;">
