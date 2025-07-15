@@ -67,8 +67,8 @@ const RIFT_ENCHANT_COST = {
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 30000000, ATTACK: 0, DEFENSE: 0,
-    REWARDS: { GOLD: 800000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 1000000000, ATTACK: 0, DEFENSE: 0,
+    REWARDS: { GOLD: 1000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
 const MailSchema = new mongoose.Schema({
@@ -90,6 +90,7 @@ const UserSchema = new mongoose.Schema({
     password: { type: String, required: true },
     kakaoId: { type: String, index: true, sparse: true },
     isKakaoVerified: { type: Boolean, default: false },
+isHelper: { type: Boolean, default: false }, 
     ban: {
         isBanned: { type: Boolean, default: false },
         expiresAt: { type: Date, default: null },
@@ -193,7 +194,11 @@ raidState: {
         guardian: { type: Map, of: Number, default: {} },
         berserker: { type: Map, of: Number, default: {} },
         pioneer: { type: Map, of: Number, default: {} }
-    }
+    },
+
+ spiritInventory: { type: [Object], default: [] },
+    logoutTime: { type: Date, default: null },
+    lastLevel: { type: Number, default: 1 },
 
 });
 
@@ -210,6 +215,7 @@ const ChatMessageSchema = new mongoose.Schema({
     title: { type: String, default: null },
     itemName: { type: String, default: null }, 
     itemGrade: { type: String, default: null },
+isHelper: { type: Boolean, default: false },
     timestamp: { type: Date, default: Date.now }
 });
 const WorldBossStateSchema = new mongoose.Schema({
@@ -240,7 +246,7 @@ const AdminLogSchema = new mongoose.Schema({
         enum: [
             'grant_item', 'kick', 'mute', 'ban', 'update_user', 'update_settings', 
             'remove_sanction', 'delete_inventory_item', 'delete_auction_listing',
-            'delete_equipped_item' 
+            'delete_equipped_item' ,'delete_equipped_item', 'toggle_helper'
         ] 
     },
     targetUsername: { type: String },
@@ -370,7 +376,9 @@ const adminItemAlias = {
     '악세3': 'acc_wristwatch_01',
  '악세4': 'primal_acc_necklace_01',
     '악세5': 'primal_acc_earring_01',
-    '악세6': 'primal_acc_wristwatch_01'
+    '악세6': 'primal_acc_wristwatch_01',
+    '정령': 'spirit_essence',
+    '제네시스': 'spirit_primal'
 };
 
 const itemData = {
@@ -460,6 +468,13 @@ const titleData = {
     '[용사]': { effect: { bossDamage: 0.03 }, hint: "강력한 적의 숨통을 직접 끊어 영웅이 되세요." },
     '[토벌대원]': { effect: { worldBossContribution: 0.01 }, hint: "세계를 위협하는 존재에 맞서 꾸준히 당신의 힘을 보태세요." },
     '[날먹최강자]': { effect: { worldBossDamage: 0.01 }, hint: "가장 보잘것없는 무기로, 가장 위대한 존재에게 당신의 실력을 증명하세요." }
+};
+
+const spiritData = {
+    spirit_rare: { id: 'spirit_rare', name: '정령: 움브라', type: 'Spirit', grade: 'Rare', description: '오프라인 시, 초당 마지막 층 골드의 40%를 획득합니다.', image: 'spirit_umbra.png', offlineBonus: { type: 'gold', multiplier: 0.4 } },
+    spirit_legendary: { id: 'spirit_legendary', name: '정령: 드리아드', type: 'Spirit', grade: 'Legendary', description: '오프라인 시, 초당 마지막 층 골드의 50%를 획득합니다.', image: 'spirit_dryad.png', offlineBonus: { type: 'gold', multiplier: 0.5 } },
+    spirit_mystic: { id: 'spirit_mystic', name: '정령: 에테리우스', type: 'Spirit', grade: 'Mystic', description: '오프라인 시, 초당 마지막 층 골드의 60%를 획득합니다.', image: 'spirit_aetherius.png', offlineBonus: { type: 'gold', multiplier: 0.6 } },
+    spirit_primal: { id: 'spirit_primal', name: '정령: 제네시스', type: 'Spirit', grade: 'Primal', description: '오프라인 시, 골드와 아이템을 70% 효율로 획득합니다.', image: 'spirit_genesis.png', offlineBonus: { type: 'gold_and_items', multiplier: 0.7 } }
 };
 
 function grantTitle(player, titleName) {
@@ -730,31 +745,34 @@ if (user.ban && user.ban.isBanned) {
         res.status(500).json({ message: '서버 내부 오류가 발생했습니다.' });
     }
 });
-
 function createItemInstance(id, quantity = 1, enhancement = 0) {
-    const d = itemData[id]; 
+    const d = itemData[id] || spiritData[id]; 
     if (!d) return null;
 
-    const item = { 
-        uid: new mongoose.Types.ObjectId().toString(), 
-        id, 
-        name: d.name, 
-        type: d.type, 
+    const item = {
+        uid: new mongoose.Types.ObjectId().toString(),
+        id,
+        name: d.name,
+        type: d.type,
         grade: d.grade,
         category: d.category,
-        image: d.image, 
+        image: d.image,
         accessoryType: d.accessoryType,
         description: d.description,
         tradable: d.tradable,
-        quantity: quantity 
+        quantity: quantity
     };
+
+    if (d.offlineBonus) {
+        item.offlineBonus = d.offlineBonus;
+    }
 
     if (d.type === 'weapon' || d.type === 'armor') {
         item.baseEffect = d.baseEffect;
         item.enhancement = enhancement;
         item.enchantments = [];
     }
-if (d.type === 'accessory' && d.enchantable) {
+    if (d.type === 'accessory' && d.enchantable) {
         item.enchantments = [];
     }
 
@@ -866,6 +884,9 @@ function handleItemStacking(player, item) {
     addDiscoveredItem(player, item.id);
     if (item.type === 'pet') {
         player.petInventory.push(item);
+    } else if (item.type === 'Spirit') {
+        if(!player.spiritInventory) player.spiritInventory = []; 
+        player.spiritInventory.push(item);
     } else if (!item.tradable || item.enhancement > 0 || item.grade === 'Primal') {
         player.inventory.push(item);
     } else {
@@ -878,6 +899,7 @@ function handleItemStacking(player, item) {
     }
     checkStateBasedTitles(player);
 }
+
 function calculateTotalStats(player) {
     if (!player || !player.stats) return;
     const base = player.stats.base;
@@ -1107,6 +1129,9 @@ io.on('connection', async (socket) => {
         return socket.disconnect(); 
     }
 
+  await calculateAndSendOfflineRewards(gameData);
+    gameData = await GameData.findOne({ user: socket.userId }).lean();
+
   if (gameData.research) {
         for (const specId in gameData.research) {
             if (typeof gameData.research[specId] === 'object' && gameData.research[specId] !== null) {
@@ -1207,6 +1232,7 @@ if (typeof gameData.researchEssence === 'undefined') {
     const initialMonster = calcMonsterStats(gameData);
     onlinePlayers[socket.userId] = { 
         ...gameData, 
+isHelper: user.isHelper,
         monster: { 
             currentHp: initialMonster.hp,
             currentBarrier: initialMonster.barrier,
@@ -1264,7 +1290,8 @@ socket.emit('enhancementData', {
     const player = onlinePlayers[socket.userId];
     const unreadMailCount = await Mail.countDocuments({ recipientId: player.user, isRead: false });
     player.hasUnreadMail = unreadMailCount > 0;
-    const { socket: _, ...playerForClient } = player;
+   const playerForClient = { ...player };
+    delete playerForClient.socket;
     socket.emit('initialState', {
         player: playerForClient, 
         monster: calcMonsterStats(player)
@@ -1468,7 +1495,7 @@ const userAccount = await User.findById(socket.userId).select('mute').lean();
                         continue;
                     }
                     
-                    const d = itemData[id] || petData[id];
+                    const d = itemData[id] || petData[id] || spiritData[id];
                     let item;
 
                     if (d.type === 'weapon' || d.type === 'armor') {
@@ -1498,10 +1525,15 @@ const userAccount = await User.findById(socket.userId).select('mute').lean();
             role: socket.role, 
             fameScore: player ? player.fameScore : 0, 
             message: trimmedMsg,
-            title: player ? player.equippedTitle : null 
+            title: player ? player.equippedTitle : null ,
+isHelper: player ? player.isHelper : false
         });
         await newChatMessage.save();
-        const payload = { ...newChatMessage.toObject(), title: player ? player.equippedTitle : null };
+       const payload = { 
+            ...newChatMessage.toObject(), 
+            title: player ? player.equippedTitle : null,
+            isHelper: player ? player.isHelper : false
+        };
         io.emit('chatMessage', payload);
 
     } catch (error) {
@@ -1535,13 +1567,17 @@ const userAccount = await User.findById(socket.userId).select('mute').lean();
         itemToShow = player.petInventory.find(i => i.uid === uid);
     }
 
+ if (!itemToShow) {
+        itemToShow = player.spiritInventory.find(i => i.uid === uid);
+    }
+
     if (itemToShow) {
         const chatMessage = {
             type: 'item_show_off',
             username: player.username,
             role: player.role,
             fameScore: player.fameScore,
-            message: `[${itemToShow.name}] 아이템을 자랑합니다!`,
+            message: `[${itemToShow.name}] 을(를) 자랑합니다!`,
             itemData: itemToShow,
 title: player.equippedTitle
         };
@@ -2230,7 +2266,7 @@ const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' |
     const itemId = adminItemAlias[itemAlias];
     if (!itemId) return;
 
-    const itemBaseData = itemData[itemId] || petData[itemId];
+const itemBaseData = itemData[itemId] || petData[itemId] || spiritData[itemId];
     if (!itemBaseData) return;
 
     let newItem;
@@ -2281,6 +2317,25 @@ announceMysticDrop(onlinePlayer, newItem);
                 new AdminLog({ adminUsername: socket.username, actionType: 'kick', targetUsername: targetPlayer.username }).save();
             }
         })
+
+.on('admin:toggleHelper', async ({ userId, username, isHelper }) => {
+            if (socket.role !== 'admin') return;
+            try {
+                await User.updateOne({ _id: userId }, { $set: { isHelper: isHelper } });
+                const targetPlayer = onlinePlayers[userId];
+                if (targetPlayer) {
+                    targetPlayer.isHelper = isHelper;
+                    const message = isHelper ? '서버 도우미로 설정되었습니다.' : '도우미가 해제되었습니다.';
+                    pushLog(targetPlayer, `[관리자] ${message}`);
+                    pushLog(onlinePlayers[socket.userId], `[관리자] ${username}님을 ${message}`);
+                }
+                new AdminLog({ adminUsername: socket.username, actionType: 'toggle_helper', targetUsername: username, details: { isHelper } }).save();
+            } catch(error) {
+                console.error(`[관리자] 도우미 설정 오류:`, error);
+                pushLog(onlinePlayers[socket.userId], `[오류] ${username}님의 도우미 설정 중 오류가 발생했습니다.`);
+            }
+        })
+
         .on('admin:sanctionUser', async ({ userId, username, type, duration, unit, reason }) => {
             if (socket.role !== 'admin') return;
             let expiresAt = null;
@@ -2444,12 +2499,55 @@ announceMysticDrop(onlinePlayer, newItem);
             socket.emit('eventStatusUpdate', activeEvents);
         })
 
-        .on('disconnect', () => {
+.on('spirit:create', async () => {
+            const player = onlinePlayers[socket.userId];
+            if (!player) return;
+
+            const essenceItemIndex = player.inventory.findIndex(i => i.id === 'spirit_essence');
+            if (essenceItemIndex === -1 || player.inventory[essenceItemIndex].quantity < 100) {
+                return player.socket.emit('serverAlert', '정령의 형상이 부족합니다. (100개 필요)');
+            }
+
+            player.inventory[essenceItemIndex].quantity -= 100;
+            if (player.inventory[essenceItemIndex].quantity <= 0) {
+                player.inventory.splice(essenceItemIndex, 1);
+            }
+
+            let spiritId;
+            const rand = Math.random();
+            if (rand < 0.7) { 
+                spiritId = 'spirit_rare';
+            } else if (rand < 0.9) { 
+                spiritId = 'spirit_legendary';
+            } else { 
+                spiritId = 'spirit_mystic';
+            }
+
+            const newSpirit = createItemInstance(spiritId);
+            if (newSpirit) {
+                handleItemStacking(player, newSpirit);
+                player.socket.emit('spirit:created', { newSpirit });
+                pushLog(player, `형상의 힘이 응축되어 <span class="${newSpirit.grade}">${newSpirit.name}</span>이(가) 당신을 따릅니다!`);
+            }
+            
+            sendInventoryUpdate(player);
+        })
+
+       .on('disconnect', async () => { 
             console.log(`[연결 해제] 유저: ${socket.username}`);
             const player = onlinePlayers[socket.userId];
             if(player) {
-                const clientIp = getNormalizedIp(player.socket);
-                savePlayerData(socket.userId);
+                try {
+                    const saveData = { ...player };
+                    delete saveData.socket;
+                    delete saveData.attackTarget;
+                    saveData.logoutTime = new Date();
+                    saveData.lastLevel = player.level;
+                    await GameData.updateOne({ user: socket.userId }, { $set: saveData });
+                } catch (error) {
+                    console.error(`[저장 실패] 유저: ${player.username} 데이터 저장 중 오류 발생:`, error);
+                }
+
             }
             delete onlinePlayers[socket.userId];
         });
@@ -3154,7 +3252,8 @@ function sendInventoryUpdate(player) {
         player.socket.emit('inventoryUpdate', {
             inventory: player.inventory,
             petInventory: player.petInventory,
-            incubator: player.incubator 
+            incubator: player.incubator,
+spiritInventory: player.spiritInventory
         });
     }
 }
@@ -3348,7 +3447,7 @@ async function sellItem(player, uid, sellAll) {
         let itemLocation = '';
         let itemIndex = -1;
 
-        itemIndex = player.inventory.findIndex(i => i && i.uid === uid);
+       itemIndex = player.inventory.findIndex(i => i && i.uid === uid);
         if (itemIndex > -1) {
             item = player.inventory[itemIndex];
             itemLocation = 'inventory';
@@ -3357,6 +3456,12 @@ async function sellItem(player, uid, sellAll) {
             if (itemIndex > -1) {
                 item = player.petInventory[itemIndex];
                 itemLocation = 'petInventory';
+            } else {
+                itemIndex = player.spiritInventory.findIndex(i => i && i.uid === uid);
+                if (itemIndex > -1) {
+                    item = player.spiritInventory[itemIndex];
+                    itemLocation = 'spiritInventory';
+                }
             }
         }
 
@@ -3389,6 +3494,16 @@ async function sellItem(player, uid, sellAll) {
             else if (item.grade === 'Epic') { goldReward = 50000000; essenceReward = 10; } 
             else if (item.grade === 'Rare') { goldReward = 3000000; essenceReward = 3; }
             if (goldReward > 0 || essenceReward > 0) isSellable = true;
+        }
+else if (item.type === 'Spirit') {
+            essenceReward = 20;
+            isSellable = true;
+        }
+
+else if (item.category === 'Tome') {
+            goldReward = 100000000;
+            shardReward = 20;
+            isSellable = true;
         }
 
         if (!isSellable) {
@@ -3425,7 +3540,8 @@ async function sellItem(player, uid, sellAll) {
                 item.quantity--;
             } else {
                 if (itemLocation === 'inventory') player.inventory.splice(itemIndex, 1);
-                else player.petInventory.splice(itemIndex, 1);
+                else if (itemLocation === 'petInventory') player.petInventory.splice(itemIndex, 1);
+                else if (itemLocation === 'spiritInventory') player.spiritInventory.splice(itemIndex, 1);
             }
             
             const rewardsLog = [];
@@ -3533,6 +3649,7 @@ const playerStateForClient = {
         equipment: player.equipment,
         equippedPet: player.equippedPet,
         unlockedArtifacts: player.unlockedArtifacts,
+spiritInventory: player.spiritInventory,
         petFusion: player.petFusion,
         inventory: player.inventory,
         petInventory: player.petInventory,
@@ -4177,6 +4294,96 @@ function onPersonalRaidFloorClear(player) {
 }
 
 scheduleDailyReset(io); 
+
+
+async function calculateAndSendOfflineRewards(player) {
+    if (!player || !player.logoutTime) return;
+
+    const offlineSeconds = Math.floor((new Date() - new Date(player.logoutTime)) / 1000);
+ 
+
+    const bestSpirit = (player.spiritInventory || []).sort((a, b) => {
+        const gradeOrder = { 'Rare': 1, 'Legendary': 2, 'Mystic': 3, 'Primal': 4 };
+        return (gradeOrder[b.grade] || 0) - (gradeOrder[a.grade] || 0);
+    })[0];
+
+    if (!bestSpirit) {
+        await GameData.updateOne({ user: player.user }, { $set: { logoutTime: null, lastLevel: 1 } });
+        return;
+    }
+
+    let researchBonuses = { offlineRewardPercent: 0 };
+    if (player.research && player.research.pioneer) {
+        const pioneerResearchLevels = player.research.pioneer instanceof Map ? Object.fromEntries(player.research.pioneer) : player.research.pioneer;
+        const offlineTech = researchConfig.pioneer.researches.find(t => t.id === 'pioneer_offline_1');
+        const level = (pioneerResearchLevels ? pioneerResearchLevels['pioneer_offline_1'] : 0) || 0;
+        if (offlineTech && level > 0) {
+            researchBonuses.offlineRewardPercent = offlineTech.getBonus(level).offlineRewardPercent || 0;
+        }
+    }
+    const researchMultiplier = 1 + researchBonuses.offlineRewardPercent;
+
+    const baseGoldPerSec = player.lastLevel;
+    const totalGoldReward = Math.floor(baseGoldPerSec * bestSpirit.offlineBonus.multiplier * offlineSeconds * researchMultiplier);
+
+    const collectedItems = new Map();
+    if (bestSpirit.offlineBonus.type === 'gold_and_items') {
+        const killsToSimulate = Math.floor(offlineSeconds * 0.7 * researchMultiplier);
+        let zone = 1;
+        const currentLevel = player.lastLevel || 1;
+        if (currentLevel >= 1000000) zone = 6;
+        else if (currentLevel >= 500000) zone = 5;
+        else if (currentLevel > 15000) zone = 4;
+        else if (currentLevel > 3000) zone = 3;
+        else if (currentLevel > 500) zone = 2;
+        
+        const dropTable = gameSettings.dropTable[zone];
+        if (dropTable) {
+            for (let i = 0; i < killsToSimulate; i++) {
+
+                if (Math.random() < 0.02) {
+                    let grade, acc = 0, r = Math.random();
+                    for (const g in dropTable.rates) { acc += dropTable.rates[g]; if (r < acc) { grade = g; break; } }
+                    if (grade) {
+                        const pool = dropTable.itemsByGrade[grade] || [];
+                        if (pool.length) {
+                            const id = pool[Math.floor(Math.random() * pool.length)];
+                            collectedItems.set(id, (collectedItems.get(id) || 0) + 1);
+                        }
+                    }
+                }
+
+                for (const itemInfo of gameSettings.globalLootTable) {
+                    if (Math.random() < itemInfo.chance) {
+                         collectedItems.set(itemInfo.id, (collectedItems.get(itemInfo.id) || 0) + 1);
+                    }
+                }
+            }
+        }
+    }
+
+
+    if (totalGoldReward > 0) {
+        await sendMail(player.user, bestSpirit.name, { gold: totalGoldReward, description: "오프라인 보상" });
+    }
+    if (collectedItems.size > 0) {
+        for(const [itemId, quantity] of collectedItems.entries()) {
+            const itemInstance = createItemInstance(itemId, quantity);
+            if (itemInstance) {
+                await sendMail(player.user, bestSpirit.name, { item: itemInstance, description: "오프라인 보상" });
+            }
+        }
+    }
+    
+    if (totalGoldReward > 0 || collectedItems.size > 0) {
+        pushLog(player, `[${bestSpirit.name}]이(가) 오프라인 동안 모아온 보상을 우편으로 보냈습니다!`);
+    }
+
+    await GameData.updateOne({ user: player.user }, { $set: { logoutTime: null, lastLevel: 1 } });
+}
+
+
+
 function startEventCheckInterval() {
     if (eventEndTimer) clearInterval(eventEndTimer);
 
@@ -4211,7 +4418,6 @@ function triggerEventAnnouncement(eventDescription) {
     };
     io.emit('chatMessage', eventChatMessage);
 
-    // new ChatMessage(eventChatMessage).save();
 }
 
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));

@@ -1739,6 +1739,24 @@ body.auth-view {
     color: #fff;
 }
 
+.tab-button[data-tab="spirit-tab"] {
+    color: #48dbfb;
+}
+.tab-button[data-tab="spirit-tab"].active {
+    color: #48dbfb;
+    border-bottom-color: #48dbfb;
+}
+
+.inventory-item[data-item-type="Spirit"] {
+    border-color: #48dbfb;
+    box-shadow: 0 0 8px #48dbfb;
+    animation: pulse-spirit 2s infinite;
+}
+
+@keyframes pulse-spirit {
+    50% { box-shadow: 0 0 15px #0abde3, 0 0 5px #fff inset; }
+}
+
 /* 칭호 도감 컨텐츠 그리드 */
 #title-codex-content {
     display: grid;
@@ -2480,5 +2498,47 @@ body.auth-view {
     }
     20%, 24%, 55% {
         text-shadow: none;
+    }
+}
+.helper-message {
+
+    background: linear-gradient(135deg, rgba(0, 122, 255, 0.15) 0%, rgba(175, 82, 222, 0.15) 100%);
+    border: 1px solid transparent;
+    border-image: linear-gradient(135deg, var(--primary-color), var(--epic-color)) 1;
+    border-radius: 6px;
+
+    box-shadow: 0 0 8px rgba(175, 82, 222, 0.5);
+    animation: helper-pulse 2.5s infinite ease-in-out;
+}
+
+.helper-message .username {
+    font-weight: 900;
+    background: linear-gradient(45deg, var(--primary-color), var(--epic-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+
+    animation: helper-text-readable-shine 2s infinite;
+}
+
+@keyframes helper-pulse {
+    0% {
+        box-shadow: 0 0 8px rgba(88, 134, 255, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 16px rgba(175, 82, 222, 0.7);
+    }
+    100% {
+        box-shadow: 0 0 8px rgba(88, 134, 255, 0.5);
+    }
+}
+
+
+@keyframes helper-text-readable-shine {
+    0%, 100% {
+
+        text-shadow: 0 0 1px #ffffff, 0 0 4px var(--primary-color);
+    }
+    50% {
+        text-shadow: 0 0 1px #ffffff, 0 0 8px var(--epic-color);
     }
 }

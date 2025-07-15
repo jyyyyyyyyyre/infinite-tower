@@ -205,6 +205,7 @@
                         <button class="tab-button" data-tab="log-tab">로그</button>
                         <button class="tab-button" data-tab="chat-tab">채팅</button>
 <button class="tab-button" data-tab="research-tab">연구소</button>
+<button class="tab-button" data-tab="spirit-tab">정령</button>
                     </div>
 
                     <div class="tab-content active" id="weapon-inventory-tab">
@@ -338,6 +339,12 @@
 <div class="tab-content" id="research-tab">
                         </div>
 
+<div class="tab-content" id="spirit-tab">
+    <div class="inventory-header">
+        <p class="inventory-tip">정령은 소지하고만 있어도 오프라인 보너스를 제공합니다. (가장 높은 등급 하나만 적용)</p>
+    </div>
+    <div id="spirit-inventory" class="inventory-grid"></div>
+</div>
 
                 </main>
             </div>
@@ -891,6 +898,8 @@
                         </div>
                 </div>
 
+
+
     <div id="research-detail-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content" style="max-width: 500px;">
             <span class="close-button">&times;</span>
@@ -903,6 +912,19 @@
         </div>
     </div>
 
+
+<div id="spirit-summon-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 450px; text-align: center;">
+        <span class="close-button">&times;</span>
+        <h2 style="color: var(--mystic-color);">정령 소환</h2>
+        <div class="inventory-item" style="width: 120px; height: 120px; margin: 20px auto; cursor: default; border: none;">
+            <div class="item-image"><img src="/image/spirit_essence.png" alt="정령의 형상"></div>
+        </div>
+        <p style="font-size: 1.1em; margin-bottom: 10px;">'정령의 형상' 100개를 소모하여 새로운 생명을 탄생시킵니다.</p>
+        <p style="font-size: 1.2em; margin-bottom: 25px;">현재 보유량: <span id="spirit-essence-count">0</span>개</p>
+        <button id="spirit-summon-btn" class="action-btn equip-btn" style="width: 80%; padding: 15px; font-size: 1.3em;">새로운 생명 탄생</button>
+    </div>
+</div>
     <script src="/socket.io/socket.io.js"></script>
 <script src="/researchConfig.js"></script>
     <script src="client.js?v=<%= version %>"></script>

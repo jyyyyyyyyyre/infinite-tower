@@ -370,6 +370,7 @@ function initializeGame(socket) {
     let currentPostId = null; 
     let selectedItemUidForAction = null;
     let returnCooldownTimer = null;
+let currentEssenceItem = null;
 
     const elements = {
         gold: document.getElementById('gold'),
@@ -403,13 +404,14 @@ function initializeGame(socket) {
             earring: document.getElementById('earring-slot'),       
             wristwatch: document.getElementById('wristwatch-slot') 
         },
-        artifactSockets: document.getElementById('artifact-sockets'),
+artifactSockets: document.getElementById('artifact-sockets-header'),
         inventory: { 
             weapon: document.getElementById('weapon-inventory'), 
             armor: document.getElementById('armor-inventory'),
             accessory: document.getElementById('accessory-inventory'),
             item: document.getElementById('item-inventory'),
             pet: document.getElementById('pet-inventory'),
+spirit: document.getElementById('spirit-inventory'),
             all: document.querySelectorAll('.inventory-grid'), 
         },
         log: document.getElementById('game-log'),
@@ -527,7 +529,14 @@ researchDetail: {
             itemInfo: {
                 overlay: document.getElementById('item-info-modal'),
                 content: document.getElementById('item-info-modal-content')
+            },
+ spiritSummon: {
+                overlay: document.getElementById('spirit-summon-modal'),
+                countSpan: document.getElementById('spirit-essence-count'),
+                summonBtn: document.getElementById('spirit-summon-btn'),
+                closeBtn: document.getElementById('spirit-summon-modal').querySelector('.close-button')
             }
+
         },
         chat: { 
             messages: document.getElementById('chat-messages'), 
@@ -594,6 +603,19 @@ researchDetail: {
         init() { elements.zoom.inBtn.addEventListener('click', () => this.applyZoom(this.currentScale + 0.1)); elements.zoom.outBtn.addEventListener('click', () => this.applyZoom(this.currentScale - 0.1)); this.applyZoom(1.0); }
     };
     zoomLogic.init();
+
+elements.modals.spiritSummon.summonBtn.addEventListener('click', () => {
+        if (!currentEssenceItem) return; 
+
+        if (confirm('정령의 형상 100개를 소모하여 새로운 정령을 소환하시겠습니까?')) {
+            socket.emit('spirit:create');
+            elements.modals.spiritSummon.overlay.style.display = 'none';
+        }
+    });
+
+    elements.modals.spiritSummon.closeBtn.addEventListener('click', () => { 
+        elements.modals.spiritSummon.overlay.style.display = 'none'; 
+    });
 
     function updatePlayerFameDisplay(score, username, title) {
         const fameDetails = getFameDetails(score);
@@ -927,24 +949,26 @@ if(accountStorageTabBtn) {
 
     const getEnhanceClass = (lvl) => lvl > 0 ? `enhance-${Math.min(lvl, 20)}` : '';
 
-    function findItemInState(uid) {
-        if (!currentPlayerState || !uid) return null;
-        let found = null;
-        const inventories = [currentPlayerState.inventory, currentPlayerState.petInventory];
-        for(const inv of inventories) {
-            found = inv.find(i => i && i.uid === uid);
-            if (found) return found;
-        }
-        for(const slot in currentPlayerState.equipment) {
-            if(currentPlayerState.equipment[slot] && currentPlayerState.equipment[slot].uid === uid) {
-                return currentPlayerState.equipment[slot];
-            }
-        }
-        if (currentPlayerState.equippedPet && currentPlayerState.equippedPet.uid === uid) {
-            return currentPlayerState.equippedPet;
-        }
-        return null;
+  function findItemInState(uid) {
+    if (!currentPlayerState || !uid) return null;
+    let found = null;
+
+    const inventories = [currentPlayerState.inventory, currentPlayerState.petInventory, currentPlayerState.spiritInventory];
+    for(const inv of inventories) {
+        if (!inv) continue; 
+        found = inv.find(i => i && i.uid === uid);
+        if (found) return found;
     }
+    for(const slot in currentPlayerState.equipment) {
+        if(currentPlayerState.equipment[slot] && currentPlayerState.equipment[slot].uid === uid) {
+            return currentPlayerState.equipment[slot];
+        }
+    }
+    if (currentPlayerState.equippedPet && currentPlayerState.equippedPet.uid === uid) {
+        return currentPlayerState.equippedPet;
+    }
+    return null;
+}
 
     const renderItemInSlot = (slotElement, item, defaultText, type) => {
         slotElement.innerHTML = '';
@@ -969,8 +993,9 @@ if(accountStorageTabBtn) {
     };
 
  const updateUI = ({ player, monster, isInRaid = false }) => {
-        currentPlayerState = player; 
-        updateTopBarInfo(player);
+       currentPlayerState = player;
+    if (!currentPlayerState.spiritInventory) currentPlayerState.spiritInventory = []; 
+    updateTopBarInfo(player);
 
   const essenceDisplaySpan = document.querySelector('.research-essence-display span');
         if (essenceDisplaySpan) {
@@ -1322,34 +1347,64 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
         });
     }
 
-    function updateEnhancementPanel(item) {
-        const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
+   function updateEnhancementPanel(item) {
+    const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
 
-        if (!item) {
-            slot.innerHTML = '강화 또는 판매할 아이템을<br>인벤토리/장비창에서 선택하세요';
-            details.style.display = 'none';
-            button.style.display = 'none';
-            checkboxes.style.display = 'none';
-            info.innerHTML = '';
-            selectedInventoryItemUid = null;
-            return;
-        }
+    if (!item) {
+        slot.innerHTML = '강화 또는 판매할 아이템을<br>인벤토리/장비창에서 선택하세요';
+        details.style.display = 'none';
+        button.style.display = 'none';
+        checkboxes.style.display = 'none';
+        info.innerHTML = '';
+        selectedInventoryItemUid = null;
+        return;
+    }
 
-        selectedInventoryItemUid = item.uid;
-        document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
-        const visibleCard = document.querySelector(`.inventory-item[data-uid="${item.uid}"]`);
-        if (visibleCard) visibleCard.classList.add('selected');
+    selectedInventoryItemUid = item.uid;
+    document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
+    const visibleCard = document.querySelector(`.inventory-item[data-uid="${item.uid}"]`);
+    if (visibleCard) visibleCard.classList.add('selected');
 
+    slot.innerHTML = createEnhancementItemHTML(item);
+
+
+    if (item.id === 'spirit_essence') {
+
+        details.style.display = 'none';
+        button.style.display = 'none';
+        checkboxes.style.display = 'none';
+
+
+        const hasEnough = item.quantity >= 100;
+        info.innerHTML = `
+            <div style="text-align: center; font-size: 1.2em; line-height: 1.6;">
+                <p>보유 중인 정령의 형상: ${item.quantity.toLocaleString()}개</p>
+                <p style="color: ${hasEnough ? 'var(--success-color)' : 'var(--fail-color)'}; margin-top: 10px;">소환에 100개가 필요합니다.</p>
+                <div class="interaction-buttons" style="margin-top: 25px;">
+                    <button id="spirit-summon-from-anvil-btn" class="action-btn equip-btn" style="padding: 15px 30px; font-size: 1.2em;" ${!hasEnough ? 'disabled' : ''}>
+                        ✨ 정령 소환
+                    </button>
+                </div>
+            </div>
+        `;
+
+
+        document.getElementById('spirit-summon-from-anvil-btn').addEventListener('click', () => {
+            if (confirm('정령의 형상 100개를 소모하여 새로운 정령을 소환하시겠습니까?')) {
+                socket.emit('spirit:create');
+                updateEnhancementPanel(null); // 소환 후 패널 초기화
+            }
+        });
+
+    } else { 
         const isEnhanceable = item.type === 'weapon' || item.type === 'armor';
 
-        slot.innerHTML = createEnhancementItemHTML(item);
         details.style.display = isEnhanceable ? 'flex' : 'none';
         button.style.display = isEnhanceable ? 'block' : 'none';
         checkboxes.style.display = isEnhanceable ? 'flex' : 'none';
 
         let infoContentHTML = '';
         let buttonsHTML = '<div class="interaction-buttons" style="justify-content: center; width: 100%; flex-wrap: wrap; gap: 10px;">';
-
 
         if (isEnhanceable) {
             const isPrimal = item.grade === 'Primal';
@@ -1365,7 +1420,7 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
             const canBeDestroyed = rates ? rates.destroy > 0 : false;
             useTicketCheck.disabled = !(item.enhancement >= 10 && hasTicket && canBeDestroyed);
             useTicketCheck.parentElement.title = (item.enhancement >= 10 && !canBeDestroyed) ? "이 아이템은 현재 강화 단계에서 파괴되지 않습니다." : "";
-            
+
             let baseBonus = item.baseEffect;
             if (item.grade === 'Primal' && item.randomizedValue) baseBonus += (item.randomizedValue / 100);
             const enhancementBonusArr = Array.from({ length: item.enhancement }, (_, i) => item.baseEffect * (i < 10 ? 0.1 : 0.5));
@@ -1374,7 +1429,7 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
             const nextTotalBonus = currentTotalBonus + item.baseEffect * (item.enhancement < 10 ? 0.1 : 0.5);
             before.innerHTML = `<b>+${item.enhancement}</b><br>${(currentTotalBonus * 100).toFixed(1)}%`;
             after.innerHTML = `<b>+${item.enhancement + 1}</b><br>${(nextTotalBonus * 100).toFixed(1)}%`;
-            
+
             let cost, riftShardCost = 0, costText = '';
             if (isPrimal) {
                 const nextLevel = item.enhancement + 1;
@@ -1405,7 +1460,6 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
         }
 
         const isEquipped = Object.values(currentPlayerState.equipment).some(eq => eq && eq.uid === item.uid) || (currentPlayerState.equippedPet && currentPlayerState.equippedPet.uid === item.uid);
-        
 
         if (!isEquipped) {
             let rewards = { gold: 0, shards: 0, essence: 0 };
@@ -1430,14 +1484,25 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
                 if (rewards.gold > 0 || rewards.essence > 0) isSellable = true;
             }
 
+ else if (item.type === 'Spirit') {
+                    rewards.essence = 20;
+                    isSellable = true;
+                }
+
+else if (item.category === 'Tome') {
+    rewards.gold = 100000000;
+    rewards.shards = 20;
+    isSellable = true;
+}
+
             if (isSellable) {
                 const rewardsText = [];
                 if (rewards.gold > 0) rewardsText.push(`${rewards.gold.toLocaleString()} G`);
                 if (rewards.shards > 0) rewardsText.push(`파편 ${rewards.shards.toLocaleString()}개`);
                 if (rewards.essence > 0) rewardsText.push(`형상 ${rewards.essence.toLocaleString()}개`);
-                
+
                 buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="false">판매 (${rewardsText.join(', ')})</button>`;
-                
+
                 if (item.enhancement === 0 && item.quantity > 1 && (item.type === 'weapon' || item.type === 'armor')) {
                     const allRewardsText = [];
                     if (rewards.gold > 0) allRewardsText.push(`${(rewards.gold * item.quantity).toLocaleString()} G`);
@@ -1446,7 +1511,7 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
                 }
             }
         }
-        
+
         if (!isEnhanceable && item.type !== 'accessory' && item.type !== 'pet') {
             if (item.id === 'hammer_hephaestus' || item.id === 'prevention_ticket') {
                 infoContentHTML += `<div style="text-align:center; color: var(--text-muted);">강화 탭에서 체크하여 사용합니다.</div>`;
@@ -1456,19 +1521,17 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
                     buttonsHTML += `<button class="action-btn use-item-btn" data-action="hatch">부화하기</button>`;
                 } else if (['Tome', 'Consumable'].includes(item.category) || item.id === 'pure_blood_crystal') {
                     buttonsHTML += `<button class="action-btn use-item-btn" data-action="use">사용하기</button>`;
-                    if (item.id === 'gold_pouch' && item.quantity > 1) {
+                    if ((item.id === 'gold_pouch' || item.id === 'box_power' || item.id === 'boss_participation_box') && item.quantity > 1) {
                         buttonsHTML += `<button class="action-btn use-item-btn" data-action="use-all">모두 사용</button>`;
                     }
                 }
             }
         }
 
-        if (item.tradable !== false) {
-        }
-
         buttonsHTML += '</div>';
         info.innerHTML = infoContentHTML + buttonsHTML;
     }
+}
 
     function updateRiftEnchantPanel(item, previouslyLockedIndices = []) {
         const { slot, optionsContainer, costDisplay, button } = elements.riftEnchant;
@@ -1597,6 +1660,7 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
         if (!currentPlayerState || !data) return;
         currentPlayerState.inventory = data.inventory;
         currentPlayerState.petInventory = data.petInventory;
+        currentPlayerState.spiritInventory = data.spiritInventory; 
         currentPlayerState.incubator = data.incubator;
         renderAllInventories(currentPlayerState);
         renderIncubator(currentPlayerState.incubator);
@@ -1630,6 +1694,7 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
         elements.inventory.accessory.innerHTML = renderGrid(player.inventory.filter(i => i.type === 'accessory'));
         elements.inventory.item.innerHTML = renderGrid(player.inventory.filter(i => i.type !== 'weapon' && i.type !== 'armor' && i.type !== 'accessory'));
         elements.inventory.pet.innerHTML = renderGrid(player.petInventory);
+elements.inventory.spirit.innerHTML = renderGrid(player.spiritInventory || []);
     }
 
     socket.on('combatResult', (damages) => { 
@@ -1755,78 +1820,76 @@ document.getElementById('account-storage-grid').addEventListener('click', (e) =>
     }
 
     function handleItemClick(e) {
-        const card = e.target.closest('.inventory-item');
-if (!card || card.closest('#auction-grid') || card.closest('#account-storage-grid')) return;
+    const card = e.target.closest('.inventory-item');
+    if (!card || card.closest('#auction-grid') || card.closest('#account-storage-grid')) return;
 
-        const uid = card.dataset.uid;
-        const item = findItemInState(uid);
-        if (!item) return;
+    const uid = card.dataset.uid;
+    const item = findItemInState(uid);
+    if (!item) return;
 
-        selectedItemUidForAction = uid;
+    selectedItemUidForAction = uid;
 
-        if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet' || item.type === 'accessory') {
-            openItemActionModal(item);
-        } else {
-            handleLegacyItemSelection(item);
-        }
+    if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet' || item.type === 'accessory' || item.type === 'Spirit') {
+        openItemActionModal(item);
+    } else {
+        handleLegacyItemSelection(item);
     }
+}
 
     function openItemActionModal(item) {
-        if (!item) return;
-        const { overlay, title, buttons } = elements.modals.itemAction;
-        title.innerHTML = `<span class="${item.grade}">${item.name}</span>`;
-        
-        buttons.innerHTML = '';
+    if (!item) return;
+    const { overlay, title, buttons } = elements.modals.itemAction;
+    title.innerHTML = `<span class="${item.grade}">${item.name}</span>`;
+    
+    buttons.innerHTML = ''; 
 
-        const isEquipped = Object.values(currentPlayerState.equipment).some(eq => eq && eq.uid === item.uid) || (currentPlayerState.equippedPet && currentPlayerState.equippedPet.uid === item.uid);
+    const isEquipped = Object.values(currentPlayerState.equipment).some(eq => eq && eq.uid === item.uid) || (currentPlayerState.equippedPet && currentPlayerState.equippedPet.uid === item.uid);
 
+    if (item.type !== 'Spirit') {
         const equipAction = document.createElement('button');
         equipAction.className = 'action-btn equip-btn';
         equipAction.textContent = isEquipped ? '해제하기' : '장착하기';
         equipAction.dataset.action = isEquipped ? 'unequip' : 'equip';
         buttons.appendChild(equipAction);
-
-        if (['weapon', 'armor', 'accessory'].includes(item.type)) {
-            const enhanceAction = document.createElement('button');
-            enhanceAction.className = 'action-btn';
-            enhanceAction.textContent = '대장간가기';
-            enhanceAction.dataset.action = 'go-enhance';
-            buttons.appendChild(enhanceAction);
-        }
-
-        const showOffAction = document.createElement('button');
-        showOffAction.className = 'action-btn';
-        showOffAction.textContent = '자랑하기';
-        showOffAction.dataset.action = 'show-off';
-        buttons.appendChild(showOffAction);
-
-if (item.type === 'pet') {
-            const enhanceAction = document.createElement('button');
-            enhanceAction.className = 'action-btn';
-            enhanceAction.textContent = '대장간가기';
-            enhanceAction.dataset.action = 'go-enhance';
-            buttons.appendChild(enhanceAction);
-        }
-
-        if (item.type === 'pet' && item.grade === 'Epic' && !item.fused) {
-            const fusionAction = document.createElement('button');
-            fusionAction.className = 'action-btn list-auction-btn';
-            fusionAction.style.backgroundColor = 'var(--epic-color)';
-            fusionAction.textContent = '융합하러가기';
-            fusionAction.dataset.action = 'go-fusion';
-            buttons.appendChild(fusionAction);
-        }
-
-        if (item.type === 'weapon' || item.type === 'armor' || (item.type === 'accessory' && item.grade === 'Primal')) {
-            const enchantAction = document.createElement('button');
-            enchantAction.className = 'action-btn list-auction-btn';
-            enchantAction.textContent = '마법부여하기';
-            enchantAction.dataset.action = 'go-enchant';
-            buttons.appendChild(enchantAction);
-        }
-        
-        overlay.style.display = 'flex';
     }
+    
+
+    if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet' || item.type === 'Spirit') {
+        const enhanceAction = document.createElement('button');
+        enhanceAction.className = 'action-btn';
+        enhanceAction.textContent = item.type === 'Spirit' ? '판매하러 가기' : '대장간 가기';
+        enhanceAction.dataset.action = 'go-enhance';
+        buttons.appendChild(enhanceAction);
+    }
+    
+
+    const showOffAction = document.createElement('button');
+    showOffAction.className = 'action-btn';
+    showOffAction.textContent = '자랑하기';
+    showOffAction.dataset.action = 'show-off';
+    buttons.appendChild(showOffAction);
+
+
+    if (item.type === 'pet' && item.grade === 'Epic' && !item.fused) {
+        const fusionAction = document.createElement('button');
+        fusionAction.className = 'action-btn list-auction-btn';
+        fusionAction.style.backgroundColor = 'var(--epic-color)';
+        fusionAction.textContent = '융합하러 가기';
+        fusionAction.dataset.action = 'go-fusion';
+        buttons.appendChild(fusionAction);
+    }
+
+
+    if (item.type === 'weapon' || item.type === 'armor' || (item.type === 'accessory' && item.grade === 'Primal')) {
+        const enchantAction = document.createElement('button');
+        enchantAction.className = 'action-btn list-auction-btn';
+        enchantAction.textContent = '마법부여하기';
+        enchantAction.dataset.action = 'go-enchant';
+        buttons.appendChild(enchantAction);
+    }
+    
+    overlay.style.display = 'flex';
+}
 
     document.querySelector('.management-panel').addEventListener('click', handleItemClick);
     document.querySelector('.equipment-slots').addEventListener('click', handleItemClick);
@@ -2127,9 +2190,8 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
         }
         modal.style.display = 'flex';
     });
-
 function addChatMessage(data) {
-    const { type, username, role, message, isSystem, fameScore, itemData, title } = data;
+    const { type, username, role, message, isSystem, fameScore, itemData, title, isHelper } = data;
     const item = document.createElement('li');
     const isScrolledToBottom = elements.chat.messages.scrollHeight - elements.chat.messages.clientHeight <= elements.chat.messages.scrollTop + 1;
 
@@ -2159,6 +2221,9 @@ function addChatMessage(data) {
         `;
     } else {
         item.classList.add(`${type || 'user'}-message`);
+        if (isHelper) {
+            item.classList.add('helper-message');
+        }
         const usernameSpan = document.createElement('span');
         usernameSpan.classList.add('username');
         usernameSpan.dataset.username = username;
@@ -2593,6 +2658,17 @@ function openResearchDetailModal(playerData, specializationId, techId) {
 
 
 
+  function openSpiritSummonModal(item) {
+    const modal = elements.modals.spiritSummon;
+    if (!modal || !modal.overlay) return;
+
+    currentEssenceItem = item; 
+    
+    modal.countSpan.textContent = (item.quantity || 0).toLocaleString();
+    modal.summonBtn.disabled = (item.quantity || 0) < 100;
+    modal.overlay.style.display = 'flex';
+}
+
 }
 
 function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, completionPercentage }) {
@@ -2886,6 +2962,17 @@ function initializeAdminPanel() {
         const target = e.target;
         const userId = document.getElementById('admin-target-userId').value;
         const username = document.getElementById('admin-target-username').value;
+if (target.id === 'admin-toggle-helper-btn') {
+            const isCurrentlyHelper = target.dataset.isHelper === 'true';
+            const newHelperState = !isCurrentlyHelper;
+            const actionText = newHelperState ? '도우미로 설정' : '도우미에서 해제';
+            if (confirm(`[${username}] 유저를 ${actionText}하시겠습니까?`)) {
+                socket.emit('admin:toggleHelper', { userId, username, isHelper: newHelperState });
+                target.textContent = newHelperState ? '도우미 해제' : '도우미로 설정';
+                target.dataset.isHelper = newHelperState;
+                target.classList.toggle('sell-btn', newHelperState);
+            }
+        }
         
         if (target.classList.contains('admin-sub-tab-button')) {
             const parent = target.closest('.admin-detail-card');
@@ -3131,6 +3218,15 @@ function renderUserDetails(data) {
     }
     sanctionInfoEl.innerHTML = sanctionInfo;
 
+const helperButton = document.createElement('button');
+    helperButton.id = 'admin-toggle-helper-btn';
+    helperButton.className = 'action-btn';
+    helperButton.dataset.isHelper = user.isHelper || false;
+    helperButton.textContent = user.isHelper ? '도우미 해제' : '도우미로 설정';
+    if (user.isHelper) {
+        helperButton.classList.add('sell-btn');
+    }
+    sanctionInfoEl.parentElement.appendChild(helperButton);
     document.getElementById('admin-stat-base-hp').value = gameData.stats?.base?.hp || 0;
     document.getElementById('admin-stat-base-attack').value = gameData.stats?.base?.attack || 0;
     document.getElementById('admin-stat-base-defense').value = gameData.stats?.base?.defense || 0;
