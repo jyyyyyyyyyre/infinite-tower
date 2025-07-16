@@ -67,8 +67,8 @@ const RIFT_ENCHANT_COST = {
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 1000000000, ATTACK: 0, DEFENSE: 0,
-    REWARDS: { GOLD: 1000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 65000000000, ATTACK: 0, DEFENSE: 0,
+    REWARDS: { GOLD: 5000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
 const MailSchema = new mongoose.Schema({
@@ -130,11 +130,7 @@ const GameDataSchema = new mongoose.Schema({
     unlockedArtifacts: { type: [Object], default: [null, null, null] },
     petInventory: { type: [Object], default: [] },
     equippedPet: { type: Object, default: null },
-    incubator: {
-        egg: { type: Object, default: null },
-        hatchCompleteTime: { type: Date, default: null },
-        hatchDuration: {type: Number, default: 0}
-    },
+incubators: { type: [Object], default: () => Array(6).fill(null).map(() => ({ egg: null, hatchCompleteTime: null, hatchDuration: 0 })) },
     hammerBuff: { type: Boolean, default: false },
     petReviveCooldown: { type: Date, default: null },
     discoveredItems: { type: [String], default: [] },
@@ -408,7 +404,7 @@ const itemData = {
     return_scroll: { name: '복귀 스크롤', type: 'Special', category: 'Consumable', grade: 'Rare', description: '사용 시 가장 높은 층으로 이동하며, 10초간 각성 상태에 돌입하여 능력치가 대폭 상승합니다.', image: 'return_scroll.png', tradable: true },
     gold_pouch: { name: '수수께끼 골드 주머니', type: 'Special', category: 'Consumable', grade: 'Common', description: '사용 시 랜덤한 골드를 획득합니다.', image: 'gold_pouch.png', tradable: true },
     pet_egg_normal: { name: '일반종 알', type: 'Special', category: 'Egg', grade: 'Rare', description: '부화시키면 일반 등급의 펫을 얻습니다.', image: 'egg_normal.png', tradable: true, hatchDuration: 30 * 60 * 1000 },
-    pet_egg_ancient: { name: '고대종 알', type: 'Special', category: 'Egg', grade: 'Epic', description: '부화시키면 고대 등급의 펫을 얻습니다.', image: 'pet_egg_ancient.png', tradable: true, hatchDuration: 60 * 60 * 1000 },
+    pet_egg_ancient: { name: '고대종 알', type: 'Special', category: 'Egg', grade: 'Epic', description: '부화시키면 고대 등급의 펫을 얻습니다.', image: 'pet_egg_ancient.png', tradable: true, hatchDuration: 60 * 60 * 1000 }, 
     pet_egg_mythic: { name: '신화종 알', type: 'Special', category: 'Egg', grade: 'Mystic', description: '부화시키면 신화 등급의 펫을 얻습니다.', image: 'pet_egg_mythic.png', tradable: true, hatchDuration: 24 * 60 * 60 * 1000 },
     prevention_ticket: { name: '파괴 방지권', type: 'Special', category: 'Ticket', grade: 'Epic', description: '10강 이상 강화 시 파괴를 1회 방지합니다.', image: 'ticket.png', tradable: true },
     hammer_hephaestus: { name: '헤파이스토스의 망치', type: 'Special', category: 'Buff', grade: 'Epic', description: '강화 시 체크하여 사용하면 성공 확률이 15%p 증가합니다.', image: 'hammer_hephaestus.png', tradable: true },
@@ -1146,7 +1142,16 @@ io.on('connection', async (socket) => {
 
 
     if (gameData) {
-
+    if (gameData.incubator && !gameData.incubators) {
+        gameData.incubators = Array(6).fill(null).map(() => ({ egg: null, hatchCompleteTime: null, hatchDuration: 0 }));
+        if (gameData.incubator.egg) {
+            gameData.incubators[0] = gameData.incubator;
+        }
+        delete gameData.incubator;
+    } else if (!gameData.incubators || gameData.incubators.length < 6) {
+        const existing = gameData.incubators || [];
+        gameData.incubators = Array(6).fill(null).map((_, i) => existing[i] || ({ egg: null, hatchCompleteTime: null, hatchDuration: 0 }));
+    }
 gameData.isExploring = false;
         const foundItemIds = new Set(gameData.discoveredItems || []);
         (gameData.inventory || []).forEach(item => foundItemIds.add(item.id));
@@ -1633,22 +1638,21 @@ title: player.equippedTitle
             pushLog(player, '[융합] 두 정령의 기운이 합쳐지기 시작합니다. (12시간 소요)');
             sendState(socket, player, calcMonsterStats(player));
         })
-        .on('useItem', ({ uid, useAll }) => useItem(onlinePlayers[socket.userId], uid, useAll))
-        .on('placeEggInIncubator', ({ uid }) => placeEggInIncubator(onlinePlayers[socket.userId], uid))
-        .on('startHatching', () => startHatching(onlinePlayers[socket.userId]))
-        .on('equipPet', (uid) => equipPet(onlinePlayers[socket.userId], uid))
-        .on('unequipPet', () => unequipPet(onlinePlayers[socket.userId]))
-        .on('removeEggFromIncubator', () => {
-            const player = onlinePlayers[socket.userId];
-            if (player && player.incubator.egg && !player.incubator.hatchCompleteTime) {
-                const egg = player.incubator.egg;
-                handleItemStacking(player, egg);
-                player.incubator.egg = null;
-                player.incubator.hatchDuration = 0;
-                pushLog(player, `[부화기] ${egg.name}을(를) 인벤토리로 옮겼습니다.`);
-                sendInventoryUpdate(player);
-            }
-        })
+       .on('useItem', ({ uid, useAll }) => useItem(onlinePlayers[socket.userId], uid, useAll))
+    .on('placeEggInIncubator', ({ uid, slotIndex }) => placeEggInIncubator(onlinePlayers[socket.userId], { uid, slotIndex }))
+    .on('startHatching', ({ slotIndex }) => startHatching(onlinePlayers[socket.userId], { slotIndex }))
+    .on('equipPet', (uid) => equipPet(onlinePlayers[socket.userId], uid))
+    .on('unequipPet', () => unequipPet(onlinePlayers[socket.userId]))
+    .on('removeEggFromIncubator', ({ slotIndex }) => {
+        const player = onlinePlayers[socket.userId];
+        if (player && player.incubators && player.incubators[slotIndex] && player.incubators[slotIndex].egg && !player.incubators[slotIndex].hatchCompleteTime) {
+            const egg = player.incubators[slotIndex].egg;
+            handleItemStacking(player, egg);
+            player.incubators[slotIndex] = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
+            pushLog(player, `[부화기] ${egg.name}을(를) 인벤토리로 옮겼습니다.`);
+            sendInventoryUpdate(player);
+        }
+    })
         .on('client-heartbeat', () => {})
         .on('board:getPosts', async ({ category, page }, callback) => {
             try {
@@ -1982,6 +1986,13 @@ title: player.equippedTitle
             itemLocation = 'inventory';
         }
     }
+
+
+ if (item && item.enhancement === 0 && (item.type === 'weapon' || item.type === 'armor')) {
+        pushLog(player, '[마법부여] 강화되지 않은 아이템에는 마법을 부여할 수 없습니다.');
+        return callback({ success: false });
+    }
+
 
 const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' || (item.type === 'accessory' && item.grade === 'Primal'));
     if (!isEnchantable) {
@@ -2584,8 +2595,14 @@ function gameTick(player) {
         }
     }
     if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) onPetFusionComplete(player);
-    if (player.incubator.hatchCompleteTime && new Date() >= new Date(player.incubator.hatchCompleteTime)) onHatchComplete(player);
-
+   if (player.incubators && player.incubators.length > 0) {
+        for (let i = 0; i < player.incubators.length; i++) {
+            const slot = player.incubators[i];
+            if (slot && slot.hatchCompleteTime && new Date() >= new Date(slot.hatchCompleteTime)) {
+                onHatchComplete(player, i);
+            }
+        }
+    }
     if (player.raidState && player.raidState.isActive) {
         const raidBoss = player.raidState.monster;
         let pDmg = 0;
@@ -3167,7 +3184,7 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
 
         if (finalItem) {
             finalItem.uid = new mongoose.Types.ObjectId().toString();
-            if (result === 'success' && isEquipped) {
+            if (isEquipped) { 
                 p.equipment[finalItem.type] = finalItem;
             } else {
                 handleItemStacking(p, finalItem);
@@ -3252,7 +3269,7 @@ function sendInventoryUpdate(player) {
         player.socket.emit('inventoryUpdate', {
             inventory: player.inventory,
             petInventory: player.petInventory,
-            incubator: player.incubator,
+incubators: player.incubators,
 spiritInventory: player.spiritInventory
         });
     }
@@ -3494,8 +3511,7 @@ async function sellItem(player, uid, sellAll) {
             else if (item.grade === 'Epic') { goldReward = 50000000; essenceReward = 10; } 
             else if (item.grade === 'Rare') { goldReward = 3000000; essenceReward = 3; }
             if (goldReward > 0 || essenceReward > 0) isSellable = true;
-        }
-else if (item.type === 'Spirit') {
+        } else if (item.type === 'Spirit') {
             essenceReward = 20;
             isSellable = true;
         }
@@ -3653,7 +3669,7 @@ spiritInventory: player.spiritInventory,
         petFusion: player.petFusion,
         inventory: player.inventory,
         petInventory: player.petInventory,
-        incubator: player.incubator,
+incubators: player.incubators,
         log: player.log,
         focus: player.focus,
         penetration: player.penetration,
@@ -3881,42 +3897,46 @@ function useItem(player, uid, useAll = false) {
     sendInventoryUpdate(player);
 }
     
+function placeEggInIncubator(player, { uid, slotIndex }) {
+    if (!player || slotIndex < 0 || slotIndex >= 6) return;
 
-function placeEggInIncubator(player, uid) {
-    if (!player) return;
-    if (player.incubator.hatchCompleteTime) {
-        pushLog(player, '[부화기] 현재 다른 알이 부화 중이라 교체할 수 없습니다.');
-        sendInventoryUpdate(player); 
+    const incubatorSlot = player.incubators[slotIndex];
+    if (incubatorSlot && incubatorSlot.egg) {
+        pushLog(player, '[부화기] 해당 슬롯은 이미 사용 중입니다.');
         return;
     }
+
     const itemIndex = player.inventory.findIndex(i => i.uid === uid && (i.category === 'Egg' || i.type === 'egg'));
     if (itemIndex === -1) {
         pushLog(player, '[부화기] 인벤토리에서 해당 알을 찾을 수 없습니다.');
         return;
     }
-    
-    if (player.incubator.egg) {
-        const oldEgg = player.incubator.egg;
-        handleItemStacking(player, oldEgg);
-        pushLog(player, `[부화기] ${oldEgg.name}을(를) 인벤토리로 돌려보냈습니다.`);
-    }
+
     const newEgg = player.inventory[itemIndex];
+	
+if (!player.incubators[slotIndex]) {
+    player.incubators[slotIndex] = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
+}
+	
     if (newEgg.quantity > 1) {
         newEgg.quantity--; 
-        player.incubator.egg = { ...newEgg, quantity: 1 }; 
+        player.incubators[slotIndex].egg = { ...newEgg, quantity: 1 }; 
     } else {
-        player.incubator.egg = player.inventory.splice(itemIndex, 1)[0];
+        player.incubators[slotIndex].egg = player.inventory.splice(itemIndex, 1)[0];
     }
-    pushLog(player, `[부화기] ${player.incubator.egg.name}을(를) 부화기에 넣었습니다.`);
-    
+    pushLog(player, `[부화기] ${player.incubators[slotIndex].egg.name}을(를) ${slotIndex + 1}번 부화기에 넣었습니다.`);
+
     sendInventoryUpdate(player);
 }
 
-function onHatchComplete(player) {
-    if (!player || !player.incubator.egg) return;
-    const eggName = player.incubator.egg.name;
-    const eggGrade = player.incubator.egg.grade;
+function onHatchComplete(player, slotIndex) {
+    if (!player || !player.incubators || !player.incubators[slotIndex] || !player.incubators[slotIndex].egg) return;
+
+    const incubatorSlot = player.incubators[slotIndex];
+    const eggName = incubatorSlot.egg.name;
+    const eggGrade = incubatorSlot.egg.grade;
     pushLog(player, `[부화기] ${eggName}에서 생명의 기운이 느껴집니다!`);
+
     const possiblePets = Object.keys(petData).filter(id => petData[id].grade === eggGrade && !petData[id].fused);
     if (possiblePets.length > 0) {
         const randomPetId = possiblePets[Math.floor(Math.random() * possiblePets.length)];
@@ -3926,7 +3946,8 @@ function onHatchComplete(player) {
             pushLog(player, `[펫] <span class="${newPet.grade}">${newPet.name}</span>이(가) 태어났습니다!`);
         }
     }
-    player.incubator = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
+
+    player.incubators[slotIndex] = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
     updateFameScore(player.socket, player); 
 
     if (player.titleCounters) {
@@ -3936,7 +3957,6 @@ function onHatchComplete(player) {
         }
     }
     checkStateBasedTitles(player);
-
     sendInventoryUpdate(player);
 }
 
@@ -4189,11 +4209,11 @@ function checkAndSpawnBoss() {
 }
 
 
+function startHatching(player, { slotIndex }) {
+    if (!player || !player.incubators || !player.incubators[slotIndex] || !player.incubators[slotIndex].egg || player.incubators[slotIndex].hatchCompleteTime) return;
 
-function startHatching(player) {
-    if (!player || !player.incubator.egg || player.incubator.hatchCompleteTime) return;
-    
-    const eggId = player.incubator.egg.id;
+    const incubatorSlot = player.incubators[slotIndex];
+    const eggId = incubatorSlot.egg.id;
     let hatchDuration = itemData[eggId]?.hatchDuration;
     if (!hatchDuration) return;
 
@@ -4201,14 +4221,13 @@ function startHatching(player) {
     if(titleEffects && titleEffects.hatchTimeReduction) {
         hatchDuration *= (1 - titleEffects.hatchTimeReduction);
     }
-    
-    player.incubator.hatchDuration = hatchDuration;
-    player.incubator.hatchCompleteTime = new Date(Date.now() + hatchDuration);
-    
-    pushLog(player, `[부화기] ${player.incubator.egg.name} 부화를 시작합니다!`);
+
+    incubatorSlot.hatchDuration = hatchDuration;
+    incubatorSlot.hatchCompleteTime = new Date(Date.now() + hatchDuration);
+
+    pushLog(player, `[부화기] ${incubatorSlot.egg.name} 부화를 시작합니다!`);
     sendInventoryUpdate(player); 
 }
-
 
 function calcPersonalRaidBossStats(floor) {
     const base = { hp: 100000, attack: 10000, defense: 10000 };
@@ -4301,6 +4320,10 @@ async function calculateAndSendOfflineRewards(player) {
 
     const offlineSeconds = Math.floor((new Date() - new Date(player.logoutTime)) / 1000);
  
+ if (offlineSeconds < 1800) {
+        await GameData.updateOne({ user: player.user }, { $set: { logoutTime: null } });
+        return; 
+    }
 
     const bestSpirit = (player.spiritInventory || []).sort((a, b) => {
         const gradeOrder = { 'Rare': 1, 'Legendary': 2, 'Mystic': 3, 'Primal': 4 };

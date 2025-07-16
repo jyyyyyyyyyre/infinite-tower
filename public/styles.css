@@ -2542,3 +2542,76 @@ body.auth-view {
         text-shadow: 0 0 1px #ffffff, 0 0 8px var(--epic-color);
     }
 }
+
+#incubator-tab {
+    padding: 20px;
+    align-items: center;
+    justify-content: center;
+}
+
+#incubator-grid-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    width: 100%;
+    max-width: 750px; /* 최대 너비 설정 */
+}
+
+.incubator-slot {
+    width: 100%;
+    aspect-ratio: 1 / 1.2; /* 슬롯 비율 조정 */
+    border: 3px dashed var(--border-color);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 15px;
+    gap: 15px;
+    text-align: center;
+    font-size: 1.1em;
+    transition: all 0.2s ease;
+}
+
+.incubator-slot.empty:hover {
+    border-color: var(--success-color);
+    background-color: rgba(52, 199, 89, .1);
+    cursor: pointer;
+}
+
+.incubator-slot-egg-image {
+    width: 60%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+}
+
+.incubator-slot-egg-image .inventory-item {
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    border: none;
+    background: none;
+}
+
+.hatching-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.progress-bar {
+    width: 90%;
+    height: 20px;
+}
+
+#hatch-timer { /* 이 선택자는 이제 각 슬롯 내부의 타이머를 가리킵니다. */
+    font-size: 1em;
+    font-weight: 500;
+}
+
+#hatch-button { /* 이 선택자는 이제 각 슬롯 내부의 버튼을 가리킵니다. */
+    padding: 10px 20px;
+    font-size: 1em;
+}

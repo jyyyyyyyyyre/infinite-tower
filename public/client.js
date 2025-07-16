@@ -481,14 +481,9 @@ spirit: document.getElementById('spirit-inventory'),
             icon: document.getElementById('fame-icon'),
             fameScoreDisplay: document.getElementById('fame-score-display')
         },
-        incubator: {
-            content: document.getElementById('incubator-content'),
-            slot: document.getElementById('incubator-slot'),
-            hatchButton: document.getElementById('hatch-button'),
-            hatchingInfo: document.getElementById('hatching-info'),
-            progressBar: document.getElementById('hatch-progress-bar'),
-            timer: document.getElementById('hatch-timer'),
-        },
+incubator: {
+    grid: document.getElementById('incubator-grid-container'),
+},
         worldBoss: { 
             container: document.getElementById('world-boss-container'), 
             name: document.getElementById('world-boss-name'), 
@@ -603,6 +598,36 @@ researchDetail: {
         init() { elements.zoom.inBtn.addEventListener('click', () => this.applyZoom(this.currentScale + 0.1)); elements.zoom.outBtn.addEventListener('click', () => this.applyZoom(this.currentScale - 0.1)); this.applyZoom(1.0); }
     };
     zoomLogic.init();
+	
+	setInterval(() => {
+    if (!currentPlayerState || !currentPlayerState.incubators) return;
+
+    currentPlayerState.incubators.forEach((slot, index) => {
+        if (slot && slot.hatchCompleteTime) {
+            const timerEl = document.getElementById(`hatch-timer-${index}`);
+            const progressEl = document.getElementById(`hatch-progress-${index}`);
+
+            if (!timerEl || !progressEl) return;
+
+            const totalTime = slot.hatchDuration;
+            const remainingTime = Math.max(0, new Date(slot.hatchCompleteTime) - new Date());
+
+            if (remainingTime <= 0) {
+                timerEl.textContent = '부화 완료!';
+                progressEl.style.width = '100%';
+            } else {
+                const elapsed = totalTime - remainingTime;
+                const progress = totalTime > 0 ? (elapsed / totalTime) * 100 : 0;
+                progressEl.style.width = `${progress}%`;
+
+                const hours = String(Math.floor(remainingTime / 3600000)).padStart(2, '0');
+                const minutes = String(Math.floor((remainingTime % 3600000) / 60000)).padStart(2, '0');
+                const seconds = String(Math.floor((remainingTime % 60000) / 1000)).padStart(2, '0');
+                timerEl.textContent = `${hours}:${minutes}:${seconds}`;
+            }
+        }
+    });
+}, 1000);
 
 elements.modals.spiritSummon.summonBtn.addEventListener('click', () => {
         if (!currentEssenceItem) return; 
@@ -992,144 +1017,225 @@ if(accountStorageTabBtn) {
         }
     };
 
- const updateUI = ({ player, monster, isInRaid = false }) => {
-       currentPlayerState = player;
+const updateUI = ({ player, monster, isInRaid = false }) => {
+    currentPlayerState = player;
     if (!currentPlayerState.spiritInventory) currentPlayerState.spiritInventory = []; 
     updateTopBarInfo(player);
 
-  const essenceDisplaySpan = document.querySelector('.research-essence-display span');
-        if (essenceDisplaySpan) {
-            essenceDisplaySpan.textContent = (player.researchEssence || 0).toLocaleString();
-        }
+    const essenceDisplaySpan = document.querySelector('.research-essence-display span');
+    if (essenceDisplaySpan) {
+        essenceDisplaySpan.textContent = (player.researchEssence || 0).toLocaleString();
+    }
 
-        if (elements.gold.textContent !== formatInt(player.gold)) { 
-            elements.gold.textContent = formatInt(player.gold); 
-        }
+    if (elements.gold.textContent !== formatInt(player.gold)) { 
+        elements.gold.textContent = formatInt(player.gold); 
+    }
 
-        elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
-        elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
-const baseHp = player.stats.base.hp;
-const totalHp = player.stats.total.hp;
-const bonusHp = Math.max(0, totalHp - baseHp);
-elements.player.totalHp.textContent = `${formatInt(baseHp)} (+${formatInt(bonusHp)})`;
+    elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
+    elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
+    const baseHp = player.stats.base.hp;
+    const totalHp = player.stats.total.hp;
+    const bonusHp = Math.max(0, totalHp - baseHp);
+    elements.player.totalHp.textContent = `${formatInt(baseHp)} (+${formatInt(bonusHp)})`;
 
-const baseAttack = player.stats.base.attack;
-const totalAttack = player.stats.total.attack;
-const bonusAttack = Math.max(0, totalAttack - baseAttack);
-elements.player.totalAttack.textContent = `${formatInt(baseAttack)} (+${formatInt(bonusAttack)})`;
+    const baseAttack = player.stats.base.attack;
+    const totalAttack = player.stats.total.attack;
+    const bonusAttack = Math.max(0, totalAttack - baseAttack);
+    elements.player.totalAttack.textContent = `${formatInt(baseAttack)} (+${formatInt(bonusAttack)})`;
 
-const baseDefense = player.stats.base.defense;
-const totalDefense = player.stats.total.defense;
-const bonusDefense = Math.max(0, totalDefense - baseDefense);
-elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${formatInt(bonusDefense)})`;
+    const baseDefense = player.stats.base.defense;
+    const totalDefense = player.stats.total.defense;
+    const bonusDefense = Math.max(0, totalDefense - baseDefense);
+    elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${formatInt(bonusDefense)})`;
 
-        if (isInRaid) {
-            elements.monster.level.innerHTML = `<span style="color:#c0392b; font-weight:bold;">[개인 레이드 ${monster.floor}층] ${monster.name}</span>`;
-            elements.floorControls.container.style.display = 'none';
-            elements.monster.leaveRaidBtn.style.display = 'block';
-        } else {
-            elements.monster.level.innerHTML = monster.isBoss 
-                ? `<span style="color:var(--fail-color); font-weight:bold;">${formatInt(monster.level)}층 보스</span>` 
-                : `${formatInt(monster.level)}층 몬스터`;
-            elements.floorControls.container.style.display = 'flex';
-            elements.monster.leaveRaidBtn.style.display = 'none';
-        }
-        
-         if (elements.player.specialStatsGrid) {
-            elements.player.specialStatsGrid.innerHTML = `
-                <div>💥 치명타: <strong>${(player.stats.critChance * 100).toFixed(2)}%</strong></div>
-                <div>🔰 치명 저항: <strong>${(player.stats.critResistance * 100).toFixed(2)}%</strong></div>
-                <div>🎯 집 중: <strong style="color: var(--primal-color);">${(player.focus || 0).toFixed(2)}%</strong></div>
-                <div>💎 관 통: <strong style="color: var(--primal-color);">${(player.penetration || 0).toFixed(2)}%</strong></div>
-                <div>🛡️ 강 인 함: <strong style="color: var(--primal-color);">${(player.tenacity || 0).toFixed(2)}%</strong></div>
-                <div>🩸 피의 갈망: <strong style="color: #c0392b;">${((player.stats.total.bloodthirst || 0)).toFixed(1)}%</strong></div>
-            `;
-        }
+    if (isInRaid) {
+        elements.monster.level.innerHTML = `<span style="color:#c0392b; font-weight:bold;">[개인 레이드 ${monster.floor}층] ${monster.name}</span>`;
+        elements.floorControls.container.style.display = 'none';
+        elements.monster.leaveRaidBtn.style.display = 'block';
+    } else {
+        elements.monster.level.innerHTML = monster.isBoss 
+            ? `<span style="color:var(--fail-color); font-weight:bold;">${formatInt(monster.level)}층 보스</span>` 
+            : `${formatInt(monster.level)}층 몬스터`;
+        elements.floorControls.container.style.display = 'flex';
+        elements.monster.leaveRaidBtn.style.display = 'none';
+    }
 
-        elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
-        elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
-        elements.monster.totalHp.textContent = formatFloat(monster.hp);
-        elements.monster.attack.textContent = formatFloat(monster.attack);
-        elements.monster.defense.textContent = formatFloat(monster.defense);
+     if (elements.player.specialStatsGrid) {
+        elements.player.specialStatsGrid.innerHTML = `
+            <div>💥 치명타: <strong>${(player.stats.critChance * 100).toFixed(2)}%</strong></div>
+            <div>🔰 치명 저항: <strong>${(player.stats.critResistance * 100).toFixed(2)}%</strong></div>
+            <div>🎯 집 중: <strong style="color: var(--primal-color);">${(player.focus || 0).toFixed(2)}%</strong></div>
+            <div>💎 관 통: <strong style="color: var(--primal-color);">${(player.penetration || 0).toFixed(2)}%</strong></div>
+            <div>🛡️ 강 인 함: <strong style="color: var(--primal-color);">${(player.tenacity || 0).toFixed(2)}%</strong></div>
+            <div>🩸 피의 갈망: <strong style="color: #c0392b;">${((player.stats.total.bloodthirst || 0)).toFixed(1)}%</strong></div>
+        `;
+    }
 
-        const showAbilities = monster.distortion > 0 || monster.empoweredAttack > 0;
-        const barrierContainer = document.getElementById('monster-barrier-container');
-        elements.monster.abilityIcons.style.display = showAbilities ? 'flex' : 'none';
-        if(barrierContainer) barrierContainer.style.display = monster.barrier > 0 ? 'block' : 'none';
+    elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
+    elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
+    elements.monster.totalHp.textContent = formatFloat(monster.hp);
+    elements.monster.attack.textContent = formatFloat(monster.attack);
+    elements.monster.defense.textContent = formatFloat(monster.defense);
 
-        if (showAbilities || monster.barrier > 0) {
-            const maxBarrier = monster.barrier;
-            const currentBarrier = monster.currentBarrier;
-            const barrierPercent = maxBarrier > 0 ? (currentBarrier / maxBarrier) * 100 : 0;
-            elements.monster.barrierBar.style.width = `${barrierPercent}%`;
-            elements.monster.barrierText.textContent = `${formatFloat(currentBarrier)} / ${formatFloat(maxBarrier)}`;
-            elements.monster.abilityIcons.innerHTML = `
-                ${monster.barrier > 0 ? `<span title="보호막: 이 몬스터는 추가 체력을 가지고 있습니다. 보호막을 모두 파괴해야 본체에 피해를 줄 수 있습니다.">🛡️</span>` : ''}
-                ${monster.distortion > 0 ? `<span title="왜곡: 이 몬스터는 ${monster.distortion}% 확률로 모든 공격을 회피합니다.">💨</span>` : ''}
-                ${monster.empoweredAttack > 0 ? `<span title="권능 공격: 이 몬스터의 모든 공격은 당신의 최대 체력 ${monster.empoweredAttack}%에 해당하는 추가 피해를 입힙니다.">💀</span>` : ''}
-            `;
-        }
+    const showAbilities = monster.distortion > 0 || monster.empoweredAttack > 0;
+    const barrierContainer = document.getElementById('monster-barrier-container');
+    elements.monster.abilityIcons.style.display = showAbilities ? 'flex' : 'none';
+    if(barrierContainer) barrierContainer.style.display = monster.barrier > 0 ? 'block' : 'none';
 
-        if (elements.floorControls.container && !isInRaid) {
-            const { safeZoneBtn, frontlineBtn } = elements.floorControls;
-            const canUseFrontline = player.maxLevel >= 1000000;
-            safeZoneBtn.style.display = 'none';
-            frontlineBtn.style.display = 'none';
-            if (canUseFrontline) {
-                if (player.level >= 1000000) { safeZoneBtn.style.display = 'block'; } 
-                else {
-                    frontlineBtn.style.display = 'block';
-                    const cooldown = player.safeZoneCooldownUntil ? new Date(player.safeZoneCooldownUntil) : null;
-                    if (cooldown && cooldown > new Date()) {
-                        frontlineBtn.disabled = true;
-                        if (returnCooldownTimer) clearInterval(returnCooldownTimer);
-                        returnCooldownTimer = setInterval(() => {
-                            const now = new Date();
-                            if (cooldown <= now) { clearInterval(returnCooldownTimer); frontlineBtn.disabled = false; frontlineBtn.textContent = '최전선 복귀'; } 
-                            else { const remaining = Math.ceil((cooldown - now) / 1000); frontlineBtn.textContent = `최전선 복귀 (${remaining}초)`; }
-                        }, 1000);
-                    } else {
-                        if (returnCooldownTimer) clearInterval(returnCooldownTimer);
-                        frontlineBtn.disabled = false;
-                        frontlineBtn.textContent = '최전선 복귀';
-                    }
+    if (showAbilities || monster.barrier > 0) {
+        const maxBarrier = monster.barrier;
+        const currentBarrier = monster.currentBarrier;
+        const barrierPercent = maxBarrier > 0 ? (currentBarrier / maxBarrier) * 100 : 0;
+        elements.monster.barrierBar.style.width = `${barrierPercent}%`;
+        elements.monster.barrierText.textContent = `${formatFloat(currentBarrier)} / ${formatFloat(maxBarrier)}`;
+        elements.monster.abilityIcons.innerHTML = `
+            ${monster.barrier > 0 ? `<span title="보호막: 이 몬스터는 추가 체력을 가지고 있습니다. 보호막을 모두 파괴해야 본체에 피해를 줄 수 있습니다.">🛡️</span>` : ''}
+            ${monster.distortion > 0 ? `<span title="왜곡: 이 몬스터는 ${monster.distortion}% 확률로 모든 공격을 회피합니다.">💨</span>` : ''}
+            ${monster.empoweredAttack > 0 ? `<span title="권능 공격: 이 몬스터의 모든 공격은 당신의 최대 체력 ${monster.empoweredAttack}%에 해당하는 추가 피해를 입힙니다.">💀</span>` : ''}
+        `;
+    }
+
+    if (elements.floorControls.container && !isInRaid) {
+        const { safeZoneBtn, frontlineBtn } = elements.floorControls;
+        const canUseFrontline = player.maxLevel >= 1000000;
+        safeZoneBtn.style.display = 'none';
+        frontlineBtn.style.display = 'none';
+        if (canUseFrontline) {
+            if (player.level >= 1000000) { safeZoneBtn.style.display = 'block'; } 
+            else {
+                frontlineBtn.style.display = 'block';
+                const cooldown = player.safeZoneCooldownUntil ? new Date(player.safeZoneCooldownUntil) : null;
+                if (cooldown && cooldown > new Date()) {
+                    frontlineBtn.disabled = true;
+                    if (returnCooldownTimer) clearInterval(returnCooldownTimer);
+                    returnCooldownTimer = setInterval(() => {
+                        const now = new Date();
+                        if (cooldown <= now) { clearInterval(returnCooldownTimer); frontlineBtn.disabled = false; frontlineBtn.textContent = '최전선 복귀'; } 
+                        else { const remaining = Math.ceil((cooldown - now) / 1000); frontlineBtn.textContent = `최전선 복귀 (${remaining}초)`; }
+                    }, 1000);
+                } else {
+                    if (returnCooldownTimer) clearInterval(returnCooldownTimer);
+                    frontlineBtn.disabled = false;
+                    frontlineBtn.textContent = '최전선 복귀';
                 }
             }
         }
+    }
 
-        const buffsContainer = document.getElementById('player-buffs-container');
-        buffsContainer.innerHTML = ''; 
-        if (player.buffs && player.buffs.length > 0) {
-            player.buffs.forEach(buff => {
-                const remainingTime = Math.max(0, Math.floor((new Date(buff.endTime) - new Date()) / 1000));
-                buffsContainer.innerHTML += `<div class="buff-icon" title="${buff.name}">✨ 각성 (${remainingTime}초)</div>`;
-            });
-        }
+    const buffsContainer = document.getElementById('player-buffs-container');
+    buffsContainer.innerHTML = ''; 
+    if (player.buffs && player.buffs.length > 0) {
+        player.buffs.forEach(buff => {
+            const remainingTime = Math.max(0, Math.floor((new Date(buff.endTime) - new Date()) / 1000));
+            buffsContainer.innerHTML += `<div class="buff-icon" title="${buff.name}">✨ 각성 (${remainingTime}초)</div>`;
+        });
+    }
 
-        renderItemInSlot(elements.equipment.weapon, player.equipment.weapon, '⚔️<br>무기', 'weapon');
-        renderItemInSlot(elements.equipment.armor, player.equipment.armor, '🛡️<br>방어구', 'armor');
-        renderItemInSlot(elements.equipment.pet, player.equippedPet, '🐾<br>펫', 'pet');
-        renderItemInSlot(elements.equipment.necklace, player.equipment.necklace, '💍<br>목걸이', 'necklace');
-        renderItemInSlot(elements.equipment.earring, player.equipment.earring, '👂<br>귀걸이', 'earring');
-        renderItemInSlot(elements.equipment.wristwatch, player.equipment.wristwatch, '⏱️<br>손목시계', 'wristwatch');
-        const artifactSocketsHeader = document.getElementById('artifact-sockets-header');
-        if (artifactSocketsHeader) {
-            artifactSocketsHeader.innerHTML = player.unlockedArtifacts.map(artifact => artifact ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`).join('');
-        }
-        
-        renderAllInventories(player);
-        renderIncubator(player.incubator);
-        renderFusionPanel(player);
-        elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
-        elements.modals.mailbox.button.classList.toggle('new-mail', player.hasUnreadMail);
-        updateAffordableButtons();
-        
+    renderItemInSlot(elements.equipment.weapon, player.equipment.weapon, '⚔️<br>무기', 'weapon');
+    renderItemInSlot(elements.equipment.armor, player.equipment.armor, '🛡️<br>방어구', 'armor');
+    renderItemInSlot(elements.equipment.pet, player.equippedPet, '🐾<br>펫', 'pet');
+    renderItemInSlot(elements.equipment.necklace, player.equipment.necklace, '💍<br>목걸이', 'necklace');
+    renderItemInSlot(elements.equipment.earring, player.equipment.earring, '👂<br>귀걸이', 'earring');
+    renderItemInSlot(elements.equipment.wristwatch, player.equipment.wristwatch, '⏱️<br>손목시계', 'wristwatch');
+    const artifactSocketsHeader = document.getElementById('artifact-sockets-header');
+    if (artifactSocketsHeader) {
+        artifactSocketsHeader.innerHTML = player.unlockedArtifacts.map(artifact => artifact ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`).join('');
+    }
 
-   const activeTab = document.querySelector('.tab-button.active');
+    renderAllInventories(player);
+    renderFusionPanel(player);
+    elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
+    elements.modals.mailbox.button.classList.toggle('new-mail', player.hasUnreadMail);
+    updateAffordableButtons();
+
+    const activeTab = document.querySelector('.tab-button.active');
     if (activeTab && activeTab.dataset.tab === 'research-tab') {
         renderResearchTab(player); 
     }
-    };
+};
+	
+	
+	let selectedEggForHatching = null;
+let incubatorTimers = [];
+
+function renderIncubators(incubators) {
+    if (!elements.incubator.grid) return;
+
+    if (window.incubatorTimers) {
+        window.incubatorTimers.forEach(timer => clearInterval(timer));
+    }
+    window.incubatorTimers = [];
+
+    elements.incubator.grid.innerHTML = '';
+
+    if (!incubators) return;
+
+    incubators.forEach((slot, index) => {
+        const slotDiv = document.createElement('div');
+        slotDiv.className = 'incubator-slot';
+        slotDiv.dataset.slotIndex = index;
+
+        if (slot && slot.egg) {
+            const egg = slot.egg;
+            const imageHTML = egg.image ? `<div class="item-image"><img src="/image/${egg.image}" alt="${egg.name}"></div>` : '<div class="item-image"></div>';
+
+            let contentHTML = `
+                <div class="incubator-slot-egg-image" title="인벤토리로 돌려보내기">
+                    <div class="inventory-item">${imageHTML}</div>
+                </div>
+            `;
+
+            if (slot.hatchCompleteTime) {
+                contentHTML += `
+                    <div class="hatching-info">
+                        <div class="progress-bar">
+                            <div class="progress-bar-inner" id="hatch-progress-${index}"></div>
+                        </div>
+                        <div id="hatch-timer-${index}">계산 중...</div>
+                    </div>`;
+            } else {
+                contentHTML += `<button class="action-btn equip-btn start-hatch-btn">부화 시작</button>`;
+            }
+            slotDiv.innerHTML = contentHTML;
+
+        } else {
+            slotDiv.classList.add('empty');
+            slotDiv.innerHTML = '빈 슬롯<br>(인벤토리에서 알 선택 후 클릭)';
+        }
+        elements.incubator.grid.appendChild(slotDiv);
+    });
+}
+
+if (elements.incubator.grid) {
+    elements.incubator.grid.addEventListener('click', (e) => {
+    const slotDiv = e.target.closest('.incubator-slot');
+    if (!slotDiv) return;
+
+    const slotIndex = parseInt(slotDiv.dataset.slotIndex, 10);
+
+    if (slotDiv.classList.contains('empty')) {
+        if (selectedEggForHatching) {
+            socket.emit('placeEggInIncubator', { uid: selectedEggForHatching.uid, slotIndex });
+            selectedEggForHatching = null; 
+            const selectedItemEl = document.querySelector(`.inventory-item[data-uid="${selectedEggForHatching?.uid}"]`);
+            if (selectedItemEl) selectedItemEl.classList.remove('selected');
+        } else {
+            alert('먼저 인벤토리에서 부화할 알을 선택해주세요.');
+        }
+    } 
+
+    else if (e.target.closest('.incubator-slot-egg-image')) {
+        if (confirm('부화기에서 이 알을 꺼내시겠습니까? (진행상황 초기화)')) {
+            socket.emit('removeEggFromIncubator', { slotIndex });
+        }
+    }
+
+    else if (e.target.classList.contains('start-hatch-btn')) {
+        socket.emit('startHatching', { slotIndex });
+    }
+});
+}
+
 
     elements.floorControls.personalRaidBtn.addEventListener('click', () => {
         if (!currentPlayerState) return;
@@ -1152,38 +1258,7 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
         updateUI({ player: currentPlayerState, monster: currentPlayerState.monster, isInRaid: false });
     });
 
-    const renderIncubator = (incubator) => {
-        if (incubator && incubator.egg) {
-            const egg = incubator.egg;
-            const imageHTML = egg.image ? `<div class="item-image"><img src="/image/${egg.image}" alt="${egg.name}"></div>` : '<div class="item-image"></div>';
-            elements.incubator.slot.innerHTML = `<div class="inventory-item">${imageHTML}</div>`;
-            if (incubator.hatchCompleteTime) {
-                const totalTime = incubator.hatchDuration;
-                const remainingTime = Math.max(0, new Date(incubator.hatchCompleteTime) - new Date());
-                const elapsed = totalTime - remainingTime;
-                const progress = (elapsed / totalTime) * 100;
-                elements.incubator.hatchingInfo.style.display = 'flex';
-                elements.incubator.hatchButton.style.display = 'none';
-                elements.incubator.progressBar.style.width = `${progress}%`;
-                const hours = Math.floor(remainingTime / 3600000);
-                const minutes = Math.floor((remainingTime % 3600000) / 60000);
-                const seconds = Math.floor((remainingTime % 60000) / 1000);
-                elements.incubator.timer.textContent = `${hours}시간 ${minutes}분 ${seconds}초 남음`;
-            } else {
-                elements.incubator.hatchingInfo.style.display = 'none';
-                elements.incubator.hatchButton.style.display = 'block';
-                elements.incubator.hatchButton.disabled = false;
-            }
-        } else {
-            elements.incubator.slot.innerHTML = '부화할 알을<br>[아이템] 탭에서 선택하세요';
-            elements.incubator.hatchingInfo.style.display = 'none';
-            elements.incubator.hatchButton.style.display = 'block';
-            elements.incubator.hatchButton.disabled = true;
-        }
-    };
-    
-    setInterval(() => { if (currentPlayerState && currentPlayerState.incubator && currentPlayerState.incubator.hatchCompleteTime) { renderIncubator(currentPlayerState.incubator); } }, 1000);
-    
+     
     const updateAffordableButtons = () => { 
         if (!currentPlayerState) return; 
         ['hp', 'attack', 'defense'].forEach(stat => { 
@@ -1392,7 +1467,7 @@ elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${format
         document.getElementById('spirit-summon-from-anvil-btn').addEventListener('click', () => {
             if (confirm('정령의 형상 100개를 소모하여 새로운 정령을 소환하시겠습니까?')) {
                 socket.emit('spirit:create');
-                updateEnhancementPanel(null); // 소환 후 패널 초기화
+                updateEnhancementPanel(null); 
             }
         });
 
@@ -1646,7 +1721,10 @@ else if (item.category === 'Tome') {
             return;
         }
         updateUI(data);
+		renderIncubators(data.player.incubators);
     });
+	
+	
 
     socket.on('stateUpdate', (data) => {
         if (!currentPlayerState || !data || !data.player) {
@@ -1656,15 +1734,15 @@ else if (item.category === 'Tome') {
         updateUI(data);
     });
 
-    socket.on('inventoryUpdate', (data) => {
-        if (!currentPlayerState || !data) return;
-        currentPlayerState.inventory = data.inventory;
-        currentPlayerState.petInventory = data.petInventory;
-        currentPlayerState.spiritInventory = data.spiritInventory; 
-        currentPlayerState.incubator = data.incubator;
-        renderAllInventories(currentPlayerState);
-        renderIncubator(currentPlayerState.incubator);
-    });
+   socket.on('inventoryUpdate', (data) => {
+    if (!currentPlayerState || !data) return;
+    currentPlayerState.inventory = data.inventory;
+    currentPlayerState.petInventory = data.petInventory;
+    currentPlayerState.incubators = data.incubators; 
+    currentPlayerState.spiritInventory = data.spiritInventory;
+    renderAllInventories(currentPlayerState);
+    renderIncubators(currentPlayerState.incubators); 
+});
 
     socket.on('logUpdate', (logs) => {
         if (!currentPlayerState || !logs) return;
@@ -1854,7 +1932,7 @@ document.getElementById('account-storage-grid').addEventListener('click', (e) =>
     }
     
 
-    if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet' || item.type === 'Spirit') {
+ if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet' || item.type === 'Spirit' || item.type === 'accessory') {
         const enhanceAction = document.createElement('button');
         enhanceAction.className = 'action-btn';
         enhanceAction.textContent = item.type === 'Spirit' ? '판매하러 가기' : '대장간 가기';
@@ -1942,16 +2020,23 @@ case 'deposit-storage':
         elements.modals.itemAction.overlay.style.display = 'none';
     });
     
-    elements.enhancement.anvil.addEventListener('click', (e) => {
-        const target = e.target.closest('.action-btn');
-        if (!target) return;
-        const action = target.dataset.action;
-        if (!action || !selectedInventoryItemUid) return;
-        
-        const item = findItemInState(selectedInventoryItemUid);
-        if (!item) return;
+  elements.enhancement.anvil.addEventListener('click', (e) => {
+    const target = e.target.closest('.action-btn');
+    if (!target) return;
+    const action = target.dataset.action;
+    if (!action || !selectedInventoryItemUid) return;
 
-        switch (action) {
+    const item = findItemInState(selectedInventoryItemUid);
+    if (!item) return;
+
+    switch (action) {
+		 case 'select-egg': 
+            selectedEggForHatching = item;
+            alert(`[${item.name}]이(가) 선택되었습니다. 부화기 탭으로 이동하여 빈 슬롯을 클릭해주세요.`);
+            document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
+            target.closest('.enhancement-anvil').querySelector('.enhancement-slot').innerHTML = '부화기 탭으로 이동하여<br>빈 슬롯을 클릭하세요';
+            document.querySelector(`.tab-button[data-tab="incubator-tab"]`).click();
+            break;
             case 'sell':
                 if (confirm("정말 판매하시겠습니까?")) {
                     socket.emit('sellItem', { uid: selectedInventoryItemUid, sellAll: target.dataset.sellAll === 'true' });
@@ -1999,24 +2084,29 @@ case 'deposit-storage':
             case 'use-all':
                 socket.emit('useItem', { uid: selectedInventoryItemUid, useAll: true });
                 break;
-            case 'hatch':
-                if (confirm(`[${item.name}]을(를) 부화기에 넣으시겠습니까?`)) {
-                    socket.emit('placeEggInIncubator', { uid: selectedInventoryItemUid });
-                    selectedInventoryItemUid = null;
-                    updateEnhancementPanel(null);
-                    document.querySelector('.tab-button[data-tab="incubator-tab"]').click();
-                }
-                break;
+           case 'hatch':
+    if (confirm(`[${item.name}]을(를) 부화기에 넣으시겠습니까?`)) {
+        const firstEmptySlotIndex = currentPlayerState.incubators.findIndex(slot => !slot || !slot.egg);
+
+        if (firstEmptySlotIndex === -1) {
+            alert('부화기 슬롯이 모두 가득 찼습니다.');
+            return; 
+        }
+
+        socket.emit('placeEggInIncubator', { 
+            uid: selectedInventoryItemUid, 
+            slotIndex: firstEmptySlotIndex 
+        });
+
+        selectedInventoryItemUid = null;
+        updateEnhancementPanel(null);
+        document.querySelector('.tab-button[data-tab="incubator-tab"]').click();
+    }
+    break;
         }
     });
 
-    elements.incubator.slot.addEventListener('click', () => {
-        if (currentPlayerState && currentPlayerState.incubator.egg && !currentPlayerState.incubator.hatchCompleteTime) {
-            if (confirm('부화기에서 알을 꺼내시겠습니까?')) {
-                socket.emit('removeEggFromIncubator');
-            }
-        }
-    });
+  
     
 document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('click', () => {
     const stat = btn.dataset.stat;
@@ -2100,8 +2190,7 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
         }
     });
 
-    elements.incubator.hatchButton.addEventListener('click', () => { if (currentPlayerState && currentPlayerState.incubator.egg) { socket.emit('startHatching'); } });
-    
+     
     document.getElementById('game-app-container').addEventListener('dragstart', e => {
         const card = e.target.closest('.inventory-item');
         if (card) { e.dataTransfer.setData('text/plain', card.dataset.uid); e.dataTransfer.setData('item-type', card.dataset.itemType); }
