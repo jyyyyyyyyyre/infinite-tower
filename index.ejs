@@ -70,6 +70,7 @@
                 <a href="https://discord.gg/zxkdFPkZVt" target="_blank" id="discord-button">💬 디스코드</a>
                 <button id="codex-button">📖 도감</button>
 <button id="title-codex-button">📜 칭호</button>
+<button id="auto-sell-button">🤖 자판기</button>
             </div>
             <div class="top-bar-right">
 <div id="player-event-timers"></div>
@@ -405,6 +406,15 @@
         <ul id="online-users-list" class="feed-list"></ul>
         </div>
     </div>
+
+<div id="auto-sell-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2>🤖 자동 판매 목록</h2>
+        <p class="inventory-tip" style="margin-bottom: 20px;">여기에 등록된 +0 아이템은 획득 시 자동으로 판매됩니다. 아이템을 클릭하여 목록에서 제거하세요.</p>
+        <div id="auto-sell-list" class="inventory-grid"></div>
+    </div>
+</div>
 
   <div id="research-detail-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content" style="max-width: 500px;">

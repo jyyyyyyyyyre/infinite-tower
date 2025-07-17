@@ -525,6 +525,11 @@ researchDetail: {
                 overlay: document.getElementById('item-info-modal'),
                 content: document.getElementById('item-info-modal-content')
             },
+autoSell: {
+    button: document.getElementById('auto-sell-button'),
+    overlay: document.getElementById('auto-sell-modal'),
+    list: document.getElementById('auto-sell-list'),
+},
  spiritSummon: {
                 overlay: document.getElementById('spirit-summon-modal'),
                 countSpan: document.getElementById('spirit-essence-count'),
@@ -1422,7 +1427,7 @@ if (elements.incubator.grid) {
         });
     }
 
-   function updateEnhancementPanel(item) {
+ function updateEnhancementPanel(item) {
     const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
 
     if (!item) {
@@ -1557,18 +1562,24 @@ if (elements.incubator.grid) {
                 else if (item.grade === 'Epic') { rewards.gold = 50000000; rewards.essence = 10; }
                 else if (item.grade === 'Rare') { rewards.gold = 3000000; rewards.essence = 3; }
                 if (rewards.gold > 0 || rewards.essence > 0) isSellable = true;
+            } else if (item.type === 'Spirit') {
+                rewards.essence = 20;
+                isSellable = true;
+            } else if (item.category === 'Tome') {
+                rewards.gold = 100000000;
+                rewards.shards = 20;
+                isSellable = true;
             }
 
- else if (item.type === 'Spirit') {
-                    rewards.essence = 20;
-                    isSellable = true;
+            else if (item.category === 'Egg') {
+                switch (item.id) {
+                    case 'pet_egg_normal': rewards.gold = 2000000; break;
+                    case 'pet_egg_ancient': rewards.gold = 35000000; break;
+                    case 'pet_egg_mythic': rewards.gold = 40000000000; break;
                 }
+                if (rewards.gold > 0) isSellable = true;
+            }
 
-else if (item.category === 'Tome') {
-    rewards.gold = 100000000;
-    rewards.shards = 20;
-    isSellable = true;
-}
 
             if (isSellable) {
                 const rewardsText = [];
@@ -1578,11 +1589,20 @@ else if (item.category === 'Tome') {
 
                 buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="false">판매 (${rewardsText.join(', ')})</button>`;
 
-                if (item.enhancement === 0 && item.quantity > 1 && (item.type === 'weapon' || item.type === 'armor')) {
+
+                if (item.enhancement === 0 && item.quantity > 1 && ((item.type === 'weapon' || item.type === 'armor') || item.category === 'Egg')) {
                     const allRewardsText = [];
                     if (rewards.gold > 0) allRewardsText.push(`${(rewards.gold * item.quantity).toLocaleString()} G`);
                     if (rewards.shards > 0) allRewardsText.push(`파편 ${(rewards.shards * item.quantity).toLocaleString()}개`);
                     buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="true">전체 판매 (${allRewardsText.join(', ')})</button>`;
+                }
+
+                
+                if (item.enhancement === 0 || typeof item.enhancement === 'undefined') {
+                    const isAutoSelling = currentPlayerState.autoSellList && currentPlayerState.autoSellList.includes(item.id);
+                    const autoSellButtonText = isAutoSelling ? '자동판매 해제' : '자동판매 등록';
+                    const autoSellButtonClass = isAutoSelling ? 'list-auction-btn' : 'use-item-btn';
+                    buttonsHTML += `<button class="action-btn ${autoSellButtonClass}" data-action="toggle-auto-sell" data-item-id="${item.id}">${autoSellButtonText}</button>`;
                 }
             }
         }
@@ -2037,6 +2057,14 @@ case 'deposit-storage':
             target.closest('.enhancement-anvil').querySelector('.enhancement-slot').innerHTML = '부화기 탭으로 이동하여<br>빈 슬롯을 클릭하세요';
             document.querySelector(`.tab-button[data-tab="incubator-tab"]`).click();
             break;
+ case 'toggle-auto-sell': {
+            const itemId = target.dataset.itemId;
+            if (confirm(`[${item.name}] 아이템을 자동판매 목록에 등록/해제 하시겠습니까?`)) {
+                socket.emit('autoSell:toggle', { itemId });
+                updateEnhancementPanel(null);
+            }
+            break;
+        }
             case 'sell':
                 if (confirm("정말 판매하시겠습니까?")) {
                     socket.emit('sellItem', { uid: selectedInventoryItemUid, sellAll: target.dataset.sellAll === 'true' });
@@ -2106,7 +2134,86 @@ case 'deposit-storage':
         }
     });
 
-  
+ const topBar = document.querySelector('.top-bar');
+if (topBar) {
+    topBar.addEventListener('click', (e) => {
+        if (e.target.id === 'auto-sell-button') {
+            socket.emit('autoSell:get', (items) => {
+                if (currentPlayerState) {
+                    currentPlayerState.autoSellList = items.map(item => item.id); 
+                    renderAutoSellList(items);
+                    elements.modals.autoSell.overlay.style.display = 'flex';
+                }
+            });
+        }
+    });
+}
+
+function renderAutoSellList(items) { 
+    const grid = elements.modals.autoSell.list;
+    grid.innerHTML = '';
+    if (!items || items.length === 0) {
+        grid.innerHTML = '<p class="inventory-tip" style="padding: 50px 0;">자동 판매 목록이 비어있습니다.</p>';
+        return;
+    }
+
+    grid.innerHTML = items.map(item => {
+        return `
+            <div class="inventory-item auto-sell-item" data-item-id="${item.id}">
+                ${createItemHTML(item)}
+                <button class="action-btn sell-btn auto-sell-remove-btn" data-item-id="${item.id}">제외</button>
+            </div>
+        `;
+    }).join('');
+}
+
+elements.modals.autoSell.list.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('.auto-sell-remove-btn');
+    if (removeBtn) {
+        const itemId = removeBtn.dataset.itemId;
+        socket.emit('autoSell:toggle', { itemId });
+    }
+});
+
+socket.on('autoSell:listUpdated', (items) => {
+    if (currentPlayerState) {
+        currentPlayerState.autoSellList = items.map(item => item.id);
+    }
+    if (elements.modals.autoSell.overlay.style.display === 'flex') {
+        renderAutoSellList(items);
+    }
+    if (selectedInventoryItemUid) {
+        const item = findItemInState(selectedInventoryItemUid);
+        if (item) {
+             updateEnhancementPanel(item);
+        }
+    }
+});
+
+const style = document.createElement('style');
+style.innerHTML = `
+    .auto-sell-item {
+        position: relative;
+    }
+    .auto-sell-remove-btn {
+        position: absolute;
+        bottom: 5px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80%;
+        opacity: 0;
+        transition: opacity 0.2s;
+        padding: 5px;
+        font-size: 0.9em;
+    }
+    .auto-sell-item:hover .auto-sell-remove-btn {
+        opacity: 1;
+    }
+    .auto-sell-item:hover .item-info {
+        opacity: 0.1;
+    }
+`;
+document.head.appendChild(style);
     
 document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('click', () => {
     const stat = btn.dataset.stat;

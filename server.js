@@ -57,7 +57,7 @@ const PORT = 3000;
 const TICK_RATE = 1000; 
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_OBJECT_ID = '68744e5af8cc7f29f0f2d114';
+const ADMIN_OBJECT_ID = '68744e5af8cc7f29f0f2d114'; //687619b2f83b60edebd6bb8b
 const BOSS_INTERVAL = 200;
 
 
@@ -67,8 +67,8 @@ const RIFT_ENCHANT_COST = {
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 65000000000, ATTACK: 0, DEFENSE: 0,
-    REWARDS: { GOLD: 5000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 115000000000, ATTACK: 0, DEFENSE: 0,
+    REWARDS: { GOLD: 8000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
 const MailSchema = new mongoose.Schema({
@@ -181,8 +181,9 @@ raidState: {
         scrollUseCount: { type: Number, default: 0 },
         deathCount: { type: Number, default: 0 },
         wbLastHitCount: { type: Number, default: 0 },
-        wbParticipateCount: { type: Number, default: 0 }
+        wbParticipateCount: { type: Number, default: 0 },
     },
+autoSellList: { type: [String], default: [] },
 
     researchEssence: { type: Number, default: 0 },
     research: {
@@ -873,6 +874,11 @@ function addDiscoveredItem(player, itemId) {
 }
 
 function handleItemStacking(player, item) {
+if (player.autoSellList && player.autoSellList.includes(item.id) && (item.enhancement === 0 || typeof item.enhancement === 'undefined')) {
+    autoSellItemById(player, item);
+    sendPlayerState(player);
+    return; 
+}
     if (!item) {
         console.error("handleItemStacking 함수에 비정상적인 null 아이템이 전달되었습니다.");
         return;
@@ -1220,6 +1226,7 @@ if (!gameData.personalRaid) {
         };
     }
 
+
 if (typeof gameData.researchEssence === 'undefined') {
         gameData.researchEssence = 0;
     }
@@ -1245,8 +1252,13 @@ isHelper: user.isHelper,
         }, 
         socket: socket, 
         buffs: [] ,
-isStorageTransacting: false
+isStorageTransacting: false,
+autoSellList: gameData.autoSellList || [] 
     };
+	
+	if (!onlinePlayers[socket.userId].autoSellList) {
+    onlinePlayers[socket.userId].autoSellList = [];
+}
 
 if (gameData.raidState && gameData.raidState.isActive) {
     const player = onlinePlayers[socket.userId];
@@ -2543,6 +2555,42 @@ announceMysticDrop(onlinePlayer, newItem);
             
             sendInventoryUpdate(player);
         })
+.on('autoSell:get', (callback) => {
+    const player = onlinePlayers[socket.userId];
+    if (player && player.autoSellList) {
+        const autoSellItems = player.autoSellList.map(id => {
+            const fullItemData = itemData[id] || petData[id] || spiritData[id] || null;
+            if (fullItemData) {
+                return { ...fullItemData, id: id };
+            }
+            return null;
+        }).filter(Boolean);
+        callback(autoSellItems);
+    } else {
+        callback([]);
+    }
+})
+
+.on('autoSell:toggle', async ({ itemId }) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player) return;
+
+    if (!player.autoSellList) {
+        player.autoSellList = [];
+    }
+    const itemIndex = player.autoSellList.indexOf(itemId);
+    const itemInfo = itemData[itemId] || petData[itemId] || spiritData[itemId];
+    if (itemIndex > -1) {
+        player.autoSellList.splice(itemIndex, 1);
+        if (itemInfo) pushLog(player, `[자동판매] '${itemInfo.name}' 아이템을 목록에서 제거했습니다.`);
+    } else {
+        player.autoSellList.push(itemId);
+        if (itemInfo) pushLog(player, `[자동판매] '${itemInfo.name}' 아이템을 목록에 추가했습니다.`);
+        await sellExistingItemsFromAutoSellList(player, itemId);
+    }
+
+    GameData.updateOne({ user: player.user }, { $set: { autoSellList: player.autoSellList } }).catch(err => console.error('자동판매 목록 저장 오류:', err));
+})
 
        .on('disconnect', async () => { 
             console.log(`[연결 해제] 유저: ${socket.username}`);
@@ -3521,6 +3569,21 @@ else if (item.category === 'Tome') {
             shardReward = 20;
             isSellable = true;
         }
+		
+		else if (item.category === 'Egg') {
+            switch (item.id) {
+                case 'pet_egg_normal':
+                    goldReward = 2000000;
+                    break;
+                case 'pet_egg_ancient':
+                    goldReward = 35000000;
+                    break;
+                case 'pet_egg_mythic':
+                    goldReward = 40000000000;
+                    break;
+            }
+            if (goldReward > 0) isSellable = true;
+        }
 
         if (!isSellable) {
             pushLog(player, '[판매] 해당 아이템은 판매할 수 없습니다.');
@@ -3626,6 +3689,138 @@ function onPetFusionComplete(player) {
 
     checkStateBasedTitles(player);
 }
+
+
+
+function autoSellItemById(player, itemToSell) {
+    if (!player || !itemToSell) return;
+
+    let goldReward = 0;
+    let shardReward = 0;
+    let essenceReward = 0;
+    let isSellable = false;
+
+    const itemDataDefinition = itemData[itemToSell.id];
+
+    if (itemDataDefinition) {
+        if (itemToSell.type === 'weapon' || itemToSell.type === 'armor') {
+            const prices = { Common: 3000, Rare: 50000, Legendary: 400000, Epic: 2000000, Mystic: 3000000000, Primal: 120000000000 };
+            const shards = { Common: 1, Rare: 2, Legendary: 5, Epic: 50, Mystic: 1000, Primal: 10000 };
+            goldReward = prices[itemToSell.grade] || 0;
+            shardReward = shards[itemToSell.grade] || 0;
+            isSellable = true;
+        } else if (itemToSell.type === 'accessory') {
+            const prices = { Primal: 120000000000 };
+            const shards = { Mystic: 500, Primal: 10000 };
+            goldReward = prices[itemToSell.grade] || 0;
+            shardReward = shards[itemToSell.grade] || 0;
+            if (goldReward > 0 || shardReward > 0) isSellable = true;
+        } else if (itemToSell.category === 'Tome') {
+             goldReward = 100000000;
+             shardReward = 20;
+             isSellable = true;
+        }
+		
+		 else if (itemToSell.category === 'Egg') {
+                switch (itemToSell.id) {
+                    case 'pet_egg_normal':
+                        goldReward = 2000000;
+                        break;
+                    case 'pet_egg_ancient':
+                        goldReward = 35000000;
+                        break;
+                    case 'pet_egg_mythic':
+                        goldReward = 40000000000;
+                        break;
+                }
+                if (goldReward > 0) isSellable = true;
+            }
+		
+		
+		
+		
+    } else {
+         const petDataDefinition = petData[itemToSell.id];
+         if (petDataDefinition) {
+             if (itemToSell.id === 'bahamut') { goldReward = 50000000000; essenceReward = 100; }
+             else if (itemToSell.fused) { goldReward = 100000000; essenceReward = 20; }
+             else if (itemToSell.grade === 'Epic') { goldReward = 50000000; essenceReward = 10; }
+             else if (itemToSell.grade === 'Rare') { goldReward = 3000000; essenceReward = 3; }
+             if (goldReward > 0 || essenceReward > 0) isSellable = true;
+         } else {
+            const spiritDataDefinition = spiritData[itemToSell.id];
+            if(spiritDataDefinition) {
+                essenceReward = 20;
+                isSellable = true;
+            }
+         }
+    }
+
+    if (!isSellable) return;
+
+    const quantity = itemToSell.quantity || 1;
+    const titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
+    const sellBonus = (titleEffects && titleEffects.sellPriceBonus) ? (1 + titleEffects.sellPriceBonus) : 1;
+
+    const totalGold = Math.floor((goldReward * quantity) * sellBonus);
+    const totalShards = shardReward * quantity;
+    const totalEssence = essenceReward * quantity;
+
+    if (totalGold > 0) player.gold += totalGold;
+    if (totalShards > 0) handleItemStacking(player, createItemInstance('rift_shard', totalShards));
+    if (totalEssence > 0) handleItemStacking(player, createItemInstance('spirit_essence', totalEssence));
+
+    const rewardsLog = [];
+    if (totalGold > 0) rewardsLog.push(`${totalGold.toLocaleString()} G`);
+    if (totalShards > 0) rewardsLog.push(`균열 파편 ${totalShards.toLocaleString()}개`);
+    if (totalEssence > 0) rewardsLog.push(`정령의 형상 ${totalEssence.toLocaleString()}개`);
+
+    if (rewardsLog.length > 0) {
+        pushLog(player, `[자동판매] ${itemToSell.name} ${quantity}개를 판매하여 ${rewardsLog.join(', ')}를 획득했습니다.`);
+    }
+}
+async function sellExistingItemsFromAutoSellList(player, itemId) {
+    if (!player || !itemId) return;
+
+    let soldSomething = false;
+
+    const generalItemsToSell = player.inventory.filter(item => item.id === itemId && (item.enhancement === 0 || typeof item.enhancement === 'undefined'));
+    if (generalItemsToSell.length > 0) {
+        for (const item of generalItemsToSell) {
+            autoSellItemById(player, item);
+        }
+        player.inventory = player.inventory.filter(item => !(item.id === itemId && (item.enhancement === 0 || typeof item.enhancement === 'undefined')));
+        soldSomething = true;
+    }
+
+    const petsToSell = player.petInventory.filter(pet => pet.id === itemId);
+    if (petsToSell.length > 0) {
+        for (const pet of petsToSell) {
+            autoSellItemById(player, pet);
+        }
+        player.petInventory = player.petInventory.filter(pet => pet.id !== itemId);
+        soldSomething = true;
+    }
+    
+    if (player.spiritInventory) {
+        const spiritsToSell = player.spiritInventory.filter(spirit => spirit.id === itemId);
+        if (spiritsToSell.length > 0) {
+             for (const spirit of spiritsToSell) {
+                autoSellItemById(player, spirit);
+            }
+            player.spiritInventory = player.spiritInventory.filter(spirit => spirit.id !== itemId);
+            soldSomething = true;
+        }
+    }
+
+    if (soldSomething) {
+        sendInventoryUpdate(player);
+        sendPlayerState(player);
+    }
+}
+
+
+
 function getFameTier(score) {
     if (score >= 40000) return 'fame-diamond';
     if (score >= 15000) return 'fame-gold';
@@ -3636,6 +3831,21 @@ function getFameTier(score) {
 
 async function savePlayerData(userId) { const p = onlinePlayers[userId]; if (!p) return; try { const { socket: _, attackTarget: __, ...playerDataToSave } = p; await GameData.updateOne({ user: userId }, { $set: playerDataToSave }); } catch (error) { console.error(`[저장 실패] 유저: ${p.username} 데이터 저장 중 오류 발생:`, error); } }
 
+
+async function saveAutoSellList(userId) {
+    const player = onlinePlayers[userId];
+    if (!player || !player.autoSellList) return; 
+
+    try {
+        await GameData.updateOne(
+            { user: userId },
+            { $set: { autoSellList: player.autoSellList } }
+        );
+        console.log(`[자판기 전용 저장] ${player.username}의 목록 저장 완료:`, player.autoSellList);
+    } catch (error) {
+        console.error(`[자판기 전용 저장 실패]`, error);
+    }
+}
 
 async function sendState(socket, player, monsterStats) {
     if (!socket || !player) return;
