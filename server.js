@@ -57,7 +57,7 @@ const PORT = 3000;
 const TICK_RATE = 1000; 
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_OBJECT_ID = '68744e5af8cc7f29f0f2d114'; //687619b2f83b60edebd6bb8b
+const ADMIN_OBJECT_ID = '68744e5af8cc7f29f0f2d114'; //687a39343baadd2ed256c079
 const BOSS_INTERVAL = 200;
 
 
@@ -1123,9 +1123,9 @@ io.on('connection', async (socket) => {
         oldSocket.emit('forceDisconnect', { message: '다른 기기 또는 탭에서 접속하여 연결을 종료합니다.' });
         oldSocket.disconnect(true);
     }
-    
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
+
     if (!gameData) { 
         console.error(`[오류] ${socket.username}의 게임 데이터를 찾을 수 없습니다.`);
         return socket.disconnect(); 
@@ -2600,7 +2600,7 @@ announceMysticDrop(onlinePlayer, newItem);
                     const saveData = { ...player };
                     delete saveData.socket;
                     delete saveData.attackTarget;
-                    saveData.logoutTime = new Date();
+saveData.logoutTime = new Date();
                     saveData.lastLevel = player.level;
                     await GameData.updateOne({ user: socket.userId }, { $set: saveData });
                 } catch (error) {
@@ -2634,13 +2634,12 @@ function gameTick(player) {
         const now = Date.now();
         const initialBuffCount = player.buffs.length;
         player.buffs = player.buffs.filter(buff => buff.endTime > now);
-        if (player.buffs.length < initialBuffCount) {
-            const hpBefore = player.stats.total.hp;
-            calculateTotalStats(player); 
-            const hpAfter = player.stats.total.hp;
-            const currentHpRatio = player.currentHp / hpBefore;
-            player.currentHp = Math.min(hpAfter, hpAfter * currentHpRatio);
-        }
+      if (player.buffs.length < initialBuffCount) {
+    const originalCurrentHp = player.currentHp;
+    calculateTotalStats(player); 
+    const newMaxHp = player.stats.total.hp;
+    player.currentHp = Math.min(originalCurrentHp, newMaxHp);
+}
     }
     if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) onPetFusionComplete(player);
    if (player.incubators && player.incubators.length > 0) {
@@ -3239,10 +3238,10 @@ async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
             }
         }
 
-        calculateTotalStats(p);
-        const hpAfter = p.stats.total.hp;
-        p.currentHp = hpBefore > 0 && hpAfter > 0 ? p.currentHp * (hpAfter / hpBefore) : hpAfter;
-        if (p.currentHp > hpAfter) p.currentHp = hpAfter;
+const originalCurrentHp = p.currentHp;
+calculateTotalStats(p);
+const hpAfter = p.stats.total.hp;
+p.currentHp = Math.min(originalCurrentHp, hpAfter);
 
         p.inventory = p.inventory.filter(i => i.quantity > 0);
 
@@ -3463,9 +3462,11 @@ function equipItem(player, uid) {
         }
         pushLog(player, `[장비] ${player.equipment[slot].name} 을(를) 장착했습니다.`);
         
-        calculateTotalStats(player);
-        player.currentHp = player.stats.total.hp;
-        sendPlayerState(player);
+       const originalCurrentHp = player.currentHp;
+calculateTotalStats(player);
+const newMaxHp = player.stats.total.hp;
+player.currentHp = Math.min(originalCurrentHp, newMaxHp);
+sendPlayerState(player);
         sendInventoryUpdate(player);
         updateFameScore(player.socket, player);
         checkStateBasedTitles(player);
@@ -3481,16 +3482,15 @@ function unequipItem(player, slot) {
     player.isBusy = true;
     try {
         if (!player.equipment[slot]) return;
-        const hpBefore = player.stats.total.hp;
-        
-        handleItemStacking(player, player.equipment[slot]);
-        player.equipment[slot] = null;
-        
-        calculateTotalStats(player);
-        
-        const hpAfter = player.stats.total.hp;
-        player.currentHp = hpBefore > 0 && hpAfter > 0 ? player.currentHp * (hpAfter / hpBefore) : hpAfter;
-        if (player.currentHp > hpAfter) player.currentHp = hpAfter;
+        const originalCurrentHp = player.currentHp;
+
+handleItemStacking(player, player.equipment[slot]);
+player.equipment[slot] = null;
+
+calculateTotalStats(player);
+
+const newMaxHp = player.stats.total.hp;
+player.currentHp = Math.min(originalCurrentHp, newMaxHp);
         
         sendPlayerState(player);
         sendInventoryUpdate(player);
@@ -4148,14 +4148,21 @@ function onHatchComplete(player, slotIndex) {
     pushLog(player, `[부화기] ${eggName}에서 생명의 기운이 느껴집니다!`);
 
     const possiblePets = Object.keys(petData).filter(id => petData[id].grade === eggGrade && !petData[id].fused);
-    if (possiblePets.length > 0) {
-        const randomPetId = possiblePets[Math.floor(Math.random() * possiblePets.length)];
-        const newPet = createPetInstance(randomPetId);
-        if(newPet) {
-            player.petInventory.push(newPet);
-            pushLog(player, `[펫] <span class="${newPet.grade}">${newPet.name}</span>이(가) 태어났습니다!`);
+   if (possiblePets.length > 0) {
+    const randomPetId = possiblePets[Math.floor(Math.random() * possiblePets.length)];
+    const newPet = createPetInstance(randomPetId);
+    if(newPet) {
+        pushLog(player, `[펫] <span class="${newPet.grade}">${newPet.name}</span>이(가) 태어났습니다!`);
+
+
+        if (player.autoSellList && player.autoSellList.includes(newPet.id)) {
+            autoSellItemById(player, newPet); 
+            sendPlayerState(player);
+        } else {
+            player.petInventory.push(newPet); 
         }
     }
+}
 
     player.incubators[slotIndex] = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
     updateFameScore(player.socket, player); 
@@ -4524,15 +4531,16 @@ function onPersonalRaidFloorClear(player) {
 
 scheduleDailyReset(io); 
 
-
 async function calculateAndSendOfflineRewards(player) {
     if (!player || !player.logoutTime) return;
 
+
     const offlineSeconds = Math.floor((new Date() - new Date(player.logoutTime)) / 1000);
  
- if (offlineSeconds < 1800) {
-        await GameData.updateOne({ user: player.user }, { $set: { logoutTime: null } });
-        return; 
+if (offlineSeconds < 60) {
+
+        await GameData.updateOne({ user: player.user }, { $set: { logoutTime: null, lastLevel: 1 } });
+        return;
     }
 
     const bestSpirit = (player.spiritInventory || []).sort((a, b) => {
@@ -4540,6 +4548,7 @@ async function calculateAndSendOfflineRewards(player) {
         return (gradeOrder[b.grade] || 0) - (gradeOrder[a.grade] || 0);
     })[0];
 
+   
     if (!bestSpirit) {
         await GameData.updateOne({ user: player.user }, { $set: { logoutTime: null, lastLevel: 1 } });
         return;
@@ -4616,7 +4625,6 @@ async function calculateAndSendOfflineRewards(player) {
 }
 
 
-
 function startEventCheckInterval() {
     if (eventEndTimer) clearInterval(eventEndTimer);
 
@@ -4652,5 +4660,40 @@ function triggerEventAnnouncement(eventDescription) {
     io.emit('chatMessage', eventChatMessage);
 
 }
+
+const CHECK_OFFLINE_INTERVAL = 30000; 
+
+async function checkOfflinePlayers() {
+    try {
+
+        const allGameData = await GameData.find({}, 'user logoutTime').lean();
+        
+        const usersToSetOffline = [];
+
+        for (const data of allGameData) {
+            const userIdString = data.user.toString();
+
+            const isOnline = onlinePlayers.hasOwnProperty(userIdString);
+            const hasLogoutTime = data.logoutTime != null;
+
+            if (!isOnline && !hasLogoutTime) {
+                usersToSetOffline.push(data.user);
+            }
+        }
+
+
+        if (usersToSetOffline.length > 0) {
+            await GameData.updateMany(
+                { user: { $in: usersToSetOffline } },
+                { $set: { logoutTime: new Date() } }
+            );
+        }
+
+    } catch (error) {
+        console.error('[오프라인 감지 시스템 오류]', error);
+    }
+}
+
+setInterval(checkOfflinePlayers, CHECK_OFFLINE_INTERVAL);
 
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));

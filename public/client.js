@@ -171,49 +171,146 @@ document.addEventListener('DOMContentLoaded', () => {
         location.reload();
     });
 
-    function startApp(token) {
-        document.body.classList.remove('auth-view');
-        authContainer.style.display = 'none';
-        kakaoRegisterContainer.style.display = 'none';
-        kakaoLinkContainer.style.display = 'none';
-        gameAppContainer.style.display = 'flex';
-        
-        const decodedToken = decodeJwtPayload(token);
-        if (!decodedToken) {
-            console.error("Invalid Token: Decoding failed.");
-            localStorage.removeItem('jwt_token');
-            location.reload();
+
+function startApp(token) {
+    document.body.classList.remove('auth-view');
+    authContainer.style.display = 'none';
+    kakaoRegisterContainer.style.display = 'none';
+    kakaoLinkContainer.style.display = 'none';
+    gameAppContainer.style.display = 'flex';
+    
+    const decodedToken = decodeJwtPayload(token);
+    if (!decodedToken) {
+        console.error("Invalid Token: Decoding failed.");
+        localStorage.removeItem('jwt_token');
+        location.reload();
+        return;
+    }
+
+    window.myUsername = decodedToken.username;
+    window.myUserId = decodedToken.userId;
+
+    const reconnectionOverlay = document.createElement('div');
+    reconnectionOverlay.id = 'reconnection-overlay';
+    reconnectionOverlay.style.position = 'fixed';
+    reconnectionOverlay.style.top = '0';
+    reconnectionOverlay.style.left = '0';
+    reconnectionOverlay.style.width = '100%';
+    reconnectionOverlay.style.height = '100%';
+    reconnectionOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    reconnectionOverlay.style.color = 'white';
+    reconnectionOverlay.style.display = 'none';
+    reconnectionOverlay.style.justifyContent = 'center';
+    reconnectionOverlay.style.alignItems = 'center';
+    reconnectionOverlay.style.zIndex = '9999';
+    reconnectionOverlay.style.fontSize = '2em';
+    reconnectionOverlay.style.textAlign = 'center';
+    reconnectionOverlay.innerHTML = `
+        <div>
+            <p>서버와 연결이 끊겼습니다. 재접속 중...</p>
+            <p id="reconnect-attempt-counter" style="font-size: 0.8em;"></p>
+        </div>`;
+    document.body.appendChild(reconnectionOverlay);
+
+    const socket = io({
+        auth: { token },
+        transports: ['websocket'], 
+        reconnection: false       
+    });
+    window.socket = socket;
+
+    if (decodedToken.role === 'admin') {
+        const topButtons = document.querySelector('.top-buttons');
+        const adminButton = document.createElement('button');
+        adminButton.id = 'admin-panel-button';
+        adminButton.innerHTML = '👑 어드민';
+        adminButton.addEventListener('click', () => {
+            document.getElementById('admin-panel-modal').style.display = 'flex';
+            socket.emit('admin:getDashboardData', renderAdminDashboard);
+        });
+        topButtons.prepend(adminButton);
+        initializeAdminPanel();
+    }
+
+    let manualReconnectTimer = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 15; // 시도 횟수를 15회로 늘림
+    const RECONNECT_DELAY = 2000; // 2초 간격으로 시도
+
+    const startManualReconnect = () => {
+
+        if (manualReconnectTimer || reconnectAttempts > 0) return; 
+        console.log('Starting manual reconnection process...');
+        reconnectionOverlay.style.display = 'flex';
+        reconnectAttempts = 0;
+        attemptReconnect();
+    };
+
+    const attemptReconnect = () => {
+
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            console.error('Could not reconnect after max attempts.');
+            reconnectionOverlay.innerHTML = `
+                <div>
+                    <p>서버에 다시 연결할 수 없습니다.</p>
+                    <button id="manual-reload-btn" style="padding: 10px 20px; font-size: 0.8em; margin-top: 20px;">새로고침</button>
+                </div>`;
+            document.getElementById('manual-reload-btn').onclick = () => {
+                localStorage.removeItem('jwt_token');
+                location.reload();
+            };
             return;
         }
 
-        window.myUsername = decodedToken.username;
-        window.myUserId = decodedToken.userId;
+        reconnectAttempts++;
+        const counter = document.getElementById('reconnect-attempt-counter');
+        if (counter) counter.textContent = `(${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}번째 시도)`;
+        
+        console.log(`Manual reconnect attempt #${reconnectAttempts}`);
 
-        const socket = io({ auth: { token }, transports: ['websocket'] });
-        window.socket = socket;
+        socket.connect(); 
+    };
 
-        if (decodedToken.role === 'admin') {
-            const topButtons = document.querySelector('.top-buttons');
-            const adminButton = document.createElement('button');
-            adminButton.id = 'admin-panel-button';
-            adminButton.innerHTML = '👑 어드민';
-            adminButton.addEventListener('click', () => {
-                document.getElementById('admin-panel-modal').style.display = 'flex';
-                socket.emit('admin:getDashboardData', renderAdminDashboard);
-            });
-            topButtons.prepend(adminButton);
-            initializeAdminPanel();
+    socket.on('connect', () => {
+        console.log('Socket connected successfully.');
+
+        if (manualReconnectTimer) {
+            clearTimeout(manualReconnectTimer);
+            manualReconnectTimer = null;
         }
+        if (reconnectAttempts > 0) { 
+            console.log(`Reconnected after ${reconnectAttempts} attempts.`);
 
-        socket.on('connect_error', (err) => { 
-            alert(err.message); 
-            localStorage.removeItem('jwt_token'); 
-            location.reload(); 
-        });
+            socket.emit('requestRanking');
+            socket.emit('requestOnlineUsers');
+        }
+        reconnectAttempts = 0;
+        reconnectionOverlay.style.display = 'none';
+    });
+    
 
-        initializeGame(socket);
-    }
+    socket.on('disconnect', (reason) => {
 
+        if (reason === 'io server disconnect' || reason === 'io client disconnect') {
+            console.log(`Intentional disconnect: ${reason}. No reconnection will be attempted.`);
+            return;
+        }
+        console.warn(`Socket disconnected due to ${reason}.`);
+        startManualReconnect();
+    });
+
+
+    socket.on('connect_error', (err) => {
+        console.error(`Connect error: ${err.message}`);
+
+        if (reconnectAttempts > 0) {
+            clearTimeout(manualReconnectTimer); 
+            manualReconnectTimer = setTimeout(attemptReconnect, RECONNECT_DELAY);
+        }
+    });
+
+    initializeGame(socket);
+}
     const token = localStorage.getItem('jwt_token');
     if (token && !action) {
         startApp(token);
