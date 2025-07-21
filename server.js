@@ -948,7 +948,7 @@ function calculateTotalStats(player) {
 
     player.buffs = player.buffs || [];
     player.buffs.forEach(buff => {
-        if (buff.id === 'awakening') {
+if (buff.id === 'awakening' || buff.id === 'awakening_earring') {
              buffAttackMultiplier *= 10;
              buffDefenseMultiplier *= 10;
              buffHpMultiplier *= 10;
@@ -2666,6 +2666,28 @@ function applyAwakeningBuff(player, duration = 10000) {
     calculateTotalStats(player);
     player.currentHp = player.stats.total.hp;
 }
+
+
+function applyEarringAwakeningBuff(player, duration = 10000) {
+    player.buffs = player.buffs || [];
+    const existingBuff = player.buffs.find(b => b.id === 'awakening_earring');
+    
+    if (existingBuff) {
+
+        const remainingTime = Math.max(0, new Date(existingBuff.endTime) - Date.now());
+        existingBuff.endTime = new Date(Date.now() + remainingTime + duration);
+    } else {
+        player.buffs.push({
+            id: 'awakening_earring', 
+            name: '각성(이어링)',
+            endTime: new Date(Date.now() + duration),
+            effects: {}
+        });
+    }
+    calculateTotalStats(player);
+    player.currentHp = player.stats.total.hp;
+}
+
 function addBuff(player, buffId, name, duration, effects) {
     player.buffs = player.buffs || [];
     const existingBuff = player.buffs.find(b => b.id === buffId);
@@ -2727,7 +2749,7 @@ function gameTick(player) {
             }
 
             if (hasBuff(player, 'predator_state')) {
-                pDmg += finalAttack * 2.0; // 추가 피해
+                pDmg += finalAttack * 2.0;
             }
             const playerCritRoll = Math.random();
             if (playerCritRoll < player.stats.critChance) {
@@ -2752,7 +2774,7 @@ function gameTick(player) {
             mDmg = Math.max(0, raidBoss.attack - (player.stats.total.defense * 2.0)) + empoweredDamage;
         }
         if (hasBuff(player, 'predator_endurance')) {
-            mDmg *= 0.7; // 30% 피해 감소
+            mDmg *= 0.7; 
         }
 
         player.currentHp -= mDmg;
@@ -2978,12 +3000,13 @@ function gameTick(player) {
 
 
     if (pDmg > 0 || mDmg > 0) { player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg }); }
-    if (pDmg > 0 && player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) {
-        applyAwakeningBuff(player, 10000);
-    }
-    if (pDmg > 0 && player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) {
-        applyAwakeningBuff(player, 15000);
-    }
+
+if (pDmg > 0 && player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) {
+    applyEarringAwakeningBuff(player, 10000);
+}
+if (pDmg > 0 && player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) {
+    applyEarringAwakeningBuff(player, 15000);
+}
     
     if (player.currentHp <= 0) {
         const reviveEffect = player.equippedPet?.effects?.revive;
@@ -4914,7 +4937,7 @@ async function rerollItemPrefix(player, itemUid) {
 
 
     let itemToReroll = null;
-    let itemLocation = null; // 'equipment' 또는 'inventory'
+    let itemLocation = null; 
     
     for (const slot in player.equipment) {
         if (player.equipment[slot] && player.equipment[slot].uid === itemUid) {
