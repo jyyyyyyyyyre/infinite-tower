@@ -889,7 +889,7 @@ if (player.autoSellList && player.autoSellList.includes(item.id) && (item.enhanc
     } else if (!item.tradable || item.enhancement > 0 || item.grade === 'Primal') {
         player.inventory.push(item);
     } else {
-const stackableItem = player.inventory.find(i => i.id === item.id && i.prefix === item.prefix && (!i.enhancement || i.enhancement === 0));
+const stackableItem = player.inventory.find(i => i.id === item.id && (i.prefix || null) === (item.prefix || null) && (!i.enhancement || i.enhancement === 0));
         if (stackableItem) {
             stackableItem.quantity += item.quantity;
         } else {
