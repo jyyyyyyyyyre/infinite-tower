@@ -234,8 +234,8 @@ function startApp(token) {
 
     let manualReconnectTimer = null;
     let reconnectAttempts = 0;
-    const MAX_RECONNECT_ATTEMPTS = 15; // 시도 횟수를 15회로 늘림
-    const RECONNECT_DELAY = 2000; // 2초 간격으로 시도
+    const MAX_RECONNECT_ATTEMPTS = 15; 
+    const RECONNECT_DELAY = 2000; 
 
     const startManualReconnect = () => {
 
@@ -345,62 +345,90 @@ function createFameUserHtml(username, score) {
     const fame = getFameDetails(score);
     return `${fame.icon} <span class="${fame.className}">${username}(${(score || 0).toLocaleString()})</span>`;
 }
+function computeClientEnhanceBonus(item) {
+    if (!item) return 0;
+
+    let rawBonus = item.baseEffect;
+    if (item.grade === 'Primal' && item.randomizedValue) {
+        rawBonus += (item.randomizedValue / 100);
+    }
+
+    for (let i = 1; i <= item.enhancement; i++) {
+
+        if (item.grade === 'Primal') {
+            rawBonus += item.baseEffect * (i <= 10 ? 0.05 : 0.10);
+        } else {
+
+            rawBonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5);
+        }
+    }
+    
+
+    const penalties = {
+        '격노': 0.90, '파멸': 0.99, '포식자': 0.82, '계시': 0.93
+    };
+
+    if (item.prefix && penalties[item.prefix]) {
+
+        return rawBonus * penalties[item.prefix];
+    }
+    
+
+    return rawBonus;
+}
 
 const createItemHTML = (item, options = {}) => {
     const { showName = true, showEffect = true, forTooltip = false, showEnchantments = true } = options;
     if (!item) return '';
 
+    const prefixColors = {
+        '완벽': '#FFFFFF', '격노': '#FF4D4D', '파멸': '#B388FF',
+        '포식자': '#CF2222', '계시': '#FFD700'
+    };
+    const prefixColor = item.prefix ? prefixColors[item.prefix] : '';
+
     let effectText = '';
-    if (showEffect) { 
-        if (item.type === 'weapon') {
-            let bonus = item.baseEffect || 0;
-            if (item.grade === 'Primal' && item.randomizedValue) {
-                bonus += (item.randomizedValue / 100);
-            }
-            for (let i = 1; i <= item.enhancement; i++) { 
-                bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); 
-            }
-            effectText = `⚔️공격력 +${(bonus * 100).toFixed(1)}%`;
-        } else if (item.type === 'armor') {
-            let bonus = item.baseEffect || 0;
-            if (item.grade === 'Primal' && item.randomizedValue) {
-                bonus += (item.randomizedValue / 100);
-            }
-            for (let i = 1; i <= item.enhancement; i++) { 
-                bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); 
-            }
-            effectText = `❤️🛡️체/방 +${(bonus * 100).toFixed(1)}%`;
-        } else if (item.type === 'accessory' || item.type === 'pet') {
-            effectText = item.description || '';
+    if (showEffect) {
+        if (item.type === 'weapon' || item.type === 'armor') {
+            const bonus = computeClientEnhanceBonus(item);
+            const typeText = item.type === 'weapon' ? '⚔️공격력' : '❤️🛡️체/방';
+            effectText = `${typeText} +${(bonus * 100).toFixed(1)}%`;
         } else {
             effectText = item.description || '';
         }
     }
 
     const nameClass = item.grade || 'Common';
-    const nameHTML = showName ? `<div class="item-name ${nameClass}">${item.name}</div>` : '';
+
+    const prefixHTML = item.prefix ? `<span style="color: ${prefixColor}; text-shadow: 0 0 5px ${prefixColor};">[${item.prefix}]</span><br>` : '';
+    const nameOnly = item.name.replace(/\[.*?\]\s*/, '');
+    const nameHTML = showName ? `<div class="item-name ${nameClass}">${prefixHTML}${nameOnly}</div>` : '';
+
+    let prefixDescription = '';
+    if (showName && item.prefix) {
+        switch (item.prefix) {
+            case '격노': prefixDescription = '<div class="item-prefix-description">(낮은 확률로 공격/방어 증폭)</div>'; break;
+            case '파멸': prefixDescription = '<div class="item-prefix-description">(낮은 확률로 강력한 추가 피해/보호막)</div>'; break;
+            case '포식자': prefixDescription = '<div class="item-prefix-description">(피의 갈망 발동 시 능력 강화)</div>'; break;
+            case '계시': prefixDescription = '<div class="item-prefix-description">(매우 낮은 확률로 각성 발동)</div>'; break;
+        }
+    }
+
+    const nameAndDescriptionHTML = `${nameHTML}${prefixDescription}`;
     const enhanceText = item.enhancement ? `<div class="item-enhancement-level">[+${item.enhancement}]</div>` : '';
     const quantityText = item.quantity > 1 && !forTooltip ? `<div class="item-quantity">x${item.quantity}</div>` : '';
     const imageHTML = item.image ? `<div class="item-image"><img src="/image/${item.image}" alt="${item.name}" draggable="false"></div>` : '<div class="item-image"></div>';
-
+    
     let enchantmentsHTML = '';
     if (showEnchantments && item.enchantments && item.enchantments.length > 0) {
         enchantmentsHTML = '<div class="item-enchantments">';
         const gradeToColor = {
-            supreme: 'var(--mystic-color)', 
-            rare_enchant: 'var(--epic-color)', 
-            common_enchant: 'var(--common-color)' 
+            supreme: 'var(--mystic-color)', rare_enchant: 'var(--epic-color)', common_enchant: 'var(--common-color)' 
         };
         const typeToName = {
-            all_stats_percent: '✨모든 스탯',
-            focus: '🎯집중',
-            penetration: '💎관통',
-            tenacity: '🛡️강인함',
-            attack_percent: '⚔️공격력',
-            defense_percent: '🛡️방어력',
-            hp_percent: '❤️체력',
-            gold_gain: '💰골드 획득',
-            extra_climb_chance: '🍀추가 등반',
+            all_stats_percent: '✨모든 스탯', focus: '🎯집중', penetration: '💎관통',
+            tenacity: '🛡️강인함', attack_percent: '⚔️공격력', defense_percent: '🛡️방어력',
+            hp_percent: '❤️체력', gold_gain: '💰골드 획득', extra_climb_chance: '🍀추가 등반',
             def_penetration: '🛡️방어력 관통',
         };
         item.enchantments.forEach(enchant => {
@@ -412,8 +440,8 @@ const createItemHTML = (item, options = {}) => {
         enchantmentsHTML += '</div>';
     }
 
-    const effectHTML = effectText ? `<div class="item-effect">${effectText}</div>` : '';
-    return `${imageHTML}<div class="item-info">${nameHTML}${effectHTML}${enchantmentsHTML}</div>${quantityText}${enhanceText}`;
+   const effectHTML = effectText ? `<div class="item-effect">${effectText}</div>` : '';
+    return `${imageHTML}<div class="item-info">${nameAndDescriptionHTML}${effectHTML}${enchantmentsHTML}</div>${quantityText}${enhanceText}`;
 };
 
 function createPlayerPanelHTML(player) {
@@ -1224,12 +1252,13 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
         }
     }
 
-    const buffsContainer = document.getElementById('player-buffs-container');
+   const buffsContainer = document.getElementById('player-buffs-container');
     buffsContainer.innerHTML = ''; 
     if (player.buffs && player.buffs.length > 0) {
         player.buffs.forEach(buff => {
             const remainingTime = Math.max(0, Math.floor((new Date(buff.endTime) - new Date()) / 1000));
-            buffsContainer.innerHTML += `<div class="buff-icon" title="${buff.name}">✨ 각성 (${remainingTime}초)</div>`;
+            const buffIdClass = buff.id.replace(/_/g, '-');
+            buffsContainer.innerHTML += `<div class="buff-icon ${buffIdClass}" title="${buff.name}">${buff.name} (${remainingTime}초)</div>`;
         });
     }
 
@@ -1253,6 +1282,43 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
     const activeTab = document.querySelector('.tab-button.active');
     if (activeTab && activeTab.dataset.tab === 'research-tab') {
         renderResearchTab(player); 
+    }
+	
+	
+	 const setEffectDisplay = document.getElementById('set-effect-display');
+    const weapon = player.equipment.weapon;
+    const armor = player.equipment.armor;
+
+    if (weapon && armor && weapon.prefix && weapon.prefix === armor.prefix) {
+        const prefix = weapon.prefix;
+        setEffectDisplay.className = `set-effect-container active set-effect-${prefix}`;
+        
+        let effectTitle = `[${prefix}] 2세트 효과`;
+        let effectDescription = '';
+
+        switch (prefix) {
+            case '완벽':
+                effectDescription = '모든 스탯(공격력, 방어력, 체력)이 5% 증가합니다.';
+                break;
+            case '격노':
+                effectDescription = "'격노' 상태의 지속시간이 2초 증가합니다 (총 7초).";
+                break;
+            case '파멸':
+                effectDescription = "무기 추가 피해량이 300%로, 방어구 보호막량이 50%로 증가합니다.";
+                break;
+            case '포식자':
+                effectDescription = "'포식' 상태의 지속시간이 5초로 증가합니다.";
+                break;
+            case '계시':
+                effectDescription = "'각성' 상태의 지속시간이 2초 증가합니다 (총 7초).";
+                break;
+        }
+        
+        setEffectDisplay.innerHTML = `<h4>${effectTitle}</h4><p>${effectDescription}</p>`;
+
+    } else {
+        setEffectDisplay.className = 'set-effect-container inactive';
+        setEffectDisplay.innerHTML = '<h4>세트 효과 비활성화</h4><p>동일한 접두어의 무기와 방어구를 장착하세요.</p>';
     }
 };
 	
@@ -1524,7 +1590,8 @@ if (elements.incubator.grid) {
         });
     }
 
- function updateEnhancementPanel(item) {
+
+  function updateEnhancementPanel(item) {
     const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
 
     if (!item) {
@@ -1598,12 +1665,11 @@ if (elements.incubator.grid) {
             useTicketCheck.disabled = !(item.enhancement >= 10 && hasTicket && canBeDestroyed);
             useTicketCheck.parentElement.title = (item.enhancement >= 10 && !canBeDestroyed) ? "이 아이템은 현재 강화 단계에서 파괴되지 않습니다." : "";
 
-            let baseBonus = item.baseEffect;
-            if (item.grade === 'Primal' && item.randomizedValue) baseBonus += (item.randomizedValue / 100);
-            const enhancementBonusArr = Array.from({ length: item.enhancement }, (_, i) => item.baseEffect * (i < 10 ? 0.1 : 0.5));
-            const currentEnhancementBonus = enhancementBonusArr.reduce((s, v) => s + v, 0);
-            const currentTotalBonus = baseBonus + currentEnhancementBonus;
-            const nextTotalBonus = currentTotalBonus + item.baseEffect * (item.enhancement < 10 ? 0.1 : 0.5);
+            const currentTotalBonus = computeClientEnhanceBonus(item);
+
+            const tempNextItem = { ...item, enhancement: item.enhancement + 1 };
+            const nextTotalBonus = computeClientEnhanceBonus(tempNextItem);
+
             before.innerHTML = `<b>+${item.enhancement}</b><br>${(currentTotalBonus * 100).toFixed(1)}%`;
             after.innerHTML = `<b>+${item.enhancement + 1}</b><br>${(nextTotalBonus * 100).toFixed(1)}%`;
 
@@ -1705,8 +1771,8 @@ if (elements.incubator.grid) {
         }
 
         if (!isEnhanceable && item.type !== 'accessory' && item.type !== 'pet') {
-            if (item.id === 'hammer_hephaestus' || item.id === 'prevention_ticket') {
-                infoContentHTML += `<div style="text-align:center; color: var(--text-muted);">강화 탭에서 체크하여 사용합니다.</div>`;
+            if (item.id === 'hammer_hephaestus' || item.id === 'prevention_ticket' || item.id === 'prefix_reroll_scroll') {
+                infoContentHTML += `<div style="text-align:center; color: var(--text-muted);">대장간에서 아이템 선택 후 사용합니다.</div>`;
             } else {
                 const isEgg = item.category === 'Egg' || item.type === 'egg';
                 if (isEgg) {
@@ -1719,12 +1785,18 @@ if (elements.incubator.grid) {
                 }
             }
         }
+        
+        if (isEnhanceable && (item.grade === 'Mystic' || item.grade === 'Primal')) {
+            const hasRerollScroll = currentPlayerState.inventory.some(i => i.id === 'prefix_reroll_scroll');
+            if (hasRerollScroll) {
+                buttonsHTML += `<button class="action-btn" data-action="reroll-prefix" style="background-color: #8e44ad; width: 100%; padding: 12px; font-size: 1.1em;">세트 변경 (스크롤 1개 소모)</button>`;
+            }
+        }
 
         buttonsHTML += '</div>';
         info.innerHTML = infoContentHTML + buttonsHTML;
     }
 }
-
     function updateRiftEnchantPanel(item, previouslyLockedIndices = []) {
         const { slot, optionsContainer, costDisplay, button } = elements.riftEnchant;
     const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' || (item.type === 'accessory' && item.grade === 'Primal'));
@@ -2162,6 +2234,14 @@ case 'deposit-storage':
             }
             break;
         }
+case 'reroll-prefix': {
+    const item = findItemInState(selectedInventoryItemUid);
+    if (item && confirm(`[${item.name}] 아이템의 접두사를 변경하시겠습니까?\n\n- 비용: 신비스크롤 1개\n- 결과는 현재와 다른 접두사 중에서 무작위로 결정됩니다.`)) {
+        socket.emit('rerollPrefix', { uid: selectedInventoryItemUid });
+        updateEnhancementPanel(null); 
+    }
+    break;
+}
             case 'sell':
                 if (confirm("정말 판매하시겠습니까?")) {
                     socket.emit('sellItem', { uid: selectedInventoryItemUid, sellAll: target.dataset.sellAll === 'true' });
@@ -3392,25 +3472,35 @@ if (target.id === 'admin-toggle-helper-btn') {
         alert('유저 정보 저장을 요청했습니다.');
     });
 
-    document.getElementById('admin-grant-item-btn').addEventListener('click', () => {
-        const userId = document.getElementById('admin-target-userId').value;
-        const username = document.getElementById('admin-user-search-input').value;
-        const itemAlias = document.getElementById('admin-item-alias').value;
-        if (!userId || !itemAlias) return alert('유저를 먼저 검색하고, 아이템 단축어를 입력하세요.');
-        const primalQualitySelect = document.getElementById('admin-primal-quality');
-        socket.emit('admin:grantItem', {
-            userId, username, itemAlias,
-            quantity: parseInt(document.getElementById('admin-item-quantity').value) || 1,
-            enhancement: parseInt(document.getElementById('admin-item-enhancement').value) || 0,
-            primalQuality: primalQualitySelect.style.display !== 'none' ? primalQualitySelect.value : null,
-        });
-        alert(`${username}에게 아이템 지급을 요청했습니다.`);
-    });
+   document.getElementById('admin-grant-item-btn').addEventListener('click', () => {
+    const userId = document.getElementById('admin-target-userId').value;
+    const username = document.getElementById('admin-user-search-input').value; 
+    const itemAlias = document.getElementById('admin-item-alias').value;
+    if (!userId || !itemAlias) return alert('유저를 먼저 검색하고, 아이템 단축어를 입력하세요.');
     
-    document.getElementById('admin-item-alias').addEventListener('input', (e) => {
-        const isPrimal = e.target.value.includes('무기6') || e.target.value.includes('방어구6');
-        document.getElementById('admin-primal-quality').style.display = isPrimal ? 'block' : 'none';
+    const prefixSelect = document.getElementById('admin-item-prefix');
+    
+    socket.emit('admin:grantItem', {
+        userId, 
+        username, 
+        itemAlias,
+        quantity: parseInt(document.getElementById('admin-item-quantity').value) || 1,
+        enhancement: parseInt(document.getElementById('admin-item-enhancement').value) || 0,
+        primalQuality: null, 
+        prefix: prefixSelect.style.display !== 'none' ? prefixSelect.value : null
     });
+    alert(`${username}에게 아이템 지급을 요청했습니다.`);
+});
+    
+   document.getElementById('admin-item-alias').addEventListener('input', (e) => {
+    const alias = e.target.value;
+    const isPrimal = alias.includes('무기6') || alias.includes('방어구6');
+    const isMystic = alias.includes('무기5') || alias.includes('방어구5');
+    
+    document.getElementById('admin-primal-quality').style.display = 'none';
+
+    document.getElementById('admin-item-prefix').style.display = (isPrimal || isMystic) ? 'block' : 'none';
+});
 
     document.querySelector('.sanction-buttons').addEventListener('click', (e) => {
         if (e.target.tagName !== 'BUTTON') return;

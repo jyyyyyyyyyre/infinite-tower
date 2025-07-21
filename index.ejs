@@ -159,7 +159,7 @@
                                 <div class="slot" id="earring-slot" data-slot="earring"></div>
                                 <div class="slot" id="wristwatch-slot" data-slot="wristwatch"></div>
                             </div>
-
+<div id="set-effect-display" class="set-effect-container"></div>
                         </div>
                     </div>
                     
@@ -713,12 +713,14 @@
                                             <input type="text" id="admin-item-alias" placeholder="아이템 단축어 (예: 무기5)">
                                             <input type="number" id="admin-item-quantity" placeholder="수량 (기본 1)">
                                             <input type="number" id="admin-item-enhancement" placeholder="강화 수치 (기본 0)">
-                                            <select id="admin-primal-quality" style="display: none;">
-                                                <option value="최하급">최하급</option>
-                                                <option value="중급">중급</option>
-                                                <option value="상급">상급</option>
-                                                <option value="최상급">최상급</option>
-                                            </select>
+                                          <select id="admin-item-prefix" style="display: none;">
+    <option value="random">랜덤 접두어</option>
+    <option value="완벽">완벽</option>
+    <option value="격노">격노</option>
+    <option value="파멸">파멸</option>
+    <option value="포식자">포식자</option>
+    <option value="계시">계시</option>
+</select>
                                             <button id="admin-grant-item-btn" class="action-btn list-auction-btn">아이템 지급</button>
                                         </div>
                                     </div>

@@ -67,8 +67,8 @@ const RIFT_ENCHANT_COST = {
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 115000000000, ATTACK: 0, DEFENSE: 0,
-    REWARDS: { GOLD: 8000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 1150000000000, ATTACK: 0, DEFENSE: 0,
+    REWARDS: { GOLD: 160000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
 const MailSchema = new mongoose.Schema({
@@ -375,7 +375,8 @@ const adminItemAlias = {
     '악세5': 'primal_acc_earring_01',
     '악세6': 'primal_acc_wristwatch_01',
     '정령': 'spirit_essence',
-    '제네시스': 'spirit_primal'
+    '제네시스': 'spirit_primal',
+'신비스크롤': 'prefix_reroll_scroll'
 };
 
 const itemData = {
@@ -397,8 +398,9 @@ const itemData = {
     a004: { name: '영겁의 흉갑', type: 'armor', grade: 'Epic', baseEffect: 0.50, image: 'armor4.png', tradable: true },
     w005: { name: '태초의 파편', type: 'weapon', grade: 'Mystic', baseEffect: 2.50, image: 'sword5.png', tradable: true },
     a005: { name: '세계수의 심장', type: 'armor', grade: 'Mystic', baseEffect: 2.50, image: 'armor5.png', tradable: true },
-    primal_w01: { name: '데미우르고스', type: 'weapon', grade: 'Primal', baseEffect: 3.00, randomStat: { type: 'attack_power_percent', min: 1460, max: 2200 }, image: 'primal_sword.png', tradable: true },
-    primal_a01: { name: '망각의 지평선', type: 'armor', grade: 'Primal', baseEffect: 3.00, randomStat: { type: 'hp_def_percent', min: 1460, max: 2200 }, image: 'primal_armor.png', tradable: true },
+ primal_w01: { name: '데미우르고스', type: 'weapon', grade: 'Primal', baseEffect: 25.00, image: 'primal_sword.png', tradable: true },
+primal_a01: { name: '망각의 지평선', type: 'armor', grade: 'Primal', baseEffect: 25.00, image: 'primal_armor.png', tradable: true },
+'prefix_reroll_scroll': { name: '신비스크롤', type: 'Special', category: 'Consumable', grade: 'Epic', description: '미스틱, 프라이멀 등급 장비의 세트를 현재와 다른 세트로 무작위 변경합니다.', image: 'prefix_scroll.png', tradable: true },
     rift_shard: { name: '균열의 파편', type: 'Special', category: 'Material', grade: 'Legendary', description: '심연의 균열에서 흘러나온 파편. 불안정한 힘을 안정시키기 위해 대량의 골드가 필요합니다.', image: 'rift_shard.png', tradable: true },
     form_locking_stone: { name: '형상의 고정석', type: 'Special', category: 'Material', grade: 'Mystic', description: '장비에 부여된 균열의 힘 하나를 완벽하게 고정시킵니다. 극도로 희귀하여 부르는 게 값입니다.', image: 'form_locking_stone.png', tradable: true },
     boss_participation_box: { name: '월드보스 참여 상자', type: 'Special', category: 'Consumable', grade: 'Rare', description: '월드보스 토벌에 참여한 등반자에게 주어지는 상자. 사용 시 골드나 아이템을 얻을 수 있다.', image: 'box.png', tradable: false },
@@ -492,39 +494,38 @@ function grantTitle(player, titleName) {
 function checkStateBasedTitles(player) {
     if (!player) return;
 
-    // [유리대포]
     if (player.equipment.weapon?.grade === 'Mystic' && player.equipment.armor?.grade === 'Common') {
         grantTitle(player, '[유리대포]');
     }
-    // [마부장인]
+
     if (player.equipment.weapon?.enchantments?.length > 0 && player.equipment.armor?.enchantments?.length > 0) {
         grantTitle(player, '[마부장인]');
     }
-    // [로포비아]
+
     if (player.equippedPet?.id === 'bahamut' || player.petInventory.some(p => p.id === 'bahamut')) {
         grantTitle(player, '[로포비아]');
     }
-    // [원소술사]
+
     const fusionPets = ['ignis_aqua', 'tempest', 'thunderbird'];
     const hasAllFusionPets = fusionPets.every(petId => player.petInventory.some(p => p.id === petId));
     if (hasAllFusionPets) {
         grantTitle(player, '[원소술사]');
     }
-    // [전당포]
+
     const mysticAcc = ['acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
     const hasAllMysticAcc = mysticAcc.every(accId => player.inventory.some(i => i.id === accId) || Object.values(player.equipment).some(e => e?.id === accId));
     if (hasAllMysticAcc) {
         grantTitle(player, '[전당포]');
     }
-    // [인과율의 밖]
+
     if (player.equipment.weapon?.grade === 'Primal' && player.equipment.armor?.grade === 'Primal') {
         grantTitle(player, '[인과율의 밖]');
     }
-    // [랭커]
+
     if (player.equipment.weapon?.grade === 'Mystic' && player.equipment.armor?.grade === 'Mystic') {
         grantTitle(player, '[랭커]');
     }
-    // [균열석]
+
     const riftShards = player.inventory.find(i => i.id === 'rift_shard');
     if (riftShards && riftShards.quantity >= 10000) {
         grantTitle(player, '[균열석]');
@@ -598,20 +599,20 @@ async function loadGameSettings() {
                 1: { itemsByGrade: { Common: ['w001', 'a001'] }, rates: { Common: 0.979, Rare: 0.02 }, specialDrops: { 'rift_shard': { chance: 0.0005 } } },
                 2: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'] }, rates: { Common: 0.899, Rare: 0.09, Legendary: 0.01 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
                 3: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'] }, rates: { Common: 0.779, Rare: 0.16, Legendary: 0.055, Epic: 0.005 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
-                4: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'] }, rates: { Common: 0.649, Rare: 0.25, Legendary: 0.09, Epic: 0.0098, Mystic: 0.0002 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
+                4: { itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'] }, rates: { Common: 0.649, Rare: 0.25, Legendary: 0.09, Epic: 0.0098, Mystic: 0.0003 }, specialDrops: { 'rift_shard': { chance: 0.001 } } },
                 5: {
                     itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'], Primal: ['primal_w01', 'primal_a01'] },
-                    rates: { Common: 0.5994995, Rare: 0.28, Legendary: 0.11, Epic: 0.0098, Mystic: 0.0002, Primal: 0.0000005 },
+                    rates: { Common: 0.5994995, Rare: 0.28, Legendary: 0.11, Epic: 0.0098, Mystic: 0.0003, Primal: 0.000001 },
                     specialDrops: { 'rift_shard': { chance: 0.001 } }
                 },
                 6: {
                     itemsByGrade: { Common: ['w001', 'a001'], Rare: ['w002', 'a002'], Legendary: ['w003', 'a003'], Epic: ['w004', 'a004'], Mystic: ['w005', 'a005'], Primal: ['primal_w01', 'primal_a01', 'primal_acc_necklace_01', 'primal_acc_earring_01', 'primal_acc_wristwatch_01'] },
-                    rates: { Common: 0.5491995, Rare: 0.30, Legendary: 0.13, Epic: 0.019, Mystic: 0.0008, Primal: 0.0000005 },
+                    rates: { Common: 0.491995, Rare: 0.30, Legendary: 0.13, Epic: 0.019, Mystic: 0.0016, Primal: 0.000001 },
                     specialDrops: { 'rift_shard': { chance: 0.002 } }
                 }
             },
             globalLootTable: [
-                { id: 'gold_pouch', chance: (0.002) }, { id: 'pet_egg_normal', chance: (0.0016) }, { id: 'prevention_ticket', chance: (0.00018) }, { id: 'pet_egg_ancient', chance: (0.00005) }, { id: 'hammer_hephaestus', chance: (0.00006) }, { id: 'tome_socket1', chance: (0.000008) }, { id: 'tome_socket2', chance: (0.0000065) }, { id: 'tome_socket3', chance: (0.000005) }, { id: 'return_scroll', chance: (0.000009 *1.5) }, { id: 'acc_necklace_01', chance: (0.000004) }, { id: 'acc_earring_01', chance: (0.000004) }, { id: 'acc_wristwatch_01', chance: (0.000004) }, { id: 'pet_egg_mythic', chance: (0.0000005) }, { id: 'form_locking_stone', chance: (0.0001 / 2) }
+                { id: 'gold_pouch', chance: (0.002) }, { id: 'pet_egg_normal', chance: (0.0016) }, { id: 'prevention_ticket', chance: (0.00018) }, { id: 'pet_egg_ancient', chance: (0.00005) }, { id: 'hammer_hephaestus', chance: (0.00006) }, { id: 'tome_socket1', chance: (0.000008) }, { id: 'tome_socket2', chance: (0.0000065) }, { id: 'tome_socket3', chance: (0.000005) }, { id: 'return_scroll', chance: (0.000009 *1.5) }, { id: 'acc_necklace_01', chance: (0.000004) }, { id: 'acc_earring_01', chance: (0.000004) }, { id: 'acc_wristwatch_01', chance: (0.000004) }, { id: 'pet_egg_mythic', chance: (0.0000005) }, { id: 'form_locking_stone', chance: (0.0001 / 2) },{ id: 'prefix_reroll_scroll', chance: (0.0001 / 2) } 
             ],
             enhancementTable: { 1: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 2: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 3: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 4: { success: 1.00, maintain: 0.00, fail: 0.00, destroy: 0.00 }, 5: { success: 0.90, maintain: 0.10, fail: 0.00, destroy: 0.00 }, 6: { success: 0.80, maintain: 0.20, fail: 0.00, destroy: 0.00 }, 7: { success: 0.70, maintain: 0.25, fail: 0.05, destroy: 0.00 }, 8: { success: 0.50, maintain: 0.30, fail: 0.20, destroy: 0.00 }, 9: { success: 0.40, maintain: 0.40, fail: 0.20, destroy: 0.00 }, 10: { success: 0.30, maintain: 0.45, fail: 0.25, destroy: 0.00 }, 11: { success: 0.20, maintain: 0.00, fail: 0.00, destroy: 0.80 }, 12: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }, 13: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }, 14: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 }, 15: { success: 0.15, maintain: 0.00, fail: 0.00, destroy: 0.85 } },
             highEnhancementRate: { success: 0.10, maintain: 0.90, fail: 0.00, destroy: 0.00 }
@@ -742,7 +743,7 @@ if (user.ban && user.ban.isBanned) {
         res.status(500).json({ message: '서버 내부 오류가 발생했습니다.' });
     }
 });
-function createItemInstance(id, quantity = 1, enhancement = 0) {
+function createItemInstance(id, quantity = 1, enhancement = 0, specificPrefix = null) {
     const d = itemData[id] || spiritData[id]; 
     if (!d) return null;
 
@@ -757,7 +758,8 @@ function createItemInstance(id, quantity = 1, enhancement = 0) {
         accessoryType: d.accessoryType,
         description: d.description,
         tradable: d.tradable,
-        quantity: quantity
+        quantity: quantity,
+        prefix: null
     };
 
     if (d.offlineBonus) {
@@ -773,20 +775,15 @@ function createItemInstance(id, quantity = 1, enhancement = 0) {
         item.enchantments = [];
     }
 
-    if (d.grade === 'Primal' && d.randomStat) {
-        const { min, max } = d.randomStat;
-        const randomValue = Math.floor(Math.random() * (max - min + 1)) + min;
-        item.randomizedValue = randomValue;
-
-        const percentage = (randomValue - min) / (max - min);
-        let quality;
-        if (percentage >= 0.9) quality = '최상급';
-        else if (percentage >= 0.7) quality = '상급';
-        else if (percentage >= 0.4) quality = '중급';
-        else quality = '최하급';
-        
-        item.quality = quality;
-        item.name = `[${quality}] ${d.name}`;
+    if ((item.grade === 'Mystic' || item.grade === 'Primal') && (item.type === 'weapon' || item.type === 'armor')) {
+        if (specificPrefix && specificPrefix !== 'random') {
+            item.prefix = specificPrefix;
+        } else {
+            const prefixes = ['완벽', '격노', '파멸', '포식자', '계시'];
+            const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+            item.prefix = randomPrefix;
+        }
+        item.name = `[${item.prefix}] ${d.name}`;
     }
 
     return item;
@@ -892,7 +889,7 @@ if (player.autoSellList && player.autoSellList.includes(item.id) && (item.enhanc
     } else if (!item.tradable || item.enhancement > 0 || item.grade === 'Primal') {
         player.inventory.push(item);
     } else {
-        const stackableItem = player.inventory.find(i => i.id === item.id && (!i.enhancement || i.enhancement === 0));
+const stackableItem = player.inventory.find(i => i.id === item.id && i.prefix === item.prefix && (!i.enhancement || i.enhancement === 0));
         if (stackableItem) {
             stackableItem.quantity += item.quantity;
         } else {
@@ -926,7 +923,6 @@ function calculateTotalStats(player) {
         if (titleEffects.petStatBonus) titlePetStatBonus += titleEffects.petStatBonus;
     }
 
-
     player.stats.critChance = 0;
     player.stats.critResistance = 0;
     player.focus = 0;
@@ -950,14 +946,14 @@ function calculateTotalStats(player) {
     if (player.equipment.wristwatch?.id === 'acc_wristwatch_01') player.stats.critChance += 0.20;
     if (player.equipment.wristwatch?.id === 'primal_acc_wristwatch_01') player.stats.critChance += 0.30;
 
-
-    if (player.buffs && player.buffs.length > 0) {
-        player.buffs.forEach(buff => {
-            if (buff.effects.attackMultiplier) buffAttackMultiplier *= buff.effects.attackMultiplier;
-            if (buff.effects.defenseMultiplier) buffDefenseMultiplier *= buff.effects.defenseMultiplier;
-            if (buff.effects.hpMultiplier) buffHpMultiplier *= buff.effects.hpMultiplier;
-        });
-    }
+    player.buffs = player.buffs || [];
+    player.buffs.forEach(buff => {
+        if (buff.id === 'awakening') {
+             buffAttackMultiplier *= 10;
+             buffDefenseMultiplier *= 10;
+             buffHpMultiplier *= 10;
+        }
+    });
 
     if (player.equipment.weapon) {
         weaponBonus = computeEnhanceBonus(player.equipment.weapon);
@@ -966,6 +962,11 @@ function calculateTotalStats(player) {
         }
     }
     if (player.equipment.armor) armorBonus = computeEnhanceBonus(player.equipment.armor);
+    
+    if (player.equipment.weapon?.prefix === '완벽' && player.equipment.armor?.prefix === '완벽') {
+        weaponBonus += (player.equipment.weapon.baseEffect * 0.05);
+        armorBonus += (player.equipment.armor.baseEffect * 0.05);
+    }
 
     if (player.unlockedArtifacts[1] && isBossFloor(player.level)) {
         artifactAttackMultiplier += 0.50;
@@ -990,7 +991,6 @@ function calculateTotalStats(player) {
         }
     }
 
-
     let researchBonuses = {
         attackPercent: 0, hpPercent: 0, defensePercent: 0, critChance: 0, critDamage: 0,
         penetration: 0, focus: 0, critResistance: 0, tenacity: 0, bloodthirst: 0,
@@ -1000,9 +1000,7 @@ function calculateTotalStats(player) {
         for (const specializationId in player.research) {
             const specialization = researchConfig[specializationId];
             if (!specialization) continue;
-
             const playerResearchLevels = player.research[specializationId] instanceof Map ? Object.fromEntries(player.research[specializationId]) : player.research[specializationId];
-
             for (const techId in playerResearchLevels) {
                 const level = playerResearchLevels[techId];
                 const tech = specialization.researches.find(t => t.id === techId);
@@ -1016,7 +1014,6 @@ function calculateTotalStats(player) {
         }
     }
     
-
     let totalHp = (base.hp * (1 + armorBonus)) * buffHpMultiplier * enchantHpPercent * enchantAllStatsPercent * titleHpBonus;
     let totalAttack = (base.attack * (1 + weaponBonus)) * artifactAttackMultiplier * buffAttackMultiplier * enchantAttackPercent * enchantAllStatsPercent * titleAttackBonus;
     let totalDefense = (base.defense * (1 + armorBonus)) * artifactDefenseMultiplier * buffDefenseMultiplier * enchantDefensePercent * enchantAllStatsPercent;
@@ -1036,7 +1033,22 @@ function calculateTotalStats(player) {
     totalHp *= (1 + researchBonuses.hpPercent);
     totalAttack *= (1 + researchBonuses.attackPercent);
     totalDefense *= (1 + researchBonuses.defensePercent);
+    
+    const weaponPrefix = player.equipment.weapon?.prefix;
+    const armorPrefix = player.equipment.armor?.prefix;
 
+    const penalties = {
+        '격노': 0.90, '파멸': 0.99, '포식자': 0.82, '계시': 0.93
+    };
+
+    if (weaponPrefix && penalties[weaponPrefix]) {
+        totalAttack *= penalties[weaponPrefix];
+    }
+    if (armorPrefix && penalties[armorPrefix]) {
+        totalDefense *= penalties[armorPrefix];
+        totalHp *= penalties[armorPrefix];
+    }
+    
     player.stats.critChance = (player.stats.critChance + titleCritBonus) * (1 + researchBonuses.critChance);
     player.stats.critResistance *= (1 + researchBonuses.critResistance);
     player.focus = player.focus * (1 + researchBonuses.focus);
@@ -1057,12 +1069,19 @@ function calculateTotalStats(player) {
 
 function computeEnhanceBonus(item) {
     if(!item) return 0;
+    
     let bonus = item.baseEffect; 
+
     if (item.grade === 'Primal' && item.randomizedValue) {
         bonus += (item.randomizedValue / 100);
     }
+
     for (let i = 1; i <= item.enhancement; i++) { 
-        bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); 
+        if (item.grade === 'Primal') {
+            bonus += item.baseEffect * (i <= 10 ? 0.05 : 0.10); 
+        } else {
+            bonus += item.baseEffect * (i <= 10 ? 0.1 : 0.5); 
+        }
     } 
     return bonus; 
 }
@@ -1126,6 +1145,19 @@ io.on('connection', async (socket) => {
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
 
+    if (gameData) {
+        const wasModified = addDefaultPrefixToOldItems(gameData);
+        if (wasModified) {
+            console.log(`[데이터 마이그레이션] ${gameData.username}님의 구버전 아이템에 [완벽] 접두어를 부여했습니다.`);
+            await GameData.updateOne({ user: socket.userId }, { 
+                $set: { 
+                    equipment: gameData.equipment, 
+                    inventory: gameData.inventory 
+                } 
+            });
+        }
+    }
+	
     if (!gameData) { 
         console.error(`[오류] ${socket.username}의 게임 데이터를 찾을 수 없습니다.`);
         return socket.disconnect(); 
@@ -2283,50 +2315,51 @@ const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' |
                 console.error(`[관리자] 유저 데이터 업데이트 오류:`, error);
             }
         })
-       .on('admin:grantItem', async ({ userId, username, itemAlias, quantity, enhancement, primalQuality }) => {
+   .on('admin:grantItem', async ({ userId, username, itemAlias, quantity, enhancement, prefix }) => {
     if (socket.role !== 'admin') return;
     
     const itemId = adminItemAlias[itemAlias];
     if (!itemId) return;
 
-const itemBaseData = itemData[itemId] || petData[itemId] || spiritData[itemId];
+    const itemBaseData = itemData[itemId] || petData[itemId] || spiritData[itemId];
     if (!itemBaseData) return;
 
     let newItem;
     if (itemBaseData.type === 'pet') {
         newItem = createPetInstance(itemId);
-        newItem.quantity = quantity;
     } else {
-        newItem = createItemInstance(itemId, quantity, enhancement);
+        newItem = createItemInstance(itemId, quantity, enhancement, prefix);
     }
     
-    if (newItem.grade === 'Primal' && primalQuality) {
-        newItem.quality = primalQuality;
-        newItem.name = `[${primalQuality}] ${itemBaseData.name}`;
-    }
-
     const onlinePlayer = onlinePlayers[userId];
     if (onlinePlayer) {
         handleItemStacking(onlinePlayer, newItem);
         sendInventoryUpdate(onlinePlayer);
 
-          const naturalDropLog = `[${onlinePlayer.level}층]에서 <span class="${newItem.grade}">${newItem.name}</span> ${newItem.quantity}개를 획득했습니다!`;
-            pushLog(onlinePlayer, naturalDropLog);
+        const naturalDropLog = `[${onlinePlayer.level}층]에서 <span class="${newItem.grade}">${newItem.name}</span> ${newItem.quantity > 1 ? newItem.quantity + '개' : ''}를 획득했습니다!`;
+        pushLog(onlinePlayer, naturalDropLog);
         
-announceMysticDrop(onlinePlayer, newItem); 
+        announceMysticDrop(onlinePlayer, newItem); 
 
     } else { 
         const gameData = await GameData.findOne({ user: userId });
         if (gameData) {
+            if (newItem.type === 'pet') {
+                gameData.petInventory.push(newItem);
+            } else if (newItem.type === 'Spirit') {
+                if(!gameData.spiritInventory) gameData.spiritInventory = [];
+                gameData.spiritInventory.push(newItem);
+            }
+            else {
 
-            const stackableItem = gameData.inventory.find(i => i.id === newItem.id && (!i.enhancement || i.enhancement === 0) && newItem.tradable !== false);
-            if (stackableItem) {
-                stackableItem.quantity += newItem.quantity;
-            } else {
-                gameData.inventory.push(newItem);
+                const stackableItem = gameData.inventory.find(i => i.id === newItem.id && i.prefix === newItem.prefix && (!i.enhancement || i.enhancement === 0) && newItem.tradable !== false);
+                if (stackableItem) {
+                    stackableItem.quantity += newItem.quantity;
+                } else {
+                    gameData.inventory.push(newItem);
+                }
             }
             await gameData.save();
-           
         }
     }
     new AdminLog({ adminUsername: socket.username, actionType: 'grant_item', targetUsername: username, details: { item: newItem } }).save();
@@ -2522,6 +2555,8 @@ announceMysticDrop(onlinePlayer, newItem);
             socket.emit('eventStatusUpdate', activeEvents);
         })
 
+.on('rerollPrefix', ({ uid }) => rerollItemPrefix(onlinePlayers[socket.userId], uid))
+
 .on('spirit:create', async () => {
             const player = onlinePlayers[socket.userId];
             if (!player) return;
@@ -2611,38 +2646,64 @@ saveData.logoutTime = new Date();
             delete onlinePlayers[socket.userId];
         });
 });
+
 function applyAwakeningBuff(player, duration = 10000) {
     player.buffs = player.buffs || [];
-    const existingBuffIndex = player.buffs.findIndex(b => b.id === 'return_scroll_awakening');
-    if (existingBuffIndex > -1) {
-        player.buffs[existingBuffIndex].endTime = Date.now() + duration;
+    const existingBuff = player.buffs.find(b => b.id === 'awakening');
+    
+    if (existingBuff) {
+
+        const remainingTime = Math.max(0, new Date(existingBuff.endTime) - Date.now());
+        existingBuff.endTime = new Date(Date.now() + remainingTime + duration);
     } else {
         player.buffs.push({
-            id: 'return_scroll_awakening',
+            id: 'awakening',
             name: '각성',
-            endTime: Date.now() + duration,
-            effects: { attackMultiplier: 10, defenseMultiplier: 10, hpMultiplier: 10 }
+            endTime: new Date(Date.now() + duration),
+            effects: {} 
         });
     }
     calculateTotalStats(player);
-    player.currentHp = player.stats.total.hp; 
+    player.currentHp = player.stats.total.hp;
+}
+function addBuff(player, buffId, name, duration, effects) {
+    player.buffs = player.buffs || [];
+    const existingBuff = player.buffs.find(b => b.id === buffId);
+    if (existingBuff) {
+        existingBuff.endTime = new Date(Date.now() + duration);
+    } else {
+        player.buffs.push({
+            id: buffId,
+            name: name,
+            endTime: new Date(Date.now() + duration),
+            effects: effects
+        });
+    }
+}
+
+function hasBuff(player, buffId) {
+    if (!player.buffs) return false;
+    return player.buffs.some(b => b.id === buffId && new Date(b.endTime) > Date.now());
 }
 function gameTick(player) {
     if (!player || !player.socket) return;
 
+    const weapon = player.equipment.weapon;
+    const armor = player.equipment.armor;
+
     if (player.buffs && player.buffs.length > 0) {
         const now = Date.now();
         const initialBuffCount = player.buffs.length;
-        player.buffs = player.buffs.filter(buff => buff.endTime > now);
-      if (player.buffs.length < initialBuffCount) {
-    const originalCurrentHp = player.currentHp;
-    calculateTotalStats(player); 
-    const newMaxHp = player.stats.total.hp;
-    player.currentHp = Math.min(originalCurrentHp, newMaxHp);
-}
+        player.buffs = player.buffs.filter(buff => new Date(buff.endTime) > now);
+        if (player.buffs.length < initialBuffCount) {
+            const originalCurrentHp = player.currentHp;
+            calculateTotalStats(player); 
+            const newMaxHp = player.stats.total.hp;
+            player.currentHp = Math.min(originalCurrentHp, newMaxHp);
+        }
     }
     if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) onPetFusionComplete(player);
-   if (player.incubators && player.incubators.length > 0) {
+    if (player.incubators && player.incubators.length > 0) {
         for (let i = 0; i < player.incubators.length; i++) {
             const slot = player.incubators[i];
             if (slot && slot.hatchCompleteTime && new Date() >= new Date(slot.hatchCompleteTime)) {
@@ -2659,12 +2720,21 @@ function gameTick(player) {
         const hitChance = 1 - Math.max(0, effectiveDistortion) / 100;
 
         if (Math.random() <= hitChance) {
+            let finalAttack = player.stats.total.attack;
+
+            if (hasBuff(player, 'fury_attack')) {
+                finalAttack *= 1.5;
+            }
+
+            if (hasBuff(player, 'predator_state')) {
+                pDmg += finalAttack * 2.0; // 추가 피해
+            }
             const playerCritRoll = Math.random();
             if (playerCritRoll < player.stats.critChance) {
                 const critMultiplier = 1.5 + (player.stats.total.critDamage || 0);
-                pDmg += player.stats.total.attack * critMultiplier;
+                pDmg += finalAttack * critMultiplier;
             } else {
-                pDmg += Math.max(0, player.stats.total.attack - (raidBoss.defense * (1 - (player.stats.total.defPenetration || 0))));
+                pDmg += Math.max(0, finalAttack - (raidBoss.defense * (1 - (player.stats.total.defPenetration || 0))));
             }
         }
 
@@ -2678,15 +2748,57 @@ function gameTick(player) {
         const empoweredDamage = player.stats.total.hp * (raidBoss.empoweredAttack / 100) * empoweredDamageReduction;
         mDmg = Math.max(0, raidBoss.attack - player.stats.total.defense) + empoweredDamage;
         
+        if (hasBuff(player, 'fury_defense')) {
+            mDmg = Math.max(0, raidBoss.attack - (player.stats.total.defense * 2.0)) + empoweredDamage;
+        }
+        if (hasBuff(player, 'predator_endurance')) {
+            mDmg *= 0.7; // 30% 피해 감소
+        }
+
         player.currentHp -= mDmg;
 
-if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
+        if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
             const bloodthirstDamage = raidBoss.hp * 0.50;
             pDmg += bloodthirstDamage; 
             player.currentHp = player.stats.total.hp; 
             pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
+
+            if (weapon?.prefix === '포식자') {
+                const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
+                addBuff(player, 'predator_state', '포식', duration, {});
+            }
+            if (armor?.prefix === '포식자') {
+                addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+            }
         }
         
+
+        if (weapon) {
+            if (weapon.prefix === '격노' && Math.random() < 0.05) {
+                const duration = (armor?.prefix === '격노') ? 7000 : 5000;
+                addBuff(player, 'fury_attack', '격노(공)', duration, {});
+            }
+            if (weapon.prefix === '파멸' && Math.random() < 0.02) {
+                const bonusDamageMultiplier = (armor?.prefix === '파멸') ? 3.0 : 2.0;
+                pDmg += player.stats.total.attack * bonusDamageMultiplier;
+            }
+            if (weapon.prefix === '계시' && Math.random() < 0.002) {
+                const duration = (armor?.prefix === '계시') ? 7000 : 5000;
+                applyAwakeningBuff(player, duration);
+            }
+        }
+        if (armor) {
+            if (armor.prefix === '격노' && mDmg > 0 && Math.random() < 0.05) {
+                const duration = (weapon?.prefix === '격노' && armor.prefix === '격노') ? 7000 : 5000;
+                addBuff(player, 'fury_defense', '격노(방)', duration, {});
+            }
+            if (armor.prefix === '계시' && mDmg > 0 && Math.random() < 0.002) {
+                const duration = (weapon?.prefix === '계시' && armor.prefix === '계시') ? 7000 : 5000;
+                applyAwakeningBuff(player, duration);
+            }
+        }
+
+
         player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg });
 
         if (player.currentHp <= 0) {
@@ -2721,11 +2833,19 @@ if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.blo
     if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
         let pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
         
-if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
+        if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
             const bloodthirstDamage = worldBossState.maxHp * 0.003;
             pDmg += bloodthirstDamage;
             player.currentHp = player.stats.total.hp;
             pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
+         
+            if (weapon?.prefix === '포식자') {
+                const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
+                addBuff(player, 'predator_state', '포식', duration, {});
+            }
+            if (armor?.prefix === '포식자') {
+                addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+            }
         }
         
         pDmg *= titleWBBonus;
@@ -2767,13 +2887,22 @@ if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.blo
 
     if (Math.random() > hitChance) { pDmg += 0; } 
     else {
-        const playerCritRoll = Math.random();
+        let finalAttack = player.stats.total.attack;
 
+        if (hasBuff(player, 'fury_attack')) {
+            finalAttack *= 1.5;
+        }
+
+        if (hasBuff(player, 'predator_state')) {
+            pDmg += finalAttack * 2.0;
+        }
+
+        const playerCritRoll = Math.random();
         if (playerCritRoll < player.stats.critChance) {
             const critMultiplier = 1.5 + (player.stats.total.critDamage || 0);
-            pDmg += player.stats.total.attack * critMultiplier;
+            pDmg += finalAttack * critMultiplier;
         } else {
-            pDmg += Math.max(0, player.stats.total.attack - (m.defense * (1 - (player.stats.total.defPenetration || 0))));
+            pDmg += Math.max(0, finalAttack - (m.defense * (1 - (player.stats.total.defPenetration || 0))));
         }
     }
     if (m.isBoss) { pDmg *= titleBossDamageBonus; }
@@ -2788,24 +2917,73 @@ if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.blo
     const monsterCritChance = m.isBoss ? monsterCritConfig.boss : monsterCritConfig.normal;
     const finalMonsterCritChance = Math.max(0, monsterCritChance - player.stats.critResistance);
     const monsterCritRoll = Math.random();
+    
+    let finalDefense = m.isBoss ? (player.stats.total.defense * 0.5) : player.stats.total.defense;
+    if (hasBuff(player, 'fury_defense')) {
+        finalDefense *= 2.0;
+    }
+
     if (monsterCritRoll < finalMonsterCritChance) { mDmg = m.attack; } 
-    else { mDmg = Math.max(0, m.attack - (m.isBoss ? (player.stats.total.defense * 0.5) : player.stats.total.defense)); }
+    else { mDmg = Math.max(0, m.attack - finalDefense); }
+
     if (m.empoweredAttack > 0) {
         const empoweredDamageReduction = 1 - ((player.tenacity || 0) / 100);
         const empoweredDamage = player.stats.total.hp * (m.empoweredAttack / 100) * empoweredDamageReduction;
         mDmg += empoweredDamage;
     }
+    
+    if (hasBuff(player, 'predator_endurance')) {
+        mDmg *= 0.7;
+    }
 
     player.currentHp -= mDmg;
-if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
+    if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
         const bloodthirstDamage = m.hp * 0.50;
         pDmg += bloodthirstDamage;
         player.currentHp = player.stats.total.hp;
+
+        if (weapon?.prefix === '포식자') {
+            const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
+            addBuff(player, 'predator_state', '포식', duration, {});
         }
+        if (armor?.prefix === '포식자') {
+            addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+        }
+    }
+
+    if (weapon) {
+        if (weapon.prefix === '격노' && Math.random() < 0.05) {
+            const duration = (armor?.prefix === '격노') ? 7000 : 5000;
+            addBuff(player, 'fury_attack', '격노(공)', duration, {});
+        }
+        if (weapon.prefix === '파멸' && Math.random() < 0.02) {
+            const bonusDamageMultiplier = (armor?.prefix === '파멸') ? 3.0 : 2.0;
+            pDmg += player.stats.total.attack * bonusDamageMultiplier;
+        }
+        if (weapon.prefix === '계시' && Math.random() < 0.002) {
+            const duration = (armor?.prefix === '계시') ? 7000 : 5000;
+            applyAwakeningBuff(player, duration);
+        }
+    }
+    if (armor) {
+        if (armor.prefix === '격노' && mDmg > 0 && Math.random() < 0.05) {
+            const duration = (weapon?.prefix === '격노' && armor.prefix === '격노') ? 7000 : 5000;
+            addBuff(player, 'fury_defense', '격노(방)', duration, {});
+        }
+        if (armor.prefix === '계시' && mDmg > 0 && Math.random() < 0.002) {
+            const duration = (weapon?.prefix === '계시' && armor.prefix === '계시') ? 7000 : 5000;
+            applyAwakeningBuff(player, duration);
+        }
+    }
+
 
     if (pDmg > 0 || mDmg > 0) { player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg }); }
-    if (pDmg > 0 && player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 10000);
-    if (pDmg > 0 && player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 15000);
+    if (pDmg > 0 && player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) {
+        applyAwakeningBuff(player, 10000);
+    }
+    if (pDmg > 0 && player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) {
+        applyAwakeningBuff(player, 15000);
+    }
     
     if (player.currentHp <= 0) {
         const reviveEffect = player.equippedPet?.effects?.revive;
@@ -3819,6 +3997,36 @@ async function sellExistingItemsFromAutoSellList(player, itemId) {
     }
 }
 
+function addDefaultPrefixToOldItems(gameData) {
+    let wasModified = false;
+    const itemsToUpdate = [
+        ...Object.values(gameData.equipment),
+        ...gameData.inventory
+    ].filter(Boolean); 
+
+    for (const item of itemsToUpdate) {
+     
+        const isTargetItem = (item.grade === 'Mystic' || item.grade === 'Primal') &&
+                             (item.type === 'weapon' || item.type === 'armor');
+		 if (isTargetItem && !item.prefix) {
+            item.prefix = '완벽';
+            const baseItemName = itemData[item.id]?.name || item.name.replace(/\[.*?\]\s*/, '');
+            item.name = `[완벽] ${baseItemName}`;
+
+            if (item.grade === 'Mystic') {
+                item.baseEffect = 2.50; 
+            } else if (item.grade === 'Primal') {
+                item.baseEffect = 25.00; 
+                
+                delete item.randomizedValue;
+                delete item.quality;
+            }
+            wasModified = true;
+        }
+    }
+    return wasModified;
+}
+
 
 
 function getFameTier(score) {
@@ -4695,5 +4903,61 @@ async function checkOfflinePlayers() {
 }
 
 setInterval(checkOfflinePlayers, CHECK_OFFLINE_INTERVAL);
+
+async function rerollItemPrefix(player, itemUid) {
+    if (!player || !itemUid) return;
+
+    const scrollIndex = player.inventory.findIndex(i => i.id === 'prefix_reroll_scroll');
+    if (scrollIndex === -1) {
+        return pushLog(player, '[세트 변경] 신비스크롤이 없습니다.');
+    }
+
+
+    let itemToReroll = null;
+    let itemLocation = null; // 'equipment' 또는 'inventory'
+    
+    for (const slot in player.equipment) {
+        if (player.equipment[slot] && player.equipment[slot].uid === itemUid) {
+            itemToReroll = player.equipment[slot];
+            itemLocation = 'equipment';
+            break;
+        }
+    }
+    if (!itemToReroll) {
+        const invIndex = player.inventory.findIndex(i => i.uid === itemUid);
+        if (invIndex > -1) {
+            itemToReroll = player.inventory[invIndex];
+            itemLocation = 'inventory';
+        }
+    }
+
+    if (!itemToReroll || !['Mystic', 'Primal'].includes(itemToReroll.grade) || !['weapon', 'armor'].includes(itemToReroll.type)) {
+        return pushLog(player, '[세트 변경] 미스틱 또는 프라이멀 등급의 무기/방어구에만 사용할 수 있습니다.');
+    }
+
+    const scroll = player.inventory[scrollIndex];
+    scroll.quantity--;
+    if (scroll.quantity <= 0) {
+        player.inventory.splice(scrollIndex, 1);
+    }
+
+    const allPrefixes = ['완벽', '격노', '파멸', '포식자', '계시'];
+    const oldPrefix = itemToReroll.prefix;
+    
+    const availablePrefixes = allPrefixes.filter(p => p !== oldPrefix);
+    const newPrefix = availablePrefixes[Math.floor(Math.random() * availablePrefixes.length)];
+    
+    const baseItemName = itemData[itemToReroll.id]?.name || itemToReroll.name.replace(/\[.*?\]\s*/, '');
+    itemToReroll.prefix = newPrefix;
+    itemToReroll.name = `[${newPrefix}] ${baseItemName}`;
+
+
+    pushLog(player, `[세트 변경] <span class="${itemToReroll.grade}">${itemToReroll.name}</span>의 세트가 [${oldPrefix}] -> [${newPrefix}](으)로 변경되었습니다.`);
+    
+    calculateTotalStats(player);
+    sendState(player.socket, player, calcMonsterStats(player));
+    sendInventoryUpdate(player);
+}
+
 
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));
