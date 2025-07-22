@@ -3523,7 +3523,7 @@ spiritInventory: player.spiritInventory
     }
 }
 
-const isBossFloor = (level) => level > 0 && level % BOSS_INTERVAL === 0;
+const isBossFloor = (level) => level > 0 && level % BOSS_INTERVAL === 0 && level !== 1000000;
 
 function calcMonsterStats(p) { 
     const level = p.level; 
