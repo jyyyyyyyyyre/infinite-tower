@@ -3146,13 +3146,13 @@ function onClearFloor(p) {
         p.researchEssence = (p.researchEssence || 0) + essenceGained;
         pushLog(p, `[보스] <span class="Mystic">무한의 정수</span> ${essenceGained}개를 획득했습니다!`);
     } 
-    else if (clearedFloor >= 1000000) { 
-        if (Math.random() < 0.001) {
-            essenceGained = 1;
-            p.researchEssence = (p.researchEssence || 0) + essenceGained;
-            pushLog(p, `[심연] <span class="Mystic">무한의 정수</span> ${essenceGained}개를 획득했습니다!`);
-        }
+else if (clearedFloor >= 1000000) { 
+    if (Math.random() < 0.001) {
+        const essenceGained = Math.floor(Math.random() * 5) + 1; 
+        p.researchEssence = (p.researchEssence || 0) + essenceGained;
+        pushLog(p, `[심연] <span class="Mystic">무한의 정수</span> ${essenceGained}개를 획득했습니다!`);
     }
+}
   
     if (p.unlockedArtifacts[0] && clearedFloor > 0 && clearedFloor % 10 === 0) {
         const skippedFloor = p.level;
@@ -4817,13 +4817,14 @@ if (offlineSeconds < 60) {
                 if (Math.random() < 0.02) {
                     let grade, acc = 0, r = Math.random();
                     for (const g in dropTable.rates) { acc += dropTable.rates[g]; if (r < acc) { grade = g; break; } }
-                    if (grade) {
-                        const pool = dropTable.itemsByGrade[grade] || [];
-                        if (pool.length) {
-                            const id = pool[Math.floor(Math.random() * pool.length)];
-                            collectedItems.set(id, (collectedItems.get(id) || 0) + 1);
-                        }
-                    }
+
+if (grade && grade !== 'Primal') { 
+    const pool = dropTable.itemsByGrade[grade] || [];
+    if (pool.length) {
+        const id = pool[Math.floor(Math.random() * pool.length)];
+        collectedItems.set(id, (collectedItems.get(id) || 0) + 1);
+    }
+}
                 }
 
                 for (const itemInfo of gameSettings.globalLootTable) {
