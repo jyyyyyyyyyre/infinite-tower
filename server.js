@@ -57,7 +57,7 @@ const PORT = 3000;
 const TICK_RATE = 1000; 
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_OBJECT_ID = '68744e5af8cc7f29f0f2d114'; //687a39343baadd2ed256c079
+const ADMIN_OBJECT_ID = '68744e5af8cc7f29f0f2d114'; //6880fadcf8e2a547bc132953
 const BOSS_INTERVAL = 200;
 
 
@@ -67,8 +67,8 @@ const RIFT_ENCHANT_COST = {
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 1150000000000, ATTACK: 0, DEFENSE: 0,
-    REWARDS: { GOLD: 160000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 3150000000000, ATTACK: 0, DEFENSE: 0,
+    REWARDS: { GOLD: 960000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
 const MailSchema = new mongoose.Schema({
@@ -341,6 +341,15 @@ app.get('/', (req, res) => {
 });
 
 const adminItemAlias = {
+    '달100퍼': 'moon_scroll_100',
+    '달70퍼': 'moon_scroll_70',
+    '달30퍼': 'moon_scroll_30',
+    '달10퍼': 'moon_scroll_10',
+'100퍼': 'star_scroll_100',
+'70퍼': 'star_scroll_70',
+'30퍼': 'star_scroll_30',
+'10퍼': 'star_scroll_10',
+'황금망치': 'golden_hammer',
     '무기1': 'w001', '무기2': 'w002', '무기3': 'w003', '무기4': 'w004', '무기5': 'w005', '무기6': 'primal_w01',
     '방어구1': 'a001', '방어구2': 'a002', '방어구3': 'a003', '방어구4': 'a004', '방어구5': 'a005', '방어구6': 'primal_a01',
     '차원파편': 'rift_shard',
@@ -380,6 +389,15 @@ const adminItemAlias = {
 };
 
 const itemData = {
+'moon_scroll_100': { name: '100% 달의 주문서', type: 'Special', category: 'Scroll', scrollType: 'moon', grade: 'Rare', description: '장비에 달의 힘을 불어넣어 특수 능력치(집중,관통,강인함)를 +1% 상승시킵니다.', image: 'prefix_scroll.png', tradable: false, specialStats: 1 },
+'moon_scroll_70': { name: '70% 달의 주문서', type: 'Special', category: 'Scroll', scrollType: 'moon', grade: 'Legendary', description: '장비에 달의 힘을 불어넣어 특수 능력치(집중,관통,강인함)를 +2% 상승시킵니다.', image: 'prefix_scroll.png', tradable: false, specialStats: 2 },
+'moon_scroll_30': { name: '30% 달의 주문서', type: 'Special', category: 'Scroll', scrollType: 'moon', grade: 'Epic', description: '장비에 달의 힘을 불어넣어 특수 능력치(집중,관통,강인함)를 +5% 상승시킵니다.', image: 'prefix_scroll.png', tradable: false, specialStats: 5 },
+'moon_scroll_10': { name: '10% 달의 주문서', type: 'Special', category: 'Scroll', scrollType: 'moon', grade: 'Mystic', description: '장비에 달의 힘을 불어넣어 특수 능력치(집중,관통,강인함)를 +10% 상승시킵니다.', image: 'prefix_scroll.png', tradable: false, specialStats: 10 },
+'star_scroll_100': { name: '100% 별의 주문서', type: 'Special', category: 'Scroll', scrollType: 'star', grade: 'Rare', description: '장비에 별의 힘을 불어넣어 기본 능력치를 +100,000 상승시킵니다.', image: 'return_scroll.png', tradable: false, stats: 100000 },
+'star_scroll_70': { name: '70% 별의 주문서', type: 'Special', category: 'Scroll', scrollType: 'star', grade: 'Legendary', description: '장비에 별의 힘을 불어넣어 기본 능력치를 +300,000 상승시킵니다.', image: 'return_scroll.png', tradable: false, stats: 300000 },
+'star_scroll_30': { name: '30% 별의 주문서', type: 'Special', category: 'Scroll', scrollType: 'star', grade: 'Epic', description: '장비에 별의 힘을 불어넣어 기본 능력치를 +600,000 상승시킵니다.', image: 'return_scroll.png', tradable: false, stats: 600000 },
+'star_scroll_10': { name: '10% 별의 주문서', type: 'Special', category: 'Scroll', scrollType: 'star', grade: 'Mystic', description: '장비에 별의 힘을 불어넣어 기본 능력치를 +1,000,000 상승시킵니다.', image: 'return_scroll.png', tradable: false, stats: 1000000 },
+'golden_hammer': { name: '헤파이스토스의 황금 망치', type: 'Special', category: 'Hammer', grade: 'Mystic', description: '주문서 강화 실패 횟수를 1회 복구합니다.', image: 'hammer_hephaestus.png', tradable: false },
 'spirit_essence': { name: '정령의 형상', type: 'Special', category: 'Material', grade: 'Mystic', description: '응축된 정령의 힘. 펫의 영혼을 변환하여 얻을 수 있으며, 뭉쳐지면 새로운 생명이 깃듭니다', image: 'spirit_essence.png', tradable: true },
    'primal_acc_necklace_01': { name: '찬란한 윤회의 성물', type: 'accessory', accessoryType: 'necklace', grade: 'Primal', description: '사망 시 2/3 지점 부활, 추가로 30% 확률로 현재 층에서 부활합니다.', image: 'primal_necklace.png', tradable: true, enchantable: true },
     'primal_acc_earring_01': { name: '시공의 각성 이어링', type: 'accessory', accessoryType: 'earring', grade: 'Primal', description: '공격 시 3% 확률로 15초간 각성 상태에 돌입합니다.', image: 'primal_earring.png', tradable: true, enchantable: true },
@@ -743,6 +761,7 @@ if (user.ban && user.ban.isBanned) {
         res.status(500).json({ message: '서버 내부 오류가 발생했습니다.' });
     }
 });
+
 function createItemInstance(id, quantity = 1, enhancement = 0, specificPrefix = null) {
     const d = itemData[id] || spiritData[id]; 
     if (!d) return null;
@@ -754,6 +773,7 @@ function createItemInstance(id, quantity = 1, enhancement = 0, specificPrefix = 
         type: d.type,
         grade: d.grade,
         category: d.category,
+        scrollType: d.scrollType, 
         image: d.image,
         accessoryType: d.accessoryType,
         description: d.description,
@@ -869,7 +889,6 @@ function addDiscoveredItem(player, itemId) {
         }
     }
 }
-
 function handleItemStacking(player, item) {
 if (player.autoSellList && player.autoSellList.includes(item.id) && (item.enhancement === 0 || typeof item.enhancement === 'undefined')) {
     autoSellItemById(player, item);
@@ -886,10 +905,17 @@ if (player.autoSellList && player.autoSellList.includes(item.id) && (item.enhanc
     } else if (item.type === 'Spirit') {
         if(!player.spiritInventory) player.spiritInventory = []; 
         player.spiritInventory.push(item);
-    } else if (!item.tradable || item.enhancement > 0 || item.grade === 'Primal') {
+    } else if (!item.tradable || item.enhancement > 0 || item.grade === 'Primal' || ((item.scrollSuccesses || 0) + (item.scrollFails || 0) + (item.moonScrollSuccesses || 0) + (item.moonScrollFails || 0) > 0)) {
         player.inventory.push(item);
     } else {
-const stackableItem = player.inventory.find(i => i.id === item.id && (i.prefix || null) === (item.prefix || null) && (!i.enhancement || i.enhancement === 0));
+
+        const stackableItem = player.inventory.find(i => 
+            i.id === item.id && 
+            (i.prefix || null) === (item.prefix || null) && 
+            (!i.enhancement || i.enhancement === 0) &&
+            i.scrollType === item.scrollType 
+        );
+
         if (stackableItem) {
             stackableItem.quantity += item.quantity;
         } else {
@@ -902,6 +928,38 @@ const stackableItem = player.inventory.find(i => i.id === item.id && (i.prefix |
 function calculateTotalStats(player) {
     if (!player || !player.stats) return;
     const base = player.stats.base;
+
+    let scrollHp = 0, scrollAttack = 0, scrollDefense = 0;
+    let moonScrollBonus = 0; 
+
+    const equipmentForScrolls = [
+        player.equipment.weapon,
+        player.equipment.armor,
+        player.equipment.necklace,
+        player.equipment.earring,
+        player.equipment.wristwatch
+    ];
+
+   equipmentForScrolls.forEach(item => {
+        if (item && item.scrollStats) {
+         
+            scrollHp += item.scrollStats;
+            scrollAttack += item.scrollStats;
+            scrollDefense += item.scrollStats;
+        }
+
+        if (item && item.moonScrollStats) {
+            moonScrollBonus += item.moonScrollStats;
+        }
+
+    });
+
+    const finalBase = {
+        hp: base.hp + scrollHp,
+        attack: base.attack + scrollAttack,
+        defense: base.defense + scrollDefense
+    };
+
     let weaponBonus = 0;
     let armorBonus = 0;
     let buffAttackMultiplier = 1;
@@ -990,6 +1048,10 @@ if (buff.id === 'awakening' || buff.id === 'awakening_earring') {
             }
         }
     }
+    
+    player.focus += moonScrollBonus;
+    player.penetration += moonScrollBonus;
+    player.tenacity += moonScrollBonus;
 
     let researchBonuses = {
         attackPercent: 0, hpPercent: 0, defensePercent: 0, critChance: 0, critDamage: 0,
@@ -1014,9 +1076,9 @@ if (buff.id === 'awakening' || buff.id === 'awakening_earring') {
         }
     }
     
-    let totalHp = (base.hp * (1 + armorBonus)) * buffHpMultiplier * enchantHpPercent * enchantAllStatsPercent * titleHpBonus;
-    let totalAttack = (base.attack * (1 + weaponBonus)) * artifactAttackMultiplier * buffAttackMultiplier * enchantAttackPercent * enchantAllStatsPercent * titleAttackBonus;
-    let totalDefense = (base.defense * (1 + armorBonus)) * artifactDefenseMultiplier * buffDefenseMultiplier * enchantDefensePercent * enchantAllStatsPercent;
+    let totalHp = (finalBase.hp * (1 + armorBonus)) * buffHpMultiplier * enchantHpPercent * enchantAllStatsPercent * titleHpBonus;
+    let totalAttack = (finalBase.attack * (1 + weaponBonus)) * artifactAttackMultiplier * buffAttackMultiplier * enchantAttackPercent * enchantAllStatsPercent * titleAttackBonus;
+    let totalDefense = (finalBase.defense * (1 + armorBonus)) * artifactDefenseMultiplier * buffDefenseMultiplier * enchantDefensePercent * enchantAllStatsPercent;
 
     if (player.codexBonusActive) {
         totalHp *= 1.05;
@@ -2016,7 +2078,7 @@ title: player.equippedTitle
     let itemLocation = null;
     let itemIndex = -1;
 
-    for (const slot of ['weapon', 'armor']) {
+   for (const slot of ['weapon', 'armor', 'necklace', 'earring', 'wristwatch']) {
         if (player.equipment[slot] && player.equipment[slot].uid === uid) {
             item = player.equipment[slot];
             itemLocation = 'equipment';
@@ -2038,7 +2100,8 @@ title: player.equippedTitle
     }
 
 
-const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' || (item.type === 'accessory' && item.grade === 'Primal'));
+ const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' || ['primal_acc_necklace_01', 'primal_acc_earring_01', 'primal_acc_wristwatch_01'].includes(item.id));
+
     if (!isEnchantable) {
         pushLog(player, '[마법부여] 마법부여가 불가능한 아이템입니다.');
         return callback({ success: false });
@@ -2605,6 +2668,10 @@ const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' |
         callback([]);
     }
 })
+
+.on('useStarScroll', ({ itemUid, scrollUid }) => useStarScroll(onlinePlayers[socket.userId], { itemUid, scrollUid }))
+.on('useMoonScroll', ({ itemUid, scrollUid }) => useMoonScroll(onlinePlayers[socket.userId], { itemUid, scrollUid }))
+.on('useGoldenHammer', ({ itemUid, hammerUid, typeToRestore }) => useGoldenHammer(onlinePlayers[socket.userId], { itemUid, hammerUid, typeToRestore }))
 
 .on('autoSell:toggle', async ({ itemId }) => {
     const player = onlinePlayers[socket.userId];
@@ -3261,6 +3328,7 @@ else if (clearedFloor >= 1000000) {
         if (titleEffects && titleEffects.itemDropRate) {
             finalChance *= (1 + titleEffects.itemDropRate);
         }
+		
 
         if (Math.random() < finalChance * eventDropMultiplier) {
             const droppedItem = createItemInstance(itemInfo.id);
@@ -3272,6 +3340,33 @@ else if (clearedFloor >= 1000000) {
             }
         }
     }
+	
+	
+	if (p.level >= 1000000) {
+    const scrollDropTable = [
+        { id: 'star_scroll_100', chance: 0.0007 }, 
+        { id: 'star_scroll_70', chance: 0.0002 },
+        { id: 'star_scroll_30', chance: 0.0001 },
+        { id: 'star_scroll_10', chance: 0.00005 },
+        { id: 'golden_hammer', chance: 0.00001 }, // 고정석 확률정도? 어짜피 잘안붙으니.
+        { id: 'moon_scroll_100', chance: 0.0007 }, 
+        { id: 'moon_scroll_70', chance: 0.0002 },
+        { id: 'moon_scroll_30', chance: 0.0001 },
+        { id: 'moon_scroll_10', chance: 0.00005 }
+    ];
+
+    for (const drop of scrollDropTable) {
+        if (Math.random() < drop.chance) {
+            const droppedItem = createItemInstance(drop.id);
+            if (droppedItem) {
+                handleItemStacking(p, droppedItem);
+                sendInventoryUpdate(p);
+                pushLog(p, `[${clearedFloor}층]에서 <span class="${droppedItem.grade}">${droppedItem.name}</span> 1개를 획득했습니다!`);
+                announceMysticDrop(p, droppedItem);
+            }
+        }
+    }
+}
 }
 
 async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
@@ -4982,6 +5077,166 @@ async function rerollItemPrefix(player, itemUid) {
     sendState(player.socket, player, calcMonsterStats(player));
     sendInventoryUpdate(player);
 }
+function useStarScroll(player, { itemUid, scrollUid }) {
+    if (!player || !itemUid || !scrollUid) return;
 
+    const scroll = player.inventory.find(i => i.uid === scrollUid);
+    if (!scroll) {
+        return pushLog(player, '[오류] 사용할 주문서를 찾을 수 없습니다.');
+    }
+
+    const scrollInfo = itemData[scroll.id];
+    if (!scrollInfo || scroll.scrollType !== 'star') {
+        return pushLog(player, '[오류] 유효하지 않은 별의 주문서입니다.');
+    }
+
+    const targetItemSlot = Object.keys(player.equipment).find(slot => player.equipment[slot] && player.equipment[slot].uid === itemUid);
+    if (!targetItemSlot) {
+        return pushLog(player, '[오류] 강화할 장착 아이템을 찾을 수 없습니다.');
+    }
+    const targetItem = player.equipment[targetItemSlot];
+
+    if (targetItem.scrollSuccesses === undefined) targetItem.scrollSuccesses = 0;
+    if (targetItem.scrollFails === undefined) targetItem.scrollFails = 0;
+
+    const maxAttempts = 9;
+    const totalAttempts = targetItem.scrollSuccesses + targetItem.scrollFails;
+
+    if (totalAttempts >= maxAttempts) {
+        return pushLog(player, '[주문서] 이 아이템은 더 이상 별의 주문서 강화를 할 수 없습니다.');
+    }
+
+    const scrollIndex = player.inventory.findIndex(i => i.uid === scrollUid);
+    player.inventory[scrollIndex].quantity--;
+    if (player.inventory[scrollIndex].quantity <= 0) {
+        player.inventory.splice(scrollIndex, 1);
+    }
+
+    const scrollChanceMap = {
+        'star_scroll_100': 1.0, 'star_scroll_70': 0.7,
+        'star_scroll_30': 0.3, 'star_scroll_10': 0.1
+    };
+    const successChance = scrollChanceMap[scroll.id];
+    const statGain = scrollInfo.stats;
+
+    let result = '';
+    if (Math.random() < successChance) {
+        result = 'success';
+        targetItem.scrollStats = (targetItem.scrollStats || 0) + statGain;
+        targetItem.scrollSuccesses++;
+        pushLog(player, `[주문서] <span class="success-color">${scroll.name} 강화에 성공했습니다!</span> (능력치 +${statGain.toLocaleString()})`);
+    } else {
+        result = 'fail';
+        targetItem.scrollFails++;
+        pushLog(player, `[주문서] <span class="fail-color">${scroll.name} 강화에 실패했습니다...</span>`);
+    }
+
+    calculateTotalStats(player);
+    player.socket.emit('scrollEnhancementResult', { result, item: targetItem });
+    sendPlayerState(player);
+    sendInventoryUpdate(player);
+}
+
+function useMoonScroll(player, { itemUid, scrollUid }) {
+    if (!player || !itemUid || !scrollUid) return;
+
+    const scroll = player.inventory.find(i => i.uid === scrollUid);
+    if (!scroll) {
+        return pushLog(player, '[오류] 사용할 주문서를 찾을 수 없습니다.');
+    }
+
+    const scrollInfo = itemData[scroll.id];
+    if (!scrollInfo || scroll.scrollType !== 'moon') {
+        return pushLog(player, '[오류] 유효하지 않은 달의 주문서입니다.');
+    }
+
+    const targetItemSlot = Object.keys(player.equipment).find(slot => player.equipment[slot] && player.equipment[slot].uid === itemUid);
+    if (!targetItemSlot) {
+        return pushLog(player, '[오류] 강화할 장착 아이템을 찾을 수 없습니다.');
+    }
+    const targetItem = player.equipment[targetItemSlot];
+
+    if (targetItem.moonScrollSuccesses === undefined) targetItem.moonScrollSuccesses = 0;
+    if (targetItem.moonScrollFails === undefined) targetItem.moonScrollFails = 0;
+
+    const maxAttempts = 2;
+    const totalAttempts = targetItem.moonScrollSuccesses + targetItem.moonScrollFails;
+
+    if (totalAttempts >= maxAttempts) {
+        return pushLog(player, '[주문서] 이 아이템은 더 이상 달의 주문서 강화를 할 수 없습니다.');
+    }
+
+    const scrollIndex = player.inventory.findIndex(i => i.uid === scrollUid);
+    player.inventory[scrollIndex].quantity--;
+    if (player.inventory[scrollIndex].quantity <= 0) {
+        player.inventory.splice(scrollIndex, 1);
+    }
+
+    const scrollChanceMap = {
+        'moon_scroll_100': 1.0, 'moon_scroll_70': 0.7,
+        'moon_scroll_30': 0.3, 'moon_scroll_10': 0.1
+    };
+    const successChance = scrollChanceMap[scroll.id];
+    const statGain = scrollInfo.specialStats;
+
+    let result = '';
+    if (Math.random() < successChance) {
+        result = 'success';
+        targetItem.moonScrollStats = (targetItem.moonScrollStats || 0) + statGain;
+        targetItem.moonScrollSuccesses++;
+        pushLog(player, `[주문서] <span class="success-color">${scroll.name} 강화에 성공했습니다!</span> (특수 능력치 +${statGain}%)`);
+    } else {
+        result = 'fail';
+        targetItem.moonScrollFails++;
+        pushLog(player, `[주문서] <span class="fail-color">${scroll.name} 강화에 실패했습니다...</span>`);
+    }
+
+    calculateTotalStats(player);
+    player.socket.emit('scrollEnhancementResult', { result, item: targetItem });
+    sendPlayerState(player);
+    sendInventoryUpdate(player);
+}
+
+function useGoldenHammer(player, { itemUid, hammerUid, typeToRestore }) { 
+    if (!player || !itemUid || !hammerUid || !typeToRestore) return;
+
+    const hammer = player.inventory.find(i => i.uid === hammerUid);
+    if (!hammer) {
+        return pushLog(player, '[오류] 사용할 망치를 찾을 수 없습니다.');
+    }
+
+    const targetItemSlot = Object.keys(player.equipment).find(slot => player.equipment[slot] && player.equipment[slot].uid === itemUid);
+    if (!targetItemSlot) {
+        return pushLog(player, '[오류] 복구할 장착 아이템을 찾을 수 없습니다.');
+    }
+    const targetItem = player.equipment[targetItemSlot];
+
+    if (typeToRestore === 'star') {
+        if (!targetItem.scrollFails || targetItem.scrollFails <= 0) {
+            return pushLog(player, '[망치] 이 아이템은 복구할 별의 기운 실패 기록이 없습니다.');
+        }
+        targetItem.scrollFails--;
+    } else if (typeToRestore === 'moon') {
+        if (!targetItem.moonScrollFails || targetItem.moonScrollFails <= 0) {
+            return pushLog(player, '[망치] 이 아이템은 복구할 달의 기운 실패 기록이 없습니다.');
+        }
+        targetItem.moonScrollFails--;
+    } else {
+        return pushLog(player, '[오류] 유효하지 않은 복구 타입입니다.');
+    }
+
+    const hammerIndex = player.inventory.findIndex(i => i.uid === hammerUid);
+    player.inventory[hammerIndex].quantity--;
+    if (player.inventory[hammerIndex].quantity <= 0) {
+        player.inventory.splice(hammerIndex, 1);
+    }
+    
+    const restoreTypeName = typeToRestore === 'star' ? '별의 기운' : '달의 기운';
+    pushLog(player, `[망치] <span class="legendary-color">${targetItem.name}</span>의 ${restoreTypeName} 실패 횟수를 1회 복구했습니다.`);
+
+    player.socket.emit('scrollEnhancementResult', { result: 'restored', item: targetItem });
+    sendPlayerState(player);
+    sendInventoryUpdate(player);
+}
 
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));

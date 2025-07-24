@@ -421,7 +421,7 @@ const createItemHTML = (item, options = {}) => {
     
     let enchantmentsHTML = '';
     if (showEnchantments && item.enchantments && item.enchantments.length > 0) {
-        enchantmentsHTML = '<div class="item-enchantments">';
+        enchantmentsHTML = '<div class="item-enchantments"><div class="item-enchantment-grid">';
         const gradeToColor = {
             supreme: 'var(--mystic-color)', rare_enchant: 'var(--epic-color)', common_enchant: 'var(--common-color)' 
         };
@@ -437,11 +437,36 @@ const createItemHTML = (item, options = {}) => {
             const valueSuffix = ['focus', 'penetration', 'tenacity', 'attack_percent', 'defense_percent', 'hp_percent', 'all_stats_percent', 'gold_gain', 'extra_climb_chance', 'def_penetration'].includes(enchant.type) ? '%' : '';
             enchantmentsHTML += `<div style="color: ${color}; font-size: 0.85em;">${name} +${enchant.value}${valueSuffix}</div>`;
         });
-        enchantmentsHTML += '</div>';
+        enchantmentsHTML += '</div></div>';
     }
 
    const effectHTML = effectText ? `<div class="item-effect">${effectText}</div>` : '';
-    return `${imageHTML}<div class="item-info">${nameAndDescriptionHTML}${effectHTML}${enchantmentsHTML}</div>${quantityText}${enhanceText}`;
+   
+    let scrollStatsHTML = '';
+    const hasScrollStats = (item.scrollStats && item.scrollStats > 0) || (item.scrollSuccesses !== undefined) || (item.scrollFails !== undefined);
+    const hasMoonScrollStats = (item.moonScrollStats && item.moonScrollStats > 0) || (item.moonScrollSuccesses !== undefined) || (item.moonScrollFails !== undefined);
+
+    if (hasScrollStats || hasMoonScrollStats) {
+        scrollStatsHTML += `<div class="item-enchantments" style="margin-top: 4px; padding-top: 6px; font-size: 0.75em;">`;
+
+        if (hasScrollStats) {
+            const sSuccess = item.scrollSuccesses || 0;
+            const sFails = item.scrollFails || 0;
+            scrollStatsHTML += `<div style="color: var(--primal-color);">☆ 별의 기운: +${(item.scrollStats || 0).toLocaleString()}</div>`;
+    
+        }
+        
+        if (hasMoonScrollStats) {
+            const mSuccess = item.moonScrollSuccesses || 0;
+            const mFails = item.moonScrollFails || 0;
+            scrollStatsHTML += `<div style="color: #66d9ef;">☆ 달의 기운: +${(item.moonScrollStats || 0)}%</div>`;
+
+        }
+
+        scrollStatsHTML += `</div>`;
+    }
+
+    return `${imageHTML}<div class="item-info">${nameAndDescriptionHTML}${effectHTML}${enchantmentsHTML}${scrollStatsHTML}</div>${quantityText}${enhanceText}`;
 };
 
 function createPlayerPanelHTML(player) {
@@ -496,7 +521,127 @@ function initializeGame(socket) {
     let selectedItemUidForAction = null;
     let returnCooldownTimer = null;
 let currentEssenceItem = null;
+let selectedScrollItem = null;
+let selectedTargetItem = null;
 
+function updateScrollEnhancementPanel(targetItem) {
+    const { scroll } = elements;
+    selectedTargetItem = targetItem;
+    selectedScrollItem = null;
+
+    if (!targetItem) {
+        scroll.placeholder.style.display = 'block';
+        scroll.display.style.display = 'none';
+        scroll.executeBtn.style.display = 'none';
+        scroll.grid.innerHTML = '<p class="inventory-tip">강화할 장착 아이템을 선택하세요.</p>';
+        return;
+    }
+
+    scroll.placeholder.style.display = 'none';
+    scroll.display.style.display = 'block';
+    scroll.imageSlot.style.padding = '5px';
+    scroll.imageSlot.innerHTML = `<div class="item-image" style="width: 100%; height: 100%;"><img src="/image/${targetItem.image}" alt="${targetItem.name}" draggable="false"></div>`;
+    scroll.name.innerHTML = `<span class="${targetItem.grade}">${targetItem.enhancement > 0 ? `+${targetItem.enhancement} ` : ''}${targetItem.name.replace(/\[.*?\]\s*/, '')}</span>`;
+
+    const statsList = [];
+
+    if (targetItem.type === 'weapon' || targetItem.type === 'armor') {
+        const bonus = computeClientEnhanceBonus(targetItem);
+        const typeText = targetItem.type === 'weapon' ? '⚔️ 기본 공격력' : '❤️🛡️ 기본 체/방';
+        statsList.push(`<div><span class="stat-name">${typeText}</span><span class="stat-value">+${(bonus * 100).toFixed(1)}%</span></div>`);
+    } else if (targetItem.type === 'accessory') {
+        statsList.push(`<div><span class="stat-name">✨ 고유 효과</span><span class="stat-value" style="font-size: 0.9em; text-align: right;">${targetItem.description}</span></div>`);
+    }
+
+    if (targetItem.enchantments && targetItem.enchantments.length > 0) {
+        const gradeToColor = { supreme: 'var(--mystic-color)', rare_enchant: 'var(--epic-color)', common_enchant: 'var(--common-color)' };
+        const typeToName = {
+            all_stats_percent: '✨모든 스탯', focus: '🎯집중', penetration: '💎관통',
+            tenacity: '🛡️강인함', attack_percent: '⚔️공격력', defense_percent: '🛡️방어력',
+            hp_percent: '❤️체력', gold_gain: '💰골드 획득', extra_climb_chance: '🍀추가 등반',
+            def_penetration: '🛡️방어력 관통',
+        };
+        targetItem.enchantments.forEach(enchant => {
+            const color = gradeToColor[enchant.grade] || '#fff';
+            const name = typeToName[enchant.type] || enchant.type;
+            const valueSuffix = ['focus', 'penetration', 'tenacity', 'attack_percent', 'defense_percent', 'hp_percent', 'all_stats_percent', 'gold_gain', 'extra_climb_chance', 'def_penetration'].includes(enchant.type) ? '%' : '';
+            statsList.push(`<div><span class="stat-name" style="color: ${color};">${name}</span><span class="stat-value" style="color: ${color};">+${enchant.value}${valueSuffix}</span></div>`);
+        });
+    }
+
+    statsList.push(`<hr style="border-color: var(--border-color); margin: 5px 0;">`);
+
+    const sSuccess = targetItem.scrollSuccesses || 0;
+    const sFails = targetItem.scrollFails || 0;
+    const sTotal = sSuccess + sFails;
+    statsList.push(`<div><span class="stat-name">☆ 별의 기운</span><span class="stat-value" style="color: var(--primal-color);">+${(targetItem.scrollStats || 0).toLocaleString()}</span></div>`);
+    statsList.push(`<div><span class="stat-name">☆ 시도 횟수</span><span class="stat-value">${sTotal} / 9 (<span style="color: var(--success-color);">성공:${sSuccess}</span> | <span style="color: var(--fail-color);">실패:${sFails}</span>)</span></div>`);
+
+    const mSuccess = targetItem.moonScrollSuccesses || 0;
+    const mFails = targetItem.moonScrollFails || 0;
+    const mTotal = mSuccess + mFails;
+    statsList.push(`<div style="margin-top: 5px;"><span class="stat-name">☆ 달의 기운</span><span class="stat-value" style="color: #66d9ef;">+${(targetItem.moonScrollStats || 0)}%</span></div>`);
+    statsList.push(`<div><span class="stat-name">☆ 시도 횟수</span><span class="stat-value">${mTotal} / 2 (<span style="color: var(--success-color);">성공:${mSuccess}</span> | <span style="color: var(--fail-color);">실패:${mFails}</span>)</span></div>`);
+
+    scroll.statsList.innerHTML = statsList.join('');
+
+    const materials = currentPlayerState.inventory.filter(i => i.category === 'Scroll' || i.category === 'Hammer');
+    if (materials.length === 0) {
+        scroll.grid.innerHTML = '<p class="inventory-tip">보유한 주문서나 망치가 없습니다.</p>';
+    } else {
+        scroll.grid.innerHTML = materials.map(item => `
+            <div class="inventory-item scroll-material-item" data-uid="${item.uid}">
+                ${createItemHTML(item)}
+            </div>
+        `).join('');
+    }
+    scroll.executeBtn.style.display = 'none';
+}
+
+
+function selectScrollMaterial(materialItem) {
+    const { scroll } = elements;
+    selectedScrollItem = materialItem;
+
+    document.querySelectorAll('.scroll-material-item').forEach(el => el.classList.remove('selected'));
+    const selectedEl = document.querySelector(`.scroll-material-item[data-uid="${materialItem.uid}"]`);
+    if (selectedEl) selectedEl.classList.add('selected');
+
+    scroll.executeBtn.style.display = 'block';
+
+    if (materialItem.category === 'Hammer') {
+        const canRestoreStar = (selectedTargetItem.scrollFails || 0) > 0;
+        const canRestoreMoon = (selectedTargetItem.moonScrollFails || 0) > 0;
+        
+        let hammerText = '▶ 황금 망치 사용 (복구할 실패 기록 없음)';
+        let hammerDisabled = true;
+
+        if (canRestoreStar && canRestoreMoon) {
+            hammerText = '▶ 황금 망치 사용 (복구 대상 선택 필요)';
+            hammerDisabled = false; 
+        } else if (canRestoreStar) {
+            hammerText = '▶ 황금 망치 사용 (별의 기운 실패 복구)';
+            hammerDisabled = false;
+        } else if (canRestoreMoon) {
+            hammerText = '▶ 황금 망치 사용 (달의 기운 실패 복구)';
+            hammerDisabled = false;
+        }
+        
+        scroll.executeBtn.textContent = hammerText;
+        scroll.executeBtn.disabled = hammerDisabled;
+        
+    } else if (materialItem.scrollType === 'star') {
+        const totalAttempts = (selectedTargetItem.scrollSuccesses || 0) + (selectedTargetItem.scrollFails || 0);
+        const canUse = totalAttempts < 9;
+        scroll.executeBtn.textContent = `▶ ${materialItem.name} 사용`;
+        scroll.executeBtn.disabled = !canUse;
+    } else if (materialItem.scrollType === 'moon') {
+        const totalAttempts = (selectedTargetItem.moonScrollSuccesses || 0) + (selectedTargetItem.moonScrollFails || 0);
+        const canUse = totalAttempts < 9;
+        scroll.executeBtn.textContent = `▶ ${materialItem.name} 사용`;
+        scroll.executeBtn.disabled = !canUse;
+    }
+}
     const elements = {
         gold: document.getElementById('gold'),
         player: { 
@@ -698,7 +843,20 @@ autoSell: {
             safeZoneBtn: document.getElementById('safe-zone-btn'),
             frontlineBtn: document.getElementById('frontline-btn'),
             personalRaidBtn: document.getElementById('personal-raid-btn')
-        }
+        },
+scroll: {
+    tab: document.getElementById('scroll-tab'),
+    placeholder: document.getElementById('scroll-target-placeholder'),
+    display: document.getElementById('scroll-target-item-display'),
+    slotContainer: document.getElementById('scroll-target-slot-container'),
+    imageSlot: document.getElementById('scroll-target-item-image'),
+    detailsContainer: document.getElementById('scroll-target-item-details'),
+    name: document.getElementById('scroll-item-name'),
+    statsList: document.getElementById('scroll-item-stats-list'),
+    executeBtn: document.getElementById('scroll-execute-btn'),
+    animation: document.getElementById('scroll-enhancement-animation'),
+    grid: document.getElementById('scroll-material-grid')
+}
     };
 
     if (elements.floorControls.safeZoneBtn) {
@@ -1797,16 +1955,18 @@ if (elements.incubator.grid) {
         info.innerHTML = infoContentHTML + buttonsHTML;
     }
 }
-    function updateRiftEnchantPanel(item, previouslyLockedIndices = []) {
-        const { slot, optionsContainer, costDisplay, button } = elements.riftEnchant;
-    const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' || (item.type === 'accessory' && item.grade === 'Primal'));
-        if (!isEnchantable) {
-            slot.innerHTML = '마법을 부여할 장비를 선택하세요 (무기/방어구, 태초 등급 액세서리만 가능)';
-            optionsContainer.innerHTML = '';
-            costDisplay.innerHTML = '';
-            button.disabled = true;
-            return;
-        }
+  function updateRiftEnchantPanel(item, previouslyLockedIndices = []) {
+    const { slot, optionsContainer, costDisplay, button } = elements.riftEnchant;
+
+  const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' || ['primal_acc_necklace_01', 'primal_acc_earring_01', 'primal_acc_wristwatch_01'].includes(item.id));
+    if (!isEnchantable) {
+
+        slot.innerHTML = '마법을 부여할 장비를 선택하세요 (무기/방어구, 태초 등급 액세서리만 가능)';
+        optionsContainer.innerHTML = '';
+        costDisplay.innerHTML = '';
+        button.disabled = true;
+        return;
+    }
 
         selectedInventoryItemUid = item.uid;
         document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
@@ -2009,6 +2169,9 @@ elements.inventory.spirit.innerHTML = renderGrid(player.spiritInventory || []);
             btn.classList.add('active');
             const tabId = btn.dataset.tab;
             const activeTabContent = document.getElementById(tabId);
+			if (selectedTargetItem) {
+    updateScrollEnhancementPanel(null);
+}
             if (activeTabContent) { 
                 activeTabContent.classList.add('active'); 
             }
@@ -2086,14 +2249,24 @@ document.getElementById('account-storage-grid').addEventListener('click', (e) =>
         }, 50);
     }
 
-    function handleItemClick(e) {
+   function handleItemClick(e) {
     const card = e.target.closest('.inventory-item');
-    if (!card || card.closest('#auction-grid') || card.closest('#account-storage-grid')) return;
+    if (!card || card.closest('#auction-grid') || card.closest('#account-storage-grid') || card.closest('.scroll-material-item')) return;
 
     const uid = card.dataset.uid;
     const item = findItemInState(uid);
     if (!item) return;
 
+    const isScrollTabActive = document.getElementById('scroll-tab').classList.contains('active');
+    const isEquipped = Object.values(currentPlayerState.equipment).some(eq => eq && eq.uid === uid);
+
+    if (isScrollTabActive && isEquipped) {
+        const eligibleTypes = ['weapon', 'armor', 'necklace', 'earring', 'wristwatch'];
+        if (eligibleTypes.includes(item.type) || eligibleTypes.includes(item.accessoryType)) {
+            updateScrollEnhancementPanel(item);
+            return; 
+        }
+    }
     selectedItemUidForAction = uid;
 
     if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet' || item.type === 'accessory' || item.type === 'Spirit') {
@@ -2157,6 +2330,73 @@ document.getElementById('account-storage-grid').addEventListener('click', (e) =>
     
     overlay.style.display = 'flex';
 }
+
+document.getElementById('scroll-tab').addEventListener('click', (e) => {
+    const materialCard = e.target.closest('.scroll-material-item');
+    if (materialCard && selectedTargetItem) {
+        const material = currentPlayerState.inventory.find(i => i.uid === materialCard.dataset.uid);
+        if (material) {
+            selectScrollMaterial(material);
+        }
+    }
+});
+
+elements.scroll.executeBtn.addEventListener('click', () => {
+
+    if (!selectedTargetItem || !selectedScrollItem) {
+        console.error("오류: 대상 아이템 또는 주문서가 선택되지 않아 중단됩니다.");
+        return;
+    }
+
+    if (selectedScrollItem.category === 'Hammer') {
+        const canRestoreStar = (selectedTargetItem.scrollFails || 0) > 0;
+        const canRestoreMoon = (selectedTargetItem.moonScrollFails || 0) > 0;
+        let typeToRestore = null;
+
+        if (canRestoreStar && canRestoreMoon) {
+            const choice = prompt("어떤 실패 횟수를 복구하시겠습니까? ('별' 또는 '달' 입력)");
+            if (choice === '별') {
+                typeToRestore = 'star';
+            } else if (choice === '달') {
+                typeToRestore = 'moon';
+            } else {
+                if (choice !== null) { 
+                    alert("잘못된 입력입니다. '별' 또는 '달' 중 하나를 정확히 입력해주세요.");
+                }
+                return;
+            }
+        } else if (canRestoreStar) {
+            typeToRestore = 'star';
+        } else if (canRestoreMoon) {
+            typeToRestore = 'moon';
+        }
+
+        if (typeToRestore) {
+            socket.emit('useGoldenHammer', { itemUid: selectedTargetItem.uid, hammerUid: selectedScrollItem.uid, typeToRestore });
+        }
+    } else if (selectedScrollItem.scrollType === 'star') {
+        socket.emit('useStarScroll', { itemUid: selectedTargetItem.uid, scrollUid: selectedScrollItem.uid });
+    } else if (selectedScrollItem.scrollType === 'moon') {
+        socket.emit('useMoonScroll', { itemUid: selectedTargetItem.uid, scrollUid: selectedScrollItem.uid });
+    } else {
+
+    }
+});
+
+socket.on('scrollEnhancementResult', ({ result, item }) => {
+    const anim = elements.scroll.animation;
+    let text = '', animClass = '';
+    switch(result) {
+        case 'success': text = '성공!'; animClass = 'success'; break;
+        case 'fail': text = '실패'; animClass = 'fail'; break;
+        case 'restored': text = '복구!'; animClass = 'success'; break;
+    }
+    anim.textContent = text;
+    anim.className = `enhancement-animation ${animClass}`;
+    setTimeout(() => { anim.className = 'enhancement-animation'; anim.textContent = ''; }, 1500);
+
+    updateScrollEnhancementPanel(item);
+});
 
     document.querySelector('.management-panel').addEventListener('click', handleItemClick);
     document.querySelector('.equipment-slots').addEventListener('click', handleItemClick);
@@ -2545,7 +2785,7 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
             const itemData = JSON.parse(itemLink.dataset.iteminfo);
             const modalContent = elements.modals.itemInfo.content;
             modalContent.innerHTML = `
-                <div class="inventory-item" style="width: 200px; margin: 0 auto; border: none; cursor: default;">
+                <div class="inventory-item" style="width: 300px; margin: 0 auto; border: none; cursor: default;">
                     ${createItemHTML(itemData, { forTooltip: true })}
                 </div>
             `;

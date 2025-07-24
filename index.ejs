@@ -206,6 +206,7 @@
                         <button class="tab-button" data-tab="log-tab">로그</button>
                         <button class="tab-button" data-tab="chat-tab">채팅</button>
 <button class="tab-button" data-tab="research-tab">연구소</button>
+<button class="tab-button" data-tab="scroll-tab">주문서</button>
 <button class="tab-button" data-tab="spirit-tab">정령</button>
                     </div>
 
@@ -336,6 +337,35 @@
         <p class="inventory-tip">정령은 소지하고만 있어도 오프라인 보너스를 제공합니다. (가장 높은 등급 하나만 적용)</p>
     </div>
     <div id="spirit-inventory" class="inventory-grid"></div>
+</div>
+
+<div class="tab-content" id="scroll-tab">
+    <div id="scroll-enhancement-container" style="display: flex; flex-direction: column; height: 100%; gap: 15px; padding: 15px;">
+        
+      <div id="scroll-target-sector" style="flex: 1; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 200px;">
+    <div id="scroll-target-placeholder" style="text-align: center; color: var(--text-muted);">
+        강화할 장착 아이템을 클릭하세요.
+    </div>
+    <div id="scroll-target-item-display" style="display: none; width: 100%; max-width: 500px;">
+        <div id="scroll-target-slot-container">
+            <div id="scroll-target-item-image" class="enhancement-slot" style="width: 150px; height: 150px; cursor: default; flex-shrink: 0;"></div>
+            <div id="scroll-target-item-details">
+                <h3 id="scroll-item-name"></h3>
+                <div id="scroll-item-stats-list">
+                    </div>
+            </div>
+        </div>
+    </div>
+    <button id="scroll-execute-btn" class="enhance-execute-btn" style="width: 80%; margin-top: 20px; display: none;"></button>
+    <div id="scroll-enhancement-animation" class="enhancement-animation"></div>
+</div>
+
+        <div id="scroll-material-sector" style="flex: 1.2; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 15px;">
+            <h4 style="text-align: center; margin-bottom: 15px; color: var(--text-muted);">보유 주문서 및 아이템</h4>
+            <div id="scroll-material-grid" class="inventory-grid" style="grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));">
+                </div>
+        </div>
+    </div>
 </div>
 
                 </main>
