@@ -57,7 +57,7 @@ const PORT = 3000;
 const TICK_RATE = 1000; 
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_OBJECT_ID = '68744e5af8cc7f29f0f2d114'; //6880fadcf8e2a547bc132953
+const ADMIN_OBJECT_ID = '68744e5af8cc7f29f0f2d114'; //6880fadcf8e2a547bc132953,68744e5af8cc7f29f0f2d114
 const BOSS_INTERVAL = 200;
 
 
@@ -67,8 +67,8 @@ const RIFT_ENCHANT_COST = {
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 3150000000000, ATTACK: 0, DEFENSE: 0,
-    REWARDS: { GOLD: 960000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 33150000000000, ATTACK: 0, DEFENSE: 0,
+    REWARDS: { GOLD: 1960000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
 const MailSchema = new mongoose.Schema({
@@ -905,8 +905,8 @@ if (player.autoSellList && player.autoSellList.includes(item.id) && (item.enhanc
     } else if (item.type === 'Spirit') {
         if(!player.spiritInventory) player.spiritInventory = []; 
         player.spiritInventory.push(item);
-    } else if (!item.tradable || item.enhancement > 0 || item.grade === 'Primal' || ((item.scrollSuccesses || 0) + (item.scrollFails || 0) + (item.moonScrollSuccesses || 0) + (item.moonScrollFails || 0) > 0)) {
-        player.inventory.push(item);
+ } else if ((!item.tradable && item.category !== 'Scroll' && item.category !== 'Hammer') || item.enhancement > 0 || item.grade === 'Primal' || ((item.scrollSuccesses || 0) + (item.scrollFails || 0) + (item.moonScrollSuccesses || 0) + (item.moonScrollFails || 0) > 0)) {
+	 player.inventory.push(item);
     } else {
 
         const stackableItem = player.inventory.find(i => 
@@ -3620,16 +3620,32 @@ spiritInventory: player.spiritInventory
 
 const isBossFloor = (level) => level > 0 && level % BOSS_INTERVAL === 0 && level !== 1000000;
 
-function calcMonsterStats(p) { 
-    const level = p.level; 
+function calcMonsterStats(p) {
+    const level = p.level;
     let hp, attack, defense;
-    if (level >= 1000002) {
+
+    if (level >= 1030000) { 
+
+        const tier1BaseLevel = 1000001;
+        const tier1EndLevel = 1029999;
+        const tier1Multiplier = Math.pow(1.0002, tier1EndLevel - tier1BaseLevel);
+
+        const hpAtTier1End = tier1BaseLevel * tier1Multiplier;
+        const attackAtTier1End = (tier1BaseLevel / 2) * tier1Multiplier;
+        const defenseAtTier1End = (tier1BaseLevel / 5) * tier1Multiplier;
+
+        const tier2Multiplier = Math.pow(1.00001, level - tier1EndLevel);
+        hp = hpAtTier1End * tier2Multiplier;
+        attack = attackAtTier1End * tier2Multiplier;
+        defense = defenseAtTier1End * tier2Multiplier;
+
+    } else if (level >= 1000002) { 
         const baseLevel = 1000001;
         const multiplier = Math.pow(1.0002, level - baseLevel);
         hp = (baseLevel) * multiplier;
         attack = (baseLevel / 2) * multiplier;
         defense = (baseLevel / 5) * multiplier;
-    } else {
+    } else { 
         hp = level;
         attack = level / 2;
         defense = level / 5;
@@ -3647,10 +3663,40 @@ function calcMonsterStats(p) {
     };
 
     if (monster.isBoss) {
-        const prevLevelMonsterAttack = Math.max(1, (level - 1) / 2);
-        monster.hp = level * 10;
-        monster.attack = prevLevelMonsterAttack * 2;
-        monster.defense = level / 3;
+        if (level >= 1000000) {
+            const prevLevel = level - 1;
+            let prevHp, prevAttack, prevDefense;
+
+            if (prevLevel >= 1030000) {
+                const tier1BaseLevel = 1000001;
+                const tier1EndLevel = 1029999;
+                const tier1Multiplier = Math.pow(1.0002, tier1EndLevel - tier1BaseLevel);
+                const hpAtTier1End = tier1BaseLevel * tier1Multiplier;
+                const attackAtTier1End = (tier1BaseLevel / 2) * tier1Multiplier;
+                const defenseAtTier1End = (tier1BaseLevel / 5) * tier1Multiplier;
+                const tier2Multiplier = Math.pow(1.00001, prevLevel - tier1EndLevel);
+                prevHp = hpAtTier1End * tier2Multiplier;
+                prevAttack = attackAtTier1End * tier2Multiplier;
+                prevDefense = defenseAtTier1End * tier2Multiplier;
+            } else if (prevLevel >= 1000002) {
+                const baseLevel = 1000001;
+                const multiplier = Math.pow(1.0002, prevLevel - baseLevel);
+                prevHp = baseLevel * multiplier;
+                prevAttack = (baseLevel / 2) * multiplier;
+                prevDefense = (baseLevel / 5) * multiplier;
+            }
+
+            monster.hp = prevHp * 10;
+            monster.attack = prevAttack * 10;
+            monster.defense = prevDefense * 10;
+
+        } else {
+
+            const prevLevelMonsterAttack = Math.max(1, (level - 1) / 2);
+            monster.hp = level * 10;
+            monster.attack = prevLevelMonsterAttack * 2;
+            monster.defense = level / 3;
+        }
     }
 
     if (level >= 1000001) {
