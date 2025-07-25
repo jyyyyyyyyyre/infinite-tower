@@ -909,12 +909,14 @@ if (player.autoSellList && player.autoSellList.includes(item.id) && (item.enhanc
 	 player.inventory.push(item);
     } else {
 
-        const stackableItem = player.inventory.find(i => 
-            i.id === item.id && 
-            (i.prefix || null) === (item.prefix || null) && 
-            (!i.enhancement || i.enhancement === 0) &&
-            i.scrollType === item.scrollType 
-        );
+      const stackableItem = player.inventory.find(i => 
+    i.id === item.id && 
+    (i.prefix || null) === (item.prefix || null) && 
+    (!i.enhancement || i.enhancement === 0) &&
+    (!i.enchantments || i.enchantments.length === 0) && 
+    !i.scrollStats &&                                 
+    !i.moonScrollStats                               
+);
 
         if (stackableItem) {
             stackableItem.quantity += item.quantity;
