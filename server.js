@@ -341,6 +341,11 @@ app.get('/', (req, res) => {
 });
 
 const adminItemAlias = {
+'파편': 'rift_shard_abyss',
+'바하정수': 'bahamut_essence',
+'소울스톤공': 'soulstone_attack',
+'소울스톤체': 'soulstone_hp',
+'소울스톤방': 'soulstone_defense',
     '달100퍼': 'moon_scroll_100',
     '달70퍼': 'moon_scroll_70',
     '달30퍼': 'moon_scroll_30',
@@ -389,6 +394,11 @@ const adminItemAlias = {
 };
 
 const itemData = {
+'rift_shard_abyss': { name: '심연의 파편', type: 'Special', category: 'Material', grade: 'Primal', description: '100만 층 이상의 심연에서만 발견되는 순수한 에너지의 결정체.', image: 'rift_shard.png', tradable: true },
+'bahamut_essence': { name: '바하무트의 정수', type: 'Special', category: 'Material', grade: 'Primal', description: '바하무트의 잠재력을 최대로 끌어올릴 수 있는 신화적인 재료.', image: 'pure_blood_crystal.png', tradable: true },
+'soulstone_attack': { name: '파괴자의 소울스톤', type: 'Special', category: 'Soulstone', grade: 'Primal', description: '아포칼립스에 흡수시켜 공격력을 영구적으로 1% 증폭시킵니다. (최종 곱연산)', image: 'power_stone.png', tradable: true },
+'soulstone_hp': { name: '선구자의 소울스톤', type: 'Special', category: 'Soulstone', grade: 'Primal', description: '아포칼립스에 흡수시켜 체력을 영구적으로 1% 증폭시킵니다. (최종 곱연산)', image: 'hp_stone.png', tradable: true },
+'soulstone_defense': { name: '통찰자의 소울스톤', type: 'Special', category: 'Soulstone', grade: 'Primal', description: '아포칼립스에 흡수시켜 방어력을 영구적으로 1% 증폭시킵니다. (최종 곱연산)', image: 'def_stone.png', tradable: true },
 'moon_scroll_100': { name: '100% 달의 주문서', type: 'Special', category: 'Scroll', scrollType: 'moon', grade: 'Rare', description: '장비에 달의 힘을 불어넣어 특수 능력치(집중,관통,강인함)를 +1% 상승시킵니다.', image: 'prefix_scroll.png', tradable: false, specialStats: 1 },
 'moon_scroll_70': { name: '70% 달의 주문서', type: 'Special', category: 'Scroll', scrollType: 'moon', grade: 'Legendary', description: '장비에 달의 힘을 불어넣어 특수 능력치(집중,관통,강인함)를 +2% 상승시킵니다.', image: 'prefix_scroll.png', tradable: false, specialStats: 2 },
 'moon_scroll_30': { name: '30% 달의 주문서', type: 'Special', category: 'Scroll', scrollType: 'moon', grade: 'Epic', description: '장비에 달의 힘을 불어넣어 특수 능력치(집중,관통,강인함)를 +5% 상승시킵니다.', image: 'prefix_scroll.png', tradable: false, specialStats: 5 },
@@ -452,6 +462,17 @@ const riftEnchantOptions = [
 ];
 
 const petData = {
+'apocalypse': { 
+    name: '아포칼립스', 
+    type: 'pet', 
+    grade: 'Primal', 
+    attribute: '심연', 
+    image: 'apocalypse.png', 
+    description: '방관70%/치명타확률30%/치명타저항10%/추가등반35%', 
+    effects: { defPenetration: 0.70, critChance: 0.30, critResistance: 0.10, extraClimbChance: 0.35 }, 
+    enchantable: true,
+    scrollable: true
+},
     ifrit: { name: '이프리', type: 'pet', grade: 'Rare', attribute: '불', image: 'ifrit.png', description: '방어력 관통 +10%', effects: { defPenetration: 0.10 } },
     undine: { name: '운디네', type: 'pet', grade: 'Rare', attribute: '물', image: 'undine.png', description: '치명타 저항 +2%', effects: { critResistance: 0.02 } },
     sylphid: { name: '실피드', type: 'pet', grade: 'Rare', attribute: '바람', image: 'sylphid.png', description: '추가 등반 확률 +5%', effects: { extraClimbChance: 0.05 } },
@@ -823,7 +844,9 @@ function createPetInstance(id) {
         description: d.description,
         effects: d.effects,
         fused: d.fused,
-        quantity: 1
+        quantity: 1,
+ enchantable: d.enchantable, 
+        scrollable: d.scrollable   
     }; 
 }
 
@@ -890,33 +913,59 @@ function addDiscoveredItem(player, itemId) {
     }
 }
 function handleItemStacking(player, item) {
-if (player.autoSellList && player.autoSellList.includes(item.id) && (item.enhancement === 0 || typeof item.enhancement === 'undefined')) {
-    autoSellItemById(player, item);
-    sendPlayerState(player);
-    return; 
-}
+    if (player.autoSellList && player.autoSellList.includes(item.id) && (item.enhancement === 0 || typeof item.enhancement === 'undefined')) {
+        autoSellItemById(player, item);
+        sendPlayerState(player);
+        return;
+    }
     if (!item) {
         console.error("handleItemStacking 함수에 비정상적인 null 아이템이 전달되었습니다.");
         return;
     }
     addDiscoveredItem(player, item.id);
-    if (item.type === 'pet') {
+
+    const isUniquePet = item.type === 'pet' && (item.enchantments?.length > 0 || item.scrollStats > 0 || item.moonScrollStats > 0 || item.soulstoneBonuses);
+    const isStackableMaterial = item.category === 'Material';
+    const isStackablePrimal = item.grade === 'Primal' && (isStackableMaterial || item.category === 'Soulstone');
+
+    if (item.type === 'pet' && !isUniquePet) {
+        player.petInventory.push(item);
+    } else if (isUniquePet) {
         player.petInventory.push(item);
     } else if (item.type === 'Spirit') {
-        if(!player.spiritInventory) player.spiritInventory = []; 
+        if(!player.spiritInventory) player.spiritInventory = [];
         player.spiritInventory.push(item);
- } else if ((!item.tradable && item.category !== 'Scroll' && item.category !== 'Hammer') || item.enhancement > 0 || item.grade === 'Primal' || ((item.scrollSuccesses || 0) + (item.scrollFails || 0) + (item.moonScrollSuccesses || 0) + (item.moonScrollFails || 0) > 0)) {
-	 player.inventory.push(item);
+    } 
+
+    else if (
+        (!item.tradable && !isStackableMaterial) || 
+        item.enhancement > 0 || 
+        (item.enchantments && item.enchantments.length > 0) || 
+        item.scrollStats > 0 ||                               
+        item.moonScrollStats > 0 ||                       
+        (item.grade === 'Primal' && !isStackablePrimal)
+    ) {
+        if (isStackablePrimal) {
+             const stackableItem = player.inventory.find(i => i.id === item.id);
+             if (stackableItem) {
+                stackableItem.quantity += item.quantity;
+             } else {
+                player.inventory.push(item);
+             }
+        } else {
+
+            player.inventory.push(item);
+        }
     } else {
 
-      const stackableItem = player.inventory.find(i => 
-    i.id === item.id && 
-    (i.prefix || null) === (item.prefix || null) && 
-    (!i.enhancement || i.enhancement === 0) &&
-    (!i.enchantments || i.enchantments.length === 0) && 
-    !i.scrollStats &&                                 
-    !i.moonScrollStats                               
-);
+        const stackableItem = player.inventory.find(i => 
+            i.id === item.id && 
+            (i.prefix || null) === (item.prefix || null) && 
+            (!i.enhancement || i.enhancement === 0) &&
+            (!i.enchantments || i.enchantments.length === 0) && 
+            !i.scrollStats &&                                  
+            !i.moonScrollStats                              
+        );
 
         if (stackableItem) {
             stackableItem.quantity += item.quantity;
@@ -939,12 +988,12 @@ function calculateTotalStats(player) {
         player.equipment.armor,
         player.equipment.necklace,
         player.equipment.earring,
-        player.equipment.wristwatch
-    ];
+        player.equipment.wristwatch,
+        player.equippedPet && player.equippedPet.scrollable ? player.equippedPet : null
+    ].filter(Boolean);
 
    equipmentForScrolls.forEach(item => {
         if (item && item.scrollStats) {
-         
             scrollHp += item.scrollStats;
             scrollAttack += item.scrollStats;
             scrollDefense += item.scrollStats;
@@ -953,7 +1002,6 @@ function calculateTotalStats(player) {
         if (item && item.moonScrollStats) {
             moonScrollBonus += item.moonScrollStats;
         }
-
     });
 
     const finalBase = {
@@ -988,7 +1036,7 @@ function calculateTotalStats(player) {
     player.focus = 0;
     player.penetration = 0;
     player.tenacity = 0;
-    
+
     let petDefPenetration = 0;
     let enchantAttackPercent = 1;
     let enchantDefensePercent = 1;
@@ -1008,7 +1056,7 @@ function calculateTotalStats(player) {
 
     player.buffs = player.buffs || [];
     player.buffs.forEach(buff => {
-if (buff.id === 'awakening' || buff.id === 'awakening_earring') {
+        if (buff.id === 'awakening' || buff.id === 'awakening_earring') {
              buffAttackMultiplier *= 10;
              buffDefenseMultiplier *= 10;
              buffHpMultiplier *= 10;
@@ -1022,7 +1070,7 @@ if (buff.id === 'awakening' || buff.id === 'awakening_earring') {
         }
     }
     if (player.equipment.armor) armorBonus = computeEnhanceBonus(player.equipment.armor);
-    
+
     if (player.equipment.weapon?.prefix === '완벽' && player.equipment.armor?.prefix === '완벽') {
         weaponBonus += (player.equipment.weapon.baseEffect * 0.05);
         armorBonus += (player.equipment.armor.baseEffect * 0.05);
@@ -1050,7 +1098,7 @@ if (buff.id === 'awakening' || buff.id === 'awakening_earring') {
             }
         }
     }
-    
+
     player.focus += moonScrollBonus;
     player.penetration += moonScrollBonus;
     player.tenacity += moonScrollBonus;
@@ -1077,7 +1125,7 @@ if (buff.id === 'awakening' || buff.id === 'awakening_earring') {
             }
         }
     }
-    
+
     let totalHp = (finalBase.hp * (1 + armorBonus)) * buffHpMultiplier * enchantHpPercent * enchantAllStatsPercent * titleHpBonus;
     let totalAttack = (finalBase.attack * (1 + weaponBonus)) * artifactAttackMultiplier * buffAttackMultiplier * enchantAttackPercent * enchantAllStatsPercent * titleAttackBonus;
     let totalDefense = (finalBase.defense * (1 + armorBonus)) * artifactDefenseMultiplier * buffDefenseMultiplier * enchantDefensePercent * enchantAllStatsPercent;
@@ -1097,7 +1145,7 @@ if (buff.id === 'awakening' || buff.id === 'awakening_earring') {
     totalHp *= (1 + researchBonuses.hpPercent);
     totalAttack *= (1 + researchBonuses.attackPercent);
     totalDefense *= (1 + researchBonuses.defensePercent);
-    
+
     const weaponPrefix = player.equipment.weapon?.prefix;
     const armorPrefix = player.equipment.armor?.prefix;
 
@@ -1112,13 +1160,20 @@ if (buff.id === 'awakening' || buff.id === 'awakening_earring') {
         totalDefense *= penalties[armorPrefix];
         totalHp *= penalties[armorPrefix];
     }
-    
+
     player.stats.critChance = (player.stats.critChance + titleCritBonus) * (1 + researchBonuses.critChance);
     player.stats.critResistance *= (1 + researchBonuses.critResistance);
     player.focus = player.focus * (1 + researchBonuses.focus);
     player.penetration = player.penetration * (1 + researchBonuses.penetration);
     player.tenacity = player.tenacity * (1 + researchBonuses.tenacity);
-    
+
+    if (player.equippedPet && player.equippedPet.soulstoneBonuses) {
+        const petBonuses = player.equippedPet.soulstoneBonuses;
+        if (petBonuses.attack > 0) totalAttack *= (1 + petBonuses.attack / 100);
+        if (petBonuses.hp > 0) totalHp *= (1 + petBonuses.hp / 100);
+        if (petBonuses.defense > 0) totalDefense *= (1 + petBonuses.defense / 100);
+    }
+
     player.stats.total = {
         hp: totalHp,
         attack: totalAttack,
@@ -1746,7 +1801,7 @@ title: player.equippedTitle
             pushLog(player, '[융합] 두 정령의 기운이 합쳐지기 시작합니다. (12시간 소요)');
             sendState(socket, player, calcMonsterStats(player));
         })
-       .on('useItem', ({ uid, useAll }) => useItem(onlinePlayers[socket.userId], uid, useAll))
+.on('useItem', ({ uid, useAll, targetUid }) => useItem(onlinePlayers[socket.userId], uid, useAll, targetUid))
     .on('placeEggInIncubator', ({ uid, slotIndex }) => placeEggInIncubator(onlinePlayers[socket.userId], { uid, slotIndex }))
     .on('startHatching', ({ slotIndex }) => startHatching(onlinePlayers[socket.userId], { slotIndex }))
     .on('equipPet', (uid) => equipPet(onlinePlayers[socket.userId], uid))
@@ -2072,7 +2127,7 @@ title: player.equippedTitle
             pushLog(player, `칭호 ${unequippedTitle}을(를) 해제했습니다.`);
         })
 
-   .on('enchantRiftItem', ({ uid, lockedIndices }, callback) => {
+  .on('enchantRiftItem', ({ uid, lockedIndices }, callback) => {
     const player = onlinePlayers[socket.userId];
     if (!player) return callback({ success: false });
 
@@ -2080,13 +2135,19 @@ title: player.equippedTitle
     let itemLocation = null;
     let itemIndex = -1;
 
-   for (const slot of ['weapon', 'armor', 'necklace', 'earring', 'wristwatch']) {
-        if (player.equipment[slot] && player.equipment[slot].uid === uid) {
-            item = player.equipment[slot];
-            itemLocation = 'equipment';
-            break;
+    if (player.equippedPet && player.equippedPet.uid === uid) {
+        item = player.equippedPet;
+        itemLocation = 'pet';
+    } else {
+        for (const slot of ['weapon', 'armor', 'necklace', 'earring', 'wristwatch']) {
+            if (player.equipment[slot] && player.equipment[slot].uid === uid) {
+                item = player.equipment[slot];
+                itemLocation = 'equipment';
+                break;
+            }
         }
     }
+
     if (!item) {
         itemIndex = player.inventory.findIndex(i => i.uid === uid);
         if (itemIndex > -1) {
@@ -2095,14 +2156,7 @@ title: player.equippedTitle
         }
     }
 
-
- if (item && item.enhancement === 0 && (item.type === 'weapon' || item.type === 'armor')) {
-        pushLog(player, '[마법부여] 강화되지 않은 아이템에는 마법을 부여할 수 없습니다.');
-        return callback({ success: false });
-    }
-
-
- const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' || ['primal_acc_necklace_01', 'primal_acc_earring_01', 'primal_acc_wristwatch_01'].includes(item.id));
+const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon' || item.type === 'armor' || ['primal_acc_necklace_01', 'primal_acc_earring_01', 'primal_acc_wristwatch_01'].includes(item.id));
 
     if (!isEnchantable) {
         pushLog(player, '[마법부여] 마법부여가 불가능한 아이템입니다.');
@@ -2123,7 +2177,6 @@ title: player.equippedTitle
         pushLog(player, `[마법부여] 균열의 파편이 부족합니다. (필요: ${RIFT_ENCHANT_COST.SHARDS}개)`);
         return callback({ success: false });
     }
-
 
     const titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
     let costReduction = 0;
@@ -2172,11 +2225,9 @@ title: player.equippedTitle
         }
     }
     item.enchantments = newEnchantments;
-    
 
     if (player.titleCounters) {
         player.titleCounters.enchantCount = (player.titleCounters.enchantCount || 0) + 1;
-
     }
     checkStateBasedTitles(player);
 
@@ -2695,7 +2746,66 @@ title: player.equippedTitle
 
     GameData.updateOne({ user: player.user }, { $set: { autoSellList: player.autoSellList } }).catch(err => console.error('자동판매 목록 저장 오류:', err));
 })
+.on('abyssalShop:buyItem', async ({ itemId }) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player) return;
 
+    const shopItems = {
+        'bahamut_essence': { price: 1200 },
+        'soulstone_attack': { price: 10 },
+        'soulstone_hp': { price: 10 },
+        'soulstone_defense': { price: 10 }
+    };
+
+    const itemToBuy = shopItems[itemId];
+    if (!itemToBuy) return;
+
+    const shardItem = player.inventory.find(i => i.id === 'rift_shard_abyss');
+    if (!shardItem || shardItem.quantity < itemToBuy.price) {
+        return pushLog(player, '[심연] 심연의 파편이 부족합니다.');
+    }
+
+    shardItem.quantity -= itemToBuy.price;
+    if (shardItem.quantity <= 0) {
+        player.inventory = player.inventory.filter(i => i.uid !== shardItem.uid);
+    }
+
+    const purchasedItem = createItemInstance(itemId);
+    if (purchasedItem) {
+        handleItemStacking(player, purchasedItem);
+        pushLog(player, `[심연] <span class="${purchasedItem.grade}">${purchasedItem.name}</span> 아이템을 구매했습니다.`);
+        sendInventoryUpdate(player);
+        sendPlayerState(player);
+    }
+})
+.on('pet:upgradeWithEssence', () => {
+    const player = onlinePlayers[socket.userId];
+    if (!player) return;
+
+    if (!player.equippedPet || player.equippedPet.id !== 'bahamut') {
+        return pushLog(player, '[오류] 바하무트 펫을 장착해야 합니다.');
+    }
+
+    const essenceIndex = player.inventory.findIndex(i => i.id === 'bahamut_essence');
+    if (essenceIndex === -1) {
+        return pushLog(player, '[오류] 바하무트의 정수가 없습니다.');
+    }
+
+    const essence = player.inventory[essenceIndex];
+    essence.quantity--;
+    if (essence.quantity <= 0) {
+        player.inventory.splice(essenceIndex, 1);
+    }
+
+    const newPet = createPetInstance('apocalypse');
+    player.equippedPet = newPet;
+
+    pushLog(player, `[진화] 바하무트가 심연의 힘을 흡수하여 <span class="${newPet.grade}">${newPet.name}</span>(으)로 다시 태어났습니다!`);
+
+    calculateTotalStats(player);
+    sendInventoryUpdate(player);
+    sendPlayerState(player);
+})
        .on('disconnect', async () => { 
             console.log(`[연결 해제] 유저: ${socket.username}`);
             const player = onlinePlayers[socket.userId];
@@ -3177,6 +3287,15 @@ function onClearFloor(p) {
     }
 
     const clearedFloor = p.level - 1;
+if (clearedFloor >= 1000000 && Math.random() < 0.001) {
+    const dropQuantity = Math.floor(Math.random() * 5) + 1; 
+    const shardItem = createItemInstance('rift_shard_abyss', dropQuantity);
+    if (shardItem) {
+        handleItemStacking(p, shardItem);
+        sendInventoryUpdate(p);
+        pushLog(p, `[심연] <span class="${shardItem.grade}">심연의 파편</span> ${dropQuantity}개를 획득했습니다!`);
+    }
+}
     const isBoss = isBossFloor(clearedFloor);
     
     let goldEarned = isBoss ? clearedFloor * 10 : clearedFloor;
@@ -3565,7 +3684,7 @@ function pushLog(p, text) {
 }
 async function announceMysticDrop(player, item) {
 
-    if (!player || !['Mystic', 'Primal'].includes(item.grade) || item.id === 'form_locking_stone') return;
+    if (!player || !['Mystic', 'Primal'].includes(item.grade) || item.id === 'form_locking_stone' || item.id === 'moon_scroll_10') return;
 
     const bannerMessage = `🎉 ★★★ 축하합니다! ${player.username}님이 <span class="${item.grade}">${item.name}</span> 아이템을 획득했습니다! ★★★ 🎉`;
     
@@ -4289,12 +4408,52 @@ function sendPlayerState(player) {
 }
 
 
-
-function useItem(player, uid, useAll = false) {
+function useItem(player, uid, useAll = false, targetUid = null) {
     if (!player) return;
     const itemIndex = player.inventory.findIndex(i => i.uid === uid);
     if (itemIndex === -1) return;
     const item = player.inventory[itemIndex];
+
+    if (item.category === 'Soulstone') {
+        if (!targetUid || !player.equippedPet || player.equippedPet.uid !== targetUid || player.equippedPet.id !== 'apocalypse') {
+            player.socket.emit('useItemResult', { messages: ['[소울스톤] 아포칼립스 펫을 장착한 상태에서만 사용할 수 있습니다.'] });
+            return;
+        }
+
+        const pet = player.equippedPet;
+        if (!pet.soulstoneBonuses) {
+            pet.soulstoneBonuses = { attack: 0, hp: 0, defense: 0 };
+        }
+
+        let statToUpgrade = '';
+        let statName = '';
+        if (item.id === 'soulstone_attack') {
+            statToUpgrade = 'attack';
+            statName = '공격력';
+        } else if (item.id === 'soulstone_hp') {
+            statToUpgrade = 'hp';
+            statName = '체력';
+        } else if (item.id === 'soulstone_defense') {
+            statToUpgrade = 'defense';
+            statName = '방어력';
+        }
+
+        if (statToUpgrade) {
+            pet.soulstoneBonuses[statToUpgrade]++;
+            pushLog(player, `[소울스톤] <span class="Primal">${pet.name}</span>의 ${statName}이(가) 영구적으로 1% 증폭되었습니다!`);
+
+            item.quantity--;
+            if (item.quantity <= 0) {
+                player.inventory.splice(itemIndex, 1);
+            }
+
+            calculateTotalStats(player);
+            sendState(player.socket, player, calcMonsterStats(player));
+            sendInventoryUpdate(player);
+        }
+        return;
+    }
+
     const quantityToUse = useAll ? item.quantity : 1;
     let messages = [];
     
@@ -5125,6 +5284,7 @@ async function rerollItemPrefix(player, itemUid) {
     sendState(player.socket, player, calcMonsterStats(player));
     sendInventoryUpdate(player);
 }
+
 function useStarScroll(player, { itemUid, scrollUid }) {
     if (!player || !itemUid || !scrollUid) return;
 
@@ -5138,11 +5298,19 @@ function useStarScroll(player, { itemUid, scrollUid }) {
         return pushLog(player, '[오류] 유효하지 않은 별의 주문서입니다.');
     }
 
-    const targetItemSlot = Object.keys(player.equipment).find(slot => player.equipment[slot] && player.equipment[slot].uid === itemUid);
-    if (!targetItemSlot) {
-        return pushLog(player, '[오류] 강화할 장착 아이템을 찾을 수 없습니다.');
+    let targetItem = null;
+    if (player.equippedPet && player.equippedPet.uid === itemUid) {
+        targetItem = player.equippedPet;
+    } else {
+        const targetItemSlot = Object.keys(player.equipment).find(slot => player.equipment[slot] && player.equipment[slot].uid === itemUid);
+        if (targetItemSlot) {
+            targetItem = player.equipment[targetItemSlot];
+        }
     }
-    const targetItem = player.equipment[targetItemSlot];
+
+    if (!targetItem) {
+        return pushLog(player, '[오류] 강화할 장착 아이템 또는 펫을 찾을 수 없습니다.');
+    }
 
     if (targetItem.scrollSuccesses === undefined) targetItem.scrollSuccesses = 0;
     if (targetItem.scrollFails === undefined) targetItem.scrollFails = 0;
@@ -5184,7 +5352,6 @@ function useStarScroll(player, { itemUid, scrollUid }) {
     sendPlayerState(player);
     sendInventoryUpdate(player);
 }
-
 function useMoonScroll(player, { itemUid, scrollUid }) {
     if (!player || !itemUid || !scrollUid) return;
 
@@ -5198,11 +5365,19 @@ function useMoonScroll(player, { itemUid, scrollUid }) {
         return pushLog(player, '[오류] 유효하지 않은 달의 주문서입니다.');
     }
 
-    const targetItemSlot = Object.keys(player.equipment).find(slot => player.equipment[slot] && player.equipment[slot].uid === itemUid);
-    if (!targetItemSlot) {
-        return pushLog(player, '[오류] 강화할 장착 아이템을 찾을 수 없습니다.');
+    let targetItem = null;
+    if (player.equippedPet && player.equippedPet.uid === itemUid) {
+        targetItem = player.equippedPet;
+    } else {
+        const targetItemSlot = Object.keys(player.equipment).find(slot => player.equipment[slot] && player.equipment[slot].uid === itemUid);
+        if (targetItemSlot) {
+            targetItem = player.equipment[targetItemSlot];
+        }
     }
-    const targetItem = player.equipment[targetItemSlot];
+
+    if (!targetItem) {
+        return pushLog(player, '[오류] 강화할 장착 아이템 또는 펫을 찾을 수 없습니다.');
+    }
 
     if (targetItem.moonScrollSuccesses === undefined) targetItem.moonScrollSuccesses = 0;
     if (targetItem.moonScrollFails === undefined) targetItem.moonScrollFails = 0;
