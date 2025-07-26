@@ -3684,7 +3684,7 @@ function pushLog(p, text) {
 }
 async function announceMysticDrop(player, item) {
 
-    if (!player || !['Mystic', 'Primal'].includes(item.grade) || item.id === 'form_locking_stone' || item.id === 'moon_scroll_10') return;
+if (!player || !['Mystic', 'Primal'].includes(item.grade) || item.id === 'form_locking_stone' || item.id === 'moon_scroll_10' || item.id === 'star_scroll_10' || item.id === 'golden_hammer') return;
 
     const bannerMessage = `🎉 ★★★ 축하합니다! ${player.username}님이 <span class="${item.grade}">${item.name}</span> 아이템을 획득했습니다! ★★★ 🎉`;
     
