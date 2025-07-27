@@ -946,10 +946,25 @@ scroll: {
     };
 	
 	const abyssalShopItems = [
-    { id: 'bahamut_essence', name: '바하무트의 정수', description: '바하무트를 궁극의 존재로 진화시킵니다.', price: 1200, image: 'pure_blood_crystal.png', grade: 'Primal' },
-    { id: 'soulstone_attack', name: '파괴자의 소울스톤', description: '플레이어의 공격력을 영구적으로 1% 증폭시킵니다.', price: 10, image: 'power_stone.png', grade: 'Primal' },
-    { id: 'soulstone_hp', name: '선구자의 소울스톤', description: '플레이어의 체력을 영구적으로 1% 증폭시킵니다.', price: 10, image: 'hp_stone.png', grade: 'Primal' },
-    { id: 'soulstone_defense', name: '통찰자의 소울스톤', description: '플레이어의 방어력을 영구적으로 1% 증폭시킵니다.', price: 10, image: 'def_stone.png', grade: 'Primal' }
+    { id: 'bahamut_essence', name: '바하무트의 정수', description: '바하무트의 정수. 바하무트에게 전달시 궁극의 존재로 진화한다', price: 2000, image: 'pure_blood_crystal.png', grade: 'Primal' },
+    { id: 'soulstone_attack', name: '파괴자의 소울스톤', description: '공격력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'power_stone.png', grade: 'Primal' },
+    { id: 'soulstone_hp', name: '선구자의 소울스톤', description: '체력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'hp_stone.png', grade: 'Primal' },
+    { id: 'soulstone_defense', name: '통찰자의 소울스톤', description: '방어력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'def_stone.png', grade: 'Primal' },
+    { id: 'w005', name: '태초의 파편', description: '미스틱 무기', price: 100, image: 'sword5.png', grade: 'Mystic' },
+    { id: 'a005', name: '세계수의 심장', description: '미스틱 방어구', price: 100, image: 'armor5.png', grade: 'Mystic' },
+    { id: 'acc_necklace_01', name: '윤회의 목걸이', description: '미스틱 목걸이.', price: 100, image: 'necklace_01.png', grade: 'Mystic' },
+    { id: 'acc_earring_01', name: '찰나의 각성 이어링', description: '미스틱 귀걸이.', price: 100, image: 'earring_01.png', grade: 'Mystic' },
+    { id: 'acc_wristwatch_01', name: '통찰자의 크로노그래프', description: '미스틱 손목시계', price: 100, image: 'wristwatch_01.png', grade: 'Mystic' },
+    { id: 'golden_hammer', name: '헤파이스토스의 황금 망치', description: '주문서 강화 실패 횟수를 1회 복구합니다.', price: 200, image: 'goldenhammer.png', grade: 'Mystic' },
+    { id: 'star_scroll_10', name: '10% 별의 주문서', description: '기본 능력치를 +1,000,000 상승시킵니다.', price: 50, image: 'return_scroll.png', grade: 'Mystic' },
+    { id: 'star_scroll_30', name: '30% 별의 주문서', description: '기본 능력치를 +600,000 상승시킵니다.', price: 40, image: 'return_scroll.png', grade: 'Epic' },
+    { id: 'star_scroll_70', name: '70% 별의 주문서', description: '기본 능력치를 +300,000 상승시킵니다.', price: 30, image: 'return_scroll.png', grade: 'Legendary' },
+    { id: 'star_scroll_100', name: '100% 별의 주문서', description: '기본 능력치를 +100,000 상승시킵니다.', price: 20, image: 'return_scroll.png', grade: 'Rare' },
+    { id: 'moon_scroll_10', name: '10% 달의 주문서', description: '특수 능력치를 +10% 상승시킵니다.', price: 50, image: 'prefix_scroll.png', grade: 'Mystic' },
+    { id: 'moon_scroll_30', name: '30% 달의 주문서', description: '특수 능력치를 +5% 상승시킵니다.', price: 40, image: 'prefix_scroll.png', grade: 'Epic' },
+    { id: 'moon_scroll_70', name: '70% 달의 주문서', description: '특수 능력치를 +2% 상승시킵니다.', price: 30, image: 'prefix_scroll.png', grade: 'Legendary' },
+    { id: 'moon_scroll_100', name: '100% 달의 주문서', description: '특수 능력치를 +1% 상승시킵니다.', price: 20, image: 'prefix_scroll.png', grade: 'Rare' },
+    { id: 'abyssal_box', name: '심연의 상자', description: '심연 상점의 아이템 중 하나를 랜덤 획득합니다.(가격에 따른 확률 균등분배)', price: 100, image: 'box100.png', grade: 'Mystic' }
 ];
 
     if (elements.floorControls.safeZoneBtn) {
@@ -1035,6 +1050,7 @@ if (abyssalShopButton) {
     });
 }
 
+
 function renderAbyssalShop() {
     if (!currentPlayerState) return;
     const shardItem = currentPlayerState.inventory.find(i => i.id === 'rift_shard_abyss');
@@ -1043,31 +1059,74 @@ function renderAbyssalShop() {
     abyssalShopGrid.innerHTML = '';
 
     abyssalShopItems.forEach(item => {
-        const canAfford = currentShards >= item.price;
         const itemDiv = document.createElement('div');
         itemDiv.className = 'inventory-item';
+        itemDiv.style.display = 'flex';
+        itemDiv.style.flexDirection = 'column';
+        itemDiv.style.alignItems = 'center';
+        itemDiv.style.justifyContent = 'space-between';
+        itemDiv.style.padding = '10px';
+        itemDiv.style.textAlign = 'center';
+
         itemDiv.innerHTML = `
-            <div class="item-image"><img src="/image/${item.image}" alt="${item.name}"></div>
-            <div class="item-info">
+            <div class="item-image" style="margin-bottom: 5px;"><img src="/image/${item.image}" alt="${item.name}"></div>
+            <div class="item-info" style="margin-bottom: 10px;">
                 <div class="item-name ${item.grade}">${item.name}</div>
-                <div class="item-effect" style="color: var(--primal-color); font-weight: bold;">${item.price.toLocaleString()} 파편</div>
+                <div class="item-effect" style="font-size: 0.9em; color: var(--text-muted); min-height: 2.7em; display: flex; align-items: center; justify-content: center; word-break: keep-all;">
+                    ${item.description}
+                </div>
+                <div class="item-price" style="color: var(--primal-color); font-weight: bold; margin-top: 5px;">
+                    ${item.price.toLocaleString()} 파편
+                </div>
             </div>
         `;
 
         const buyButton = document.createElement('button');
         buyButton.textContent = '구매';
         buyButton.className = 'action-btn';
-        buyButton.style.marginTop = '10px';
-        buyButton.disabled = !canAfford;
+        buyButton.style.width = '90%';
+
         buyButton.addEventListener('click', () => {
-            if (confirm(`'${item.name}' 을(를) 구매하시겠습니까?`)) {
-                socket.emit('abyssalShop:buyItem', { itemId: item.id });
+            const latestShardItem = currentPlayerState.inventory.find(i => i.id === 'rift_shard_abyss');
+            const latestCurrentShards = latestShardItem ? latestShardItem.quantity : 0;
+
+            if (latestCurrentShards < item.price) {
+                alert('심연의 파편이 부족합니다.');
+                return;
+            }
+
+            const promptMessage = `[${item.name}] 몇 개를 구매하시겠습니까?\n(보유 파편: ${latestCurrentShards.toLocaleString()}개)`;
+            const input = prompt(promptMessage, 1);
+            
+            if (input === null) {
+                return; 
+            }
+            const quantity = parseInt(input, 10);
+            if (isNaN(quantity) || quantity <= 0) {
+                return alert('올바른 수량을 입력해주세요.');
+            }
+            
+            const totalPrice = item.price * quantity;
+            if (latestCurrentShards < totalPrice) {
+                alert(`심연의 파편이 부족합니다. (필요: ${totalPrice.toLocaleString()}개)`);
+                return;
+            }
+
+            const confirmMessage = `'${item.name}' ${quantity > 1 ? quantity + '개를' : '을(를)'} 구매하시겠습니까?`;
+
+            
+            if (confirm(confirmMessage)) {
+                socket.emit('abyssalShop:buyItem', { itemId: item.id, quantity: quantity });
             }
         });
+
         itemDiv.appendChild(buyButton);
         abyssalShopGrid.appendChild(itemDiv);
     });
 }
+
+
+
 
     function updatePlayerFameDisplay(score, username, title) {
         const fameDetails = getFameDetails(score);

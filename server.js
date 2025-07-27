@@ -394,7 +394,8 @@ const adminItemAlias = {
 };
 
 const itemData = {
-'rift_shard_abyss': { name: '심연의 파편', type: 'Special', category: 'Material', grade: 'Primal', description: '100만 층 이상의 심연에서만 발견되는 순수한 에너지의 결정체.', image: 'rift_shard.png', tradable: true },
+'abyssal_box': { name: '심연의 상자', type: 'Special', category: 'Consumable', grade: 'Mystic', description: '사용 시 심연 상점에서 판매하는 아이템 중 하나를 획득합니다.', image: 'box100.png', tradable: true },
+'rift_shard_abyss': { name: '심연의 파편', type: 'Special', category: 'Material', grade: 'Primal', description: '100만 층 이상의 심연에서만 발견되는 순수한 에너지의 결정체.', image: 'rift_shard_abyss.png', tradable: true },
 'bahamut_essence': { name: '바하무트의 정수', type: 'Special', category: 'Material', grade: 'Primal', description: '바하무트의 잠재력을 최대로 끌어올릴 수 있는 신화적인 재료.', image: 'pure_blood_crystal.png', tradable: true },
 'soulstone_attack': { name: '파괴자의 소울스톤', type: 'Special', category: 'Soulstone', grade: 'Primal', description: '아포칼립스에 흡수시켜 공격력을 영구적으로 1% 증폭시킵니다. (최종 곱연산)', image: 'power_stone.png', tradable: true },
 'soulstone_hp': { name: '선구자의 소울스톤', type: 'Special', category: 'Soulstone', grade: 'Primal', description: '아포칼립스에 흡수시켜 체력을 영구적으로 1% 증폭시킵니다. (최종 곱연산)', image: 'hp_stone.png', tradable: true },
@@ -407,7 +408,7 @@ const itemData = {
 'star_scroll_70': { name: '70% 별의 주문서', type: 'Special', category: 'Scroll', scrollType: 'star', grade: 'Legendary', description: '장비에 별의 힘을 불어넣어 기본 능력치를 +300,000 상승시킵니다.', image: 'return_scroll.png', tradable: false, stats: 300000 },
 'star_scroll_30': { name: '30% 별의 주문서', type: 'Special', category: 'Scroll', scrollType: 'star', grade: 'Epic', description: '장비에 별의 힘을 불어넣어 기본 능력치를 +600,000 상승시킵니다.', image: 'return_scroll.png', tradable: false, stats: 600000 },
 'star_scroll_10': { name: '10% 별의 주문서', type: 'Special', category: 'Scroll', scrollType: 'star', grade: 'Mystic', description: '장비에 별의 힘을 불어넣어 기본 능력치를 +1,000,000 상승시킵니다.', image: 'return_scroll.png', tradable: false, stats: 1000000 },
-'golden_hammer': { name: '헤파이스토스의 황금 망치', type: 'Special', category: 'Hammer', grade: 'Mystic', description: '주문서 강화 실패 횟수를 1회 복구합니다.', image: 'hammer_hephaestus.png', tradable: false },
+'golden_hammer': { name: '헤파이스토스의 황금 망치', type: 'Special', category: 'Hammer', grade: 'Mystic', description: '주문서 강화 실패 횟수를 1회 복구합니다.', image: 'goldenhammer.png', tradable: false },
 'spirit_essence': { name: '정령의 형상', type: 'Special', category: 'Material', grade: 'Mystic', description: '응축된 정령의 힘. 펫의 영혼을 변환하여 얻을 수 있으며, 뭉쳐지면 새로운 생명이 깃듭니다', image: 'spirit_essence.png', tradable: true },
    'primal_acc_necklace_01': { name: '찬란한 윤회의 성물', type: 'accessory', accessoryType: 'necklace', grade: 'Primal', description: '사망 시 2/3 지점 부활, 추가로 30% 확률로 현재 층에서 부활합니다.', image: 'primal_necklace.png', tradable: true, enchantable: true },
     'primal_acc_earring_01': { name: '시공의 각성 이어링', type: 'accessory', accessoryType: 'earring', grade: 'Primal', description: '공격 시 3% 확률로 15초간 각성 상태에 돌입합니다.', image: 'primal_earring.png', tradable: true, enchantable: true },
@@ -912,6 +913,8 @@ function addDiscoveredItem(player, itemId) {
         }
     }
 }
+
+
 function handleItemStacking(player, item) {
     if (player.autoSellList && player.autoSellList.includes(item.id) && (item.enhancement === 0 || typeof item.enhancement === 'undefined')) {
         autoSellItemById(player, item);
@@ -927,6 +930,8 @@ function handleItemStacking(player, item) {
     const isUniquePet = item.type === 'pet' && (item.enchantments?.length > 0 || item.scrollStats > 0 || item.moonScrollStats > 0 || item.soulstoneBonuses);
     const isStackableMaterial = item.category === 'Material';
     const isStackablePrimal = item.grade === 'Primal' && (isStackableMaterial || item.category === 'Soulstone');
+    const nonStackableMysticIds = ['w005', 'a005', 'acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
+
 
     if (item.type === 'pet' && !isUniquePet) {
         player.petInventory.push(item);
@@ -937,8 +942,9 @@ function handleItemStacking(player, item) {
         player.spiritInventory.push(item);
     } 
 
+
     else if (
-        (!item.tradable && !isStackableMaterial) || 
+        nonStackableMysticIds.includes(item.id) ||
         item.enhancement > 0 || 
         (item.enchantments && item.enchantments.length > 0) || 
         item.scrollStats > 0 ||                               
@@ -2746,37 +2752,58 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
 
     GameData.updateOne({ user: player.user }, { $set: { autoSellList: player.autoSellList } }).catch(err => console.error('자동판매 목록 저장 오류:', err));
 })
-.on('abyssalShop:buyItem', async ({ itemId }) => {
+
+.on('abyssalShop:buyItem', async ({ itemId, quantity }) => {
     const player = onlinePlayers[socket.userId];
     if (!player) return;
 
     const shopItems = {
-        'bahamut_essence': { price: 1200 },
-        'soulstone_attack': { price: 10 },
-        'soulstone_hp': { price: 10 },
-        'soulstone_defense': { price: 10 }
+        'bahamut_essence': { price: 2000 },
+        'soulstone_attack': { price: 50 },
+        'soulstone_hp': { price: 50 },
+        'soulstone_defense': { price: 50 },
+        'w005': { price: 100 },
+        'a005': { price: 100 },
+        'acc_necklace_01': { price: 100 },
+        'acc_earring_01': { price: 100 },
+        'acc_wristwatch_01': { price: 100 },
+        'golden_hammer': { price: 200 },
+        'star_scroll_10': { price: 50 },
+        'star_scroll_30': { price: 40 },
+        'star_scroll_70': { price: 30 },
+        'star_scroll_100': { price: 20 },
+        'moon_scroll_10': { price: 50 },
+        'moon_scroll_30': { price: 40 },
+        'moon_scroll_70': { price: 30 },
+        'moon_scroll_100': { price: 20 },
+        'abyssal_box': { price: 100 }
     };
 
     const itemToBuy = shopItems[itemId];
     if (!itemToBuy) return;
 
+    const purchaseQuantity = (typeof quantity === 'number' && quantity > 0) ? Math.floor(quantity) : 1;
+    const totalPrice = itemToBuy.price * purchaseQuantity;
+
     const shardItem = player.inventory.find(i => i.id === 'rift_shard_abyss');
-    if (!shardItem || shardItem.quantity < itemToBuy.price) {
-        return pushLog(player, '[심연] 심연의 파편이 부족합니다.');
+    if (!shardItem || shardItem.quantity < totalPrice) {
+        return pushLog(player, `[심연] 심연의 파편이 부족합니다. (필요: ${totalPrice.toLocaleString()}개)`);
     }
 
-    shardItem.quantity -= itemToBuy.price;
+    shardItem.quantity -= totalPrice;
     if (shardItem.quantity <= 0) {
         player.inventory = player.inventory.filter(i => i.uid !== shardItem.uid);
     }
 
-    const purchasedItem = createItemInstance(itemId);
+
+    const purchasedItem = createItemInstance(itemId, purchaseQuantity);
     if (purchasedItem) {
         handleItemStacking(player, purchasedItem);
-        pushLog(player, `[심연] <span class="${purchasedItem.grade}">${purchasedItem.name}</span> 아이템을 구매했습니다.`);
+        pushLog(player, `[심연] <span class="${purchasedItem.grade}">${purchasedItem.name}</span> ${purchaseQuantity}개를 구매했습니다.`);
         sendInventoryUpdate(player);
         sendPlayerState(player);
     }
+
 })
 .on('pet:upgradeWithEssence', () => {
     const player = onlinePlayers[socket.userId];
@@ -3682,17 +3709,29 @@ function pushLog(p, text) {
         p.socket.emit('logUpdate', p.log);
     }
 }
+
+
 async function announceMysticDrop(player, item) {
 
-if (!player || !['Mystic', 'Primal'].includes(item.grade) || item.id === 'form_locking_stone' || item.id === 'moon_scroll_10' || item.id === 'star_scroll_10' || item.id === 'golden_hammer') return;
+    if (!player || !['Mystic', 'Primal'].includes(item.grade) || item.id === 'form_locking_stone' || item.id === 'moon_scroll_10' || item.id === 'star_scroll_10' || item.id === 'golden_hammer') return;
 
     const bannerMessage = `🎉 ★★★ 축하합니다! ${player.username}님이 <span class="${item.grade}">${item.name}</span> 아이템을 획득했습니다! ★★★ 🎉`;
     
     if (item.grade === 'Primal') {
+        
+        const excludedPrimalIds = [
+            'rift_shard_abyss', 
+            'soulstone_attack',   
+            'soulstone_hp',      
+            'soulstone_defense'  
+        ];
+
+        if (excludedPrimalIds.includes(item.id)) {
+            return;
+        }
 
         io.emit('globalAnnouncement', bannerMessage, { style: 'primal' });
         
-
         const primalDropMessage = {
             type: 'primal_drop',
             username: player.username,   
@@ -3700,7 +3739,6 @@ if (!player || !['Mystic', 'Primal'].includes(item.grade) || item.id === 'form_l
             itemName: item.name,
             itemGrade: item.grade
         };
-
 
         io.emit('chatMessage', primalDropMessage);
         
@@ -3713,10 +3751,8 @@ if (!player || !['Mystic', 'Primal'].includes(item.grade) || item.id === 'form_l
 
     } else {
         
-
         io.emit('globalAnnouncement', bannerMessage);
         
-
         const mysticAnnounce = { 
             type: 'announcement', 
             username: 'SYSTEM', 
@@ -4460,6 +4496,52 @@ function useItem(player, uid, useAll = false, targetUid = null) {
     const titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
     
     switch (item.id) {
+
+case 'abyssal_box':
+        const lootTable = [
+            { id: 'bahamut_essence', chance: 0.01 }, // 1%
+            { id: 'golden_hammer', chance: 0.05 }, // 5%
+            { id: 'w005', chance: 0.03 }, // 3%
+            { id: 'a005', chance: 0.03 }, // 3%
+            { id: 'acc_necklace_01', chance: 0.03 }, // 3%
+            { id: 'acc_earring_01', chance: 0.03 }, // 3%
+            { id: 'acc_wristwatch_01', chance: 0.03 }, // 3%
+            { id: 'star_scroll_10', chance: 0.05 }, // 5%
+            { id: 'moon_scroll_10', chance: 0.05 }, // 5%
+            { id: 'star_scroll_30', chance: 0.05 }, // 5%
+            { id: 'moon_scroll_30', chance: 0.05 }, // 5%
+            { id: 'star_scroll_70', chance: 0.05 }, // 5%
+            { id: 'moon_scroll_70', chance: 0.05 }, // 5%
+            { id: 'star_scroll_100', chance: 0.098 }, // 9.8%
+            { id: 'moon_scroll_100', chance: 0.098 }, // 9.8%
+            { id: 'soulstone_attack', chance: 0.098 }, // 9.8%
+            { id: 'soulstone_hp', chance: 0.098 }, // 9.8%
+            { id: 'soulstone_defense', chance: 0.098 }  // 9.8%
+        ];
+        
+        let wonItem = null;
+        const rand = Math.random();
+        let cumulativeChance = 0;
+
+        for (const loot of lootTable) {
+            cumulativeChance += loot.chance;
+            if (rand < cumulativeChance) {
+                wonItem = createItemInstance(loot.id);
+                break;
+            }
+        }
+
+        if (wonItem) {
+            handleItemStacking(player, wonItem);
+messages.push(`[심연의 상자] 상자에서 [${wonItem.grade}] ${wonItem.name} 아이템을 획득했습니다!`);
+            announceMysticDrop(player, wonItem);
+        } else {
+            const fallbackItem = createItemInstance('star_scroll_100');
+            handleItemStacking(player, fallbackItem);
+messages.push(`[심연의 상자] 상자에서 [${fallbackItem.grade}] ${fallbackItem.name} 아이템을 획득했습니다!`);
+        }
+        break;
+
     case 'pure_blood_crystal':
         if (player.bloodthirst >= 10) {
             messages.push("[피의 갈망] 이미 최대치(10%)에 도달했습니다.");

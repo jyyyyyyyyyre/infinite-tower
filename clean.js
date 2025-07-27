@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 const mongoose = require('mongoose');
 
@@ -30,15 +29,27 @@ async function stackExistingItems() {
         let inventoryModified = false;
 
         for (const item of originalInventory) {
-            const isStackable = (item.category === 'Scroll' || item.category === 'Hammer') && (!item.enhancement || item.enhancement === 0);
+            const isStackable = 
+                item.type !== 'weapon' &&
+                item.type !== 'armor' &&
+                item.type !== 'accessory' &&
+                (!item.enhancement || item.enhancement === 0) &&
+                (!item.enchantments || item.enchantments.length === 0) &&
+                !item.scrollStats &&
+                !item.moonScrollStats;
 
             if (isStackable) {
-                if (stackableItems.has(item.id)) {
-                    const existingItem = stackableItems.get(item.id);
+                const stackKey = `${item.id}_${item.prefix || 'none'}`;
+
+                if (stackableItems.has(stackKey)) {
+                    const existingItem = stackableItems.get(stackKey);
                     existingItem.quantity += item.quantity || 1;
                     inventoryModified = true; 
                 } else {
-                    stackableItems.set(item.id, item);
+                    if (!item.quantity) {
+                        item.quantity = 1;
+                    }
+                    stackableItems.set(stackKey, item);
                 }
             } else {
                 unstackableItems.push(item);
@@ -50,7 +61,7 @@ async function stackExistingItems() {
             gameData.inventory = newInventory;
             await gameData.save();
             processedCount++;
-            console.log(`- ${processedCount}번째 유저의 인벤토리를 정리했습니다.`);
+            console.log(`- ${gameData._id} 유저의 인벤토리를 정리했습니다.`);
         }
     }
 
