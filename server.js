@@ -4593,9 +4593,19 @@ messages.push(`[심연의 상자] 상자에서 [${fallbackItem.grade}] ${fallbac
 
     case 'boss_participation_box':
         for (let i = 0; i < quantityToUse; i++) {
-            const goldGained = 3000000;
-            player.gold += goldGained;
-            messages.push(`[참여 상자] 상자에서 ${goldGained.toLocaleString()} G를 획득했습니다!`);
+            if (player.maxLevel >= 1000000) {
+                const shardAmount = Math.floor(Math.random() * 30) + 1;
+                const shardItem = createItemInstance('rift_shard_abyss', shardAmount);
+                if (shardItem) {
+                    handleItemStacking(player, shardItem);
+                    messages.push(`[참여 상자] 상자에서 ${shardItem.name} ${shardAmount}개를 획득했습니다!`);
+                }
+            } else {
+                const goldGained = 3000000;
+                player.gold += goldGained;
+                messages.push(`[참여 상자] 상자에서 ${goldGained.toLocaleString()} G를 획득했습니다!`);
+            }
+
             const bonusItems = [
                 { id: 'hammer_hephaestus', chance: 0.01 },
                 { id: 'prevention_ticket', chance: 0.01 },
@@ -4817,7 +4827,6 @@ function unequipPet(player) {
     updateFameScore(player.socket, player);
 checkStateBasedTitles(player);
 }
-
 async function onWorldBossDefeated() {
     if (!worldBossState || !worldBossState.isActive) return;
 
@@ -4846,12 +4855,14 @@ async function onWorldBossDefeated() {
         const userRewards = rewardLedger.get(userIdString);
         const contributionPercent = (participant.damageDealt / totalDamage) * 100;
 
-        const goldReward = Math.floor(10000000000 * (participant.damageDealt / totalDamage));
+const goldReward = Math.floor(WORLD_BOSS_CONFIG.REWARDS.GOLD * (participant.damageDealt / totalDamage));
         if (goldReward > 0) userRewards.gold += goldReward;
 
         if (contributionPercent >= 0) userRewards.items.push(createItemInstance('boss_participation_box'));
-        if (contributionPercent >= 1) userRewards.items.push(createItemInstance('rift_shard', 5));
-        if (contributionPercent >= 5) userRewards.items.push(createItemInstance('rift_shard', 20));
+
+        if (contributionPercent >= 1) userRewards.items.push(createItemInstance('rift_shard_abyss', 5));
+        if (contributionPercent >= 5) userRewards.items.push(createItemInstance('rift_shard_abyss', 20));
+        
         if (contributionPercent >= 10) {
             if (Math.random() < 0.10) {
                 const mysticPool = ['w005', 'a005', 'acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
