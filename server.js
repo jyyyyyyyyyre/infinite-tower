@@ -4499,8 +4499,8 @@ function useItem(player, uid, useAll = false, targetUid = null) {
 
 case 'abyssal_box':
         const lootTable = [
-            { id: 'bahamut_essence', chance: 0.01 }, // 1%
-            { id: 'golden_hammer', chance: 0.05 }, // 5%
+            { id: 'bahamut_essence', chance: 0.02 }, // 2%
+            { id: 'golden_hammer', chance: 0.04 }, // 4%
             { id: 'w005', chance: 0.03 }, // 3%
             { id: 'a005', chance: 0.03 }, // 3%
             { id: 'acc_necklace_01', chance: 0.03 }, // 3%
