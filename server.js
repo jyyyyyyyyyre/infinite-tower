@@ -500,8 +500,6 @@ const titleData = {
     '[균열석]': { effect: { riftShardDropRate: 0.02 }, hint: "차원을 넘나들 정도의 파편을 모아보세요." },
     '[생명의 은인]': { effect: { hatchTimeReduction: 0.01 }, hint: "수많은 알을 당신의 손으로 부화시켜 보세요." },
     '[탐욕]': { effect: { goldPouchMinBonus: 0.05 }, hint: "주머니 속의 행운을 끊임없이 갈망하세요." },
-    '[대장간]': { effect: { sellPriceBonus: 0.015 }, hint: "더 강한 장비를 위해, 낡은 장비들을 정리하는 것도 지혜입니다." },
-    '[큰손]': { effect: { maxHp: 0.01 }, hint: "거래소의 경제를 움직이는 보이지 않는 손이 되어보세요." },
     '[회귀자]': { effect: { scrollBuffDuration: 0.5 }, hint: "과거의 영광을 되찾기 위해 몇 번이고 시간을 되돌리세요." },
     '[오뚝이]': { effect: { goldOnDeath: 100000 }, hint: "넘어지고, 또 넘어져도, 계속해서 일어서는 자에게 주어집니다." },
     '[용사]': { effect: { bossDamage: 0.03 }, hint: "강력한 적의 숨통을 직접 끊어 영웅이 되세요." },
@@ -522,9 +520,9 @@ function grantTitle(player, titleName) {
         const message = `📜 칭호 ${titleName}을(를) 획득했습니다!`;
         pushLog(player, message);
 
-        if (player.unlockedTitles.length >= Object.keys(titleData).length && !player.titleCodexCompleted) {
+        if (player.unlockedTitles.length >= Math.floor(Object.keys(titleData).length * 0.75) && !player.titleCodexCompleted) {
             player.titleCodexCompleted = true;
-            const completionMessage = `[칭호 도감] 모든 칭호를 수집하여 마스터 보너스가 활성화되었습니다! (모든 능력치 +5%)`;
+            const completionMessage = `[칭호 도감] 모든 칭호의 75%를 수집하여 마스터 보너스가 활성화되었습니다! (모든 능력치 +5%)`;
             pushLog(player, completionMessage);
         }
 
@@ -899,16 +897,17 @@ const getTotalCodexItemCount = () => {
     return (Object.keys(itemData).length - 3) + Object.keys(petData).length + Object.keys(artifactData).length;
 };
 
+
 function addDiscoveredItem(player, itemId) {
     if (player && itemId && !player.discoveredItems.includes(itemId)) {
         player.discoveredItems.push(itemId);
         
         const totalCount = getTotalCodexItemCount();
-        if (!player.codexBonusActive && player.discoveredItems.length >= totalCount) {
+        if (!player.codexBonusActive && player.discoveredItems.length >= Math.floor(totalCount * 0.75)) {
             player.codexBonusActive = true;
-            const message = `[도감] 모든 아이템을 수집하여 마스터 보너스가 활성화되었습니다! (체/공/방/골드/치명타 +5%)`;
+            const message = `[도감] 모든 아이템의 75%를 수집하여 마스터 보너스가 활성화되었습니다! (체/공/방/골드/치명타 +5%)`;
             pushLog(player, message);
-            io.emit('chatMessage', { isSystem: true, message: `🎉 ${player.username}님이 아이템 도감을 100% 완성했습니다! 🎉` });
+            io.emit('chatMessage', { isSystem: true, message: `🎉 ${player.username}님이 아이템 도감을 75% 완성했습니다! 🎉` });
             calculateTotalStats(player);
         }
     }
@@ -981,7 +980,6 @@ function handleItemStacking(player, item) {
     }
     checkStateBasedTitles(player);
 }
-
 function calculateTotalStats(player) {
     if (!player || !player.stats) return;
     const base = player.stats.base;
@@ -1066,6 +1064,10 @@ function calculateTotalStats(player) {
              buffAttackMultiplier *= 10;
              buffDefenseMultiplier *= 10;
              buffHpMultiplier *= 10;
+        } else if (buff.id === 'return_scroll_awakening') {
+             buffAttackMultiplier *= (buff.effects.attackMultiplier || 1);
+             buffDefenseMultiplier *= (buff.effects.defenseMultiplier || 1);
+             buffHpMultiplier *= (buff.effects.hpMultiplier || 1);
         }
     });
 
@@ -2833,7 +2835,7 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
     sendInventoryUpdate(player);
     sendPlayerState(player);
 })
-       .on('disconnect', async () => { 
+      .on('disconnect', async () => { 
             console.log(`[연결 해제] 유저: ${socket.username}`);
             const player = onlinePlayers[socket.userId];
             if(player) {
@@ -2841,8 +2843,6 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
                     const saveData = { ...player };
                     delete saveData.socket;
                     delete saveData.attackTarget;
-saveData.logoutTime = new Date();
-                    saveData.lastLevel = player.level;
                     await GameData.updateOne({ user: socket.userId }, { $set: saveData });
                 } catch (error) {
                     console.error(`[저장 실패] 유저: ${player.username} 데이터 저장 중 오류 발생:`, error);
@@ -5156,16 +5156,13 @@ function onPersonalRaidFloorClear(player) {
 }
 
 scheduleDailyReset(io); 
-
 async function calculateAndSendOfflineRewards(player) {
     if (!player || !player.logoutTime) return;
-
-
+    await GameData.updateOne({ user: player.user }, { $set: { logoutTime: null, lastLevel: 1 } });
+    
     const offlineSeconds = Math.floor((new Date() - new Date(player.logoutTime)) / 1000);
  
-if (offlineSeconds < 60) {
-
-        await GameData.updateOne({ user: player.user }, { $set: { logoutTime: null, lastLevel: 1 } });
+    if (offlineSeconds < 60) {
         return;
     }
 
@@ -5176,7 +5173,6 @@ if (offlineSeconds < 60) {
 
    
     if (!bestSpirit) {
-        await GameData.updateOne({ user: player.user }, { $set: { logoutTime: null, lastLevel: 1 } });
         return;
     }
 
@@ -5248,7 +5244,6 @@ if (grade && grade !== 'Primal') {
         pushLog(player, `[${bestSpirit.name}]이(가) 오프라인 동안 모아온 보상을 우편으로 보냈습니다!`);
     }
 
-    await GameData.updateOne({ user: player.user }, { $set: { logoutTime: null, lastLevel: 1 } });
 }
 
 
@@ -5292,10 +5287,9 @@ const CHECK_OFFLINE_INTERVAL = 30000;
 
 async function checkOfflinePlayers() {
     try {
-
-        const allGameData = await GameData.find({}, 'user logoutTime').lean();
+        const allGameData = await GameData.find({}, 'user level logoutTime').lean();
         
-        const usersToSetOffline = [];
+        const updates = [];
 
         for (const data of allGameData) {
             const userIdString = data.user.toString();
@@ -5304,16 +5298,26 @@ async function checkOfflinePlayers() {
             const hasLogoutTime = data.logoutTime != null;
 
             if (!isOnline && !hasLogoutTime) {
-                usersToSetOffline.push(data.user);
+
+                updates.push({
+                    updateOne: {
+                        filter: { user: data.user },
+                        update: { $set: { logoutTime: new Date(), lastLevel: data.level } }
+                    }
+                });
+            } else if (isOnline && hasLogoutTime) {
+
+                updates.push({
+                    updateOne: {
+                        filter: { user: data.user },
+                        update: { $set: { logoutTime: null } }
+                    }
+                });
             }
         }
 
-
-        if (usersToSetOffline.length > 0) {
-            await GameData.updateMany(
-                { user: { $in: usersToSetOffline } },
-                { $set: { logoutTime: new Date() } }
-            );
+        if (updates.length > 0) {
+            await GameData.bulkWrite(updates);
         }
 
     } catch (error) {
@@ -5512,7 +5516,6 @@ function useMoonScroll(player, { itemUid, scrollUid }) {
     sendPlayerState(player);
     sendInventoryUpdate(player);
 }
-
 function useGoldenHammer(player, { itemUid, hammerUid, typeToRestore }) { 
     if (!player || !itemUid || !hammerUid || !typeToRestore) return;
 
@@ -5521,11 +5524,21 @@ function useGoldenHammer(player, { itemUid, hammerUid, typeToRestore }) {
         return pushLog(player, '[오류] 사용할 망치를 찾을 수 없습니다.');
     }
 
-    const targetItemSlot = Object.keys(player.equipment).find(slot => player.equipment[slot] && player.equipment[slot].uid === itemUid);
-    if (!targetItemSlot) {
-        return pushLog(player, '[오류] 복구할 장착 아이템을 찾을 수 없습니다.');
+    let targetItem = null;
+
+    if (player.equippedPet && player.equippedPet.uid === itemUid) {
+        targetItem = player.equippedPet;
+    } else {
+
+        const targetItemSlot = Object.keys(player.equipment).find(slot => player.equipment[slot] && player.equipment[slot].uid === itemUid);
+        if (targetItemSlot) {
+            targetItem = player.equipment[targetItemSlot];
+        }
     }
-    const targetItem = player.equipment[targetItemSlot];
+    
+    if (!targetItem) {
+        return pushLog(player, '[오류] 복구할 장착 아이템 또는 펫을 찾을 수 없습니다.');
+    }
 
     if (typeToRestore === 'star') {
         if (!targetItem.scrollFails || targetItem.scrollFails <= 0) {

@@ -173,22 +173,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 function startApp(token) {
-    document.body.classList.remove('auth-view');
-    authContainer.style.display = 'none';
-    kakaoRegisterContainer.style.display = 'none';
-    kakaoLinkContainer.style.display = 'none';
-    gameAppContainer.style.display = 'flex';
-    
-    const decodedToken = decodeJwtPayload(token);
-    if (!decodedToken) {
-        console.error("Invalid Token: Decoding failed.");
+    function forceLogout(message) {
+        alert(message);
         localStorage.removeItem('jwt_token');
+        localStorage.removeItem('link_token_for_kakao');
+        sessionStorage.removeItem('kakao_temp_token');
         location.reload();
+    }
+
+    try {
+        const decodedToken = decodeJwtPayload(token);
+        if (!decodedToken) {
+            forceLogout("세션 정보가 유효하지 않습니다. 다시 로그인해주세요.");
+            return;
+        }
+        if (decodedToken.exp && (decodedToken.exp * 1000) < Date.now()) {
+            forceLogout("세션이 만료되었습니다. 다시 로그인해주세요.");
+            return;
+        }
+        window.myUsername = decodedToken.username;
+        window.myUserId = decodedToken.userId;
+    } catch (e) {
+        console.error("토큰 처리 중 심각한 오류 발생:", e);
+        forceLogout("저장된 세션 정보가 손상되었습니다. 다시 로그인해주세요.");
         return;
     }
 
-    window.myUsername = decodedToken.username;
-    window.myUserId = decodedToken.userId;
+
+    document.body.classList.remove('auth-view');
+    document.getElementById('auth-container').style.display = 'none';
+    document.getElementById('kakao-register-container').style.display = 'none';
+    document.getElementById('kakao-link-container').style.display = 'none';
+    document.getElementById('game-app-container').style.display = 'flex';
+
+
+    const socket = io({
+        auth: { token },
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: 15,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 10000,
+        randomizationFactor: 0.5
+    });
+    window.socket = socket;
+
 
     const reconnectionOverlay = document.createElement('div');
     reconnectionOverlay.id = 'reconnection-overlay';
@@ -212,14 +241,58 @@ function startApp(token) {
         </div>`;
     document.body.appendChild(reconnectionOverlay);
 
-    const socket = io({
-        auth: { token },
-        transports: ['websocket'], 
-        reconnection: false       
-    });
-    window.socket = socket;
+    let isFirstConnect = true;
 
-    if (decodedToken.role === 'admin') {
+    socket.on('connect', () => {
+        console.log('Socket.IO: 서버에 성공적으로 연결되었습니다.');
+        reconnectionOverlay.style.display = 'none';
+
+        if (isFirstConnect) {
+
+            isFirstConnect = false;
+            socket.emit('requestRanking');
+            socket.emit('requestOnlineUsers');
+        } else {
+
+            location.reload();
+        }
+    });
+
+    socket.on('disconnect', (reason) => {
+        console.warn(`Socket.IO: 서버와 연결이 끊겼습니다. 이유: ${reason}`);
+        if (reason !== 'io server disconnect' && reason !== 'io client disconnect') {
+            reconnectionOverlay.style.display = 'flex';
+        }
+    });
+
+    socket.on('reconnect_attempt', (attempt) => {
+        console.log(`Socket.IO: 재연결 시도 중... (${attempt}회)`);
+        const counter = document.getElementById('reconnect-attempt-counter');
+        if (counter) counter.textContent = `(${attempt}/${socket.io.opts.reconnectionAttempts}번째 시도)`;
+    });
+
+    socket.on('reconnect_failed', () => {
+        console.error('Socket.IO: 최대 재연결 횟수를 초과했습니다.');
+        reconnectionOverlay.innerHTML = `
+            <div>
+                <p>서버에 다시 연결할 수 없습니다.</p>
+                <button id="manual-reload-btn" style="padding: 10px 20px; font-size: 0.8em; margin-top: 20px;">새로고침</button>
+            </div>`;
+        document.getElementById('manual-reload-btn').onclick = () => {
+            location.reload();
+        };
+    });
+
+    socket.on('connect_error', (err) => {
+        console.error(`Socket.IO: 연결 오류 발생 - ${err.message}`);
+        if (err.message.includes('유효하지 않은 토큰')) {
+            socket.disconnect();
+            forceLogout("세션이 만료되었거나 유효하지 않습니다. 다시 로그인해주세요.");
+        }
+    });
+
+    const decodedTokenFromStart = decodeJwtPayload(token);
+    if (decodedTokenFromStart.role === 'admin') {
         const topButtons = document.querySelector('.top-buttons');
         const adminButton = document.createElement('button');
         adminButton.id = 'admin-panel-button';
@@ -232,84 +305,10 @@ function startApp(token) {
         initializeAdminPanel();
     }
 
-    let manualReconnectTimer = null;
-    let reconnectAttempts = 0;
-    const MAX_RECONNECT_ATTEMPTS = 15; 
-    const RECONNECT_DELAY = 2000; 
-
-    const startManualReconnect = () => {
-
-        if (manualReconnectTimer || reconnectAttempts > 0) return; 
-        console.log('Starting manual reconnection process...');
-        reconnectionOverlay.style.display = 'flex';
-        reconnectAttempts = 0;
-        attemptReconnect();
-    };
-
-    const attemptReconnect = () => {
-
-        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            console.error('Could not reconnect after max attempts.');
-            reconnectionOverlay.innerHTML = `
-                <div>
-                    <p>서버에 다시 연결할 수 없습니다.</p>
-                    <button id="manual-reload-btn" style="padding: 10px 20px; font-size: 0.8em; margin-top: 20px;">새로고침</button>
-                </div>`;
-            document.getElementById('manual-reload-btn').onclick = () => {
-                localStorage.removeItem('jwt_token');
-                location.reload();
-            };
-            return;
-        }
-
-        reconnectAttempts++;
-        const counter = document.getElementById('reconnect-attempt-counter');
-        if (counter) counter.textContent = `(${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}번째 시도)`;
-        
-        console.log(`Manual reconnect attempt #${reconnectAttempts}`);
-
-        socket.connect(); 
-    };
-
-    socket.on('connect', () => {
-
-        if (manualReconnectTimer) {
-            clearTimeout(manualReconnectTimer);
-            manualReconnectTimer = null;
-        }
-        if (reconnectAttempts > 0) { 
-            console.log(`Reconnected after ${reconnectAttempts} attempts.`);
-
-            socket.emit('requestRanking');
-            socket.emit('requestOnlineUsers');
-        }
-        reconnectAttempts = 0;
-        reconnectionOverlay.style.display = 'none';
-    });
-    
-
-    socket.on('disconnect', (reason) => {
-
-        if (reason === 'io server disconnect' || reason === 'io client disconnect') {
-            console.log(`Intentional disconnect: ${reason}. No reconnection will be attempted.`);
-            return;
-        }
-        console.warn(`Socket disconnected due to ${reason}.`);
-        startManualReconnect();
-    });
-
-
-    socket.on('connect_error', (err) => {
-        console.error(`Connect error: ${err.message}`);
-
-        if (reconnectAttempts > 0) {
-            clearTimeout(manualReconnectTimer); 
-            manualReconnectTimer = setTimeout(attemptReconnect, RECONNECT_DELAY);
-        }
-    });
-
     initializeGame(socket);
 }
+
+
     const token = localStorage.getItem('jwt_token');
     if (token && !action) {
         startApp(token);
@@ -317,19 +316,13 @@ function startApp(token) {
         document.body.classList.add('auth-view');
     }
 });
-
 function decodeJwtPayload(token) {
-    try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-        return JSON.parse(jsonPayload);
-    } catch (e) {
-        console.error("JWT 디코딩 실패:", e);
-        return null;
-    }
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
 }
 
 function getFameDetails(score) {
@@ -3490,7 +3483,6 @@ function openResearchDetailModal(playerData, specializationId, techId) {
 }
 
 }
-
 function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, completionPercentage }) {
     const modal = document.getElementById('codex-modal');
     if (!modal) return;
@@ -3500,7 +3492,10 @@ function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, co
     if (!title || !content || !footer) return;
     const completionText = `📖 아이템 도감 (${completionPercentage.toFixed(1)}%)`;
     title.textContent = completionText;
-    if (completionPercentage === 100) {
+
+    const hasBonus = completionPercentage >= 75;
+
+    if (hasBonus) {
        title.classList.add('codex-completion-full');
     } else {
        title.classList.remove('codex-completion-full');
@@ -3557,7 +3552,7 @@ function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, co
     footer.innerHTML = `
         <p style="font-size: 1.1em;"><strong>도감 수집률:</strong> ${discoveredCount} / ${totalItemCount}</p>
         <p style="margin-top: 10px; font-size: 1.2em; color: var(--gold-color);">
-            <strong>✨ 100% 달성 보상 ✨</strong>
+            <strong>✨ 75% 달성 보상 ✨</strong>
         </p>
         <div style="margin-top: 8px; font-size: 1.1em; display: flex; justify-content: center; flex-wrap: wrap; gap: 15px;">
             <span>❤️ 체력 +5%</span>
@@ -3568,6 +3563,7 @@ function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, co
         </div>
     `;
 }
+
 
 function renderTitleCodex(data) {
     const { allTitles, unlockedTitles, equippedTitle } = data;
@@ -3634,11 +3630,11 @@ function renderTitleCodex(data) {
 
     const totalTitles = titleOrder.length;
     const collectedTitles = unlockedTitles.length;
-    const isCompleted = collectedTitles >= totalTitles;
+    const isCompleted = collectedTitles >= Math.floor(totalTitles * 0.75);
     footerEl.innerHTML = `
         <p>수집 현황: ${collectedTitles} / ${totalTitles}</p>
         <p style="margin-top: 10px; color: ${isCompleted ? 'var(--success-color)' : 'var(--text-muted)'}; font-weight: bold;">
-            ${isCompleted ? '모든 칭호를 수집하여 마스터 보너스가 활성화되었습니다!' : '칭호 20개를 모두 수집하면 모든 능력치가 영구적으로 5% 증가합니다.'}
+            ${isCompleted ? '모든 칭호의 75%를 수집하여 마스터 보너스가 활성화되었습니다!' : '전체 칭호의 75% 이상을 수집하면 모든 능력치가 영구적으로 5% 증가합니다.'}
         </p>
     `;
 }
