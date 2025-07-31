@@ -1272,6 +1272,25 @@ io.on('connection', async (socket) => {
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
 
+
+ if (gameData) {
+        // 칭호 도감 보너스 체크
+        const totalTitles = Object.keys(titleData).length;
+        if (gameData.unlockedTitles && gameData.unlockedTitles.length >= Math.floor(totalTitles * 0.75) && !gameData.titleCodexCompleted) {
+            gameData.titleCodexCompleted = true;
+        }
+
+        // 아이템 도감 보너스 체크
+        const totalCodexItems = getTotalCodexItemCount();
+        if (gameData.discoveredItems && gameData.discoveredItems.length >= Math.floor(totalCodexItems * 0.75) && !gameData.codexBonusActive) {
+            gameData.codexBonusActive = true;
+        }
+    }
+
+
+
+
+
     if (gameData) {
         const wasModified = addDefaultPrefixToOldItems(gameData);
         if (wasModified) {
