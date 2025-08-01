@@ -68,7 +68,7 @@ const RIFT_ENCHANT_COST = {
 
 const WORLD_BOSS_CONFIG = {
     SPAWN_INTERVAL: 720 * 60 * 1000, HP: 33150000000000, ATTACK: 0, DEFENSE: 0,
-    REWARDS: { GOLD: 1960000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
+    REWARDS: { GOLD: 2960000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
 const MailSchema = new mongoose.Schema({
@@ -980,6 +980,7 @@ function handleItemStacking(player, item) {
     }
     checkStateBasedTitles(player);
 }
+
 function calculateTotalStats(player) {
     if (!player || !player.stats) return;
     const base = player.stats.base;
@@ -1182,6 +1183,16 @@ function calculateTotalStats(player) {
         if (petBonuses.defense > 0) totalDefense *= (1 + petBonuses.defense / 100);
     }
 
+
+  const fameBonusPercent = (player.fameScore || 0) / 300;
+    player.stats.fameBonusPercent = fameBonusPercent; // UI 표시를 위해 값 저장
+
+    const fameBonusMultiplier = 1 + (fameBonusPercent / 100);
+
+    totalHp *= fameBonusMultiplier;
+    totalAttack *= fameBonusMultiplier;
+    totalDefense *= fameBonusMultiplier;
+
     player.stats.total = {
         hp: totalHp,
         attack: totalAttack,
@@ -1272,21 +1283,33 @@ io.on('connection', async (socket) => {
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
 
-
  if (gameData) {
-        // 칭호 도감 보너스 체크
-        const totalTitles = Object.keys(titleData).length;
-        if (gameData.unlockedTitles && gameData.unlockedTitles.length >= Math.floor(totalTitles * 0.75) && !gameData.titleCodexCompleted) {
-            gameData.titleCodexCompleted = true;
-        }
-
-        // 아이템 도감 보너스 체크
+        let updatesToSave = {};
         const totalCodexItems = getTotalCodexItemCount();
         if (gameData.discoveredItems && gameData.discoveredItems.length >= Math.floor(totalCodexItems * 0.75) && !gameData.codexBonusActive) {
-            gameData.codexBonusActive = true;
+            gameData.codexBonusActive = true; 
+            updatesToSave.codexBonusActive = true; 
+
+            const message = `[도감] 모든 아이템의 75%를 수집하여 마스터 보너스가 활성화되었습니다! (체/공/방/골드/치명타 +5%)`;
+            gameData.log.unshift(message);
+            if (gameData.log.length > 15) gameData.log.pop();
+            
+            io.emit('chatMessage', { isSystem: true, message: `🎉 ${gameData.username}님이 아이템 도감을 75% 완성했습니다! 🎉` });
+        }
+
+        const totalTitles = Object.keys(titleData).length;
+        if (gameData.unlockedTitles && gameData.unlockedTitles.length >= Math.floor(totalTitles * 0.75) && !gameData.titleCodexCompleted) {
+            gameData.titleCodexCompleted = true; 
+            updatesToSave.titleCodexCompleted = true; 
+
+            const completionMessage = `[칭호 도감] 모든 칭호의 75%를 수집하여 마스터 보너스가 활성화되었습니다! (모든 능력치 +5%)`;
+            gameData.log.unshift(completionMessage);
+            if (gameData.log.length > 15) gameData.log.pop();
+        }
+        if (Object.keys(updatesToSave).length > 0) {
+            await GameData.updateOne({ user: socket.userId }, { $set: updatesToSave });
         }
     }
-
 
 
 

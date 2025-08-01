@@ -477,6 +477,8 @@ function createPlayerPanelHTML(player) {
         ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` 
         : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`
     ).join('');
+
+    const fameBonusHTML = player.stats?.fameBonusPercent > 0 ? `<div class="stat-row-monster"><span>👑 명성 효과</span><span class="stat-value" style="color: var(--gold-color);">+${(player.stats.fameBonusPercent).toFixed(2)}%</span></div>` : '';
     
    return `
         <div class="character-panel player-panel" style="background: none; box-shadow: none;">
@@ -490,6 +492,7 @@ function createPlayerPanelHTML(player) {
                 <div class="stat-row-monster"><span>🛡️ 총 방어력</span><span class="stat-value">${Math.floor(player.stats?.total?.defense || 0).toLocaleString()}</span></div>
                 <div class="stat-row-monster"><span>💥 치명타 확률</span><span class="stat-value">${((player.stats?.critChance || 0) * 100).toFixed(2)}%</span></div>
                 <div class="stat-row-monster"><span>🔰 치명타 저항</span><span class="stat-value">${((player.stats?.critResistance || 0) * 100).toFixed(2)}%</span></div>
+                ${fameBonusHTML}
             </div>
             <div class="equipment-section">
                 <div class="equipment-slots">
@@ -1547,6 +1550,7 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
             <div>💎 관 통: <strong style="color: var(--primal-color);">${(player.penetration || 0).toFixed(2)}%</strong></div>
             <div>🛡️ 강 인 함: <strong style="color: var(--primal-color);">${(player.tenacity || 0).toFixed(2)}%</strong></div>
             <div>🩸 피의 갈망: <strong style="color: #c0392b;">${((player.stats.total.bloodthirst || 0)).toFixed(1)}%</strong></div>
+            <div>👑 명성 효과: <strong style="color: var(--gold-color);">${(player.stats.fameBonusPercent || 0).toFixed(2)}%</strong></div>
         `;
     }
 
