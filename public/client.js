@@ -368,6 +368,51 @@ function computeClientEnhanceBonus(item) {
 
     return rawBonus;
 }
+
+
+function getExpForNextLevelClient(level, currentExp) {
+    const EXP_TABLE = [
+        0, 1500, 3500, 6000, 9000, 12500, 16500, 21000, 26000, 31500, 37500, 
+        44000, 51000, 58500, 66500, 75000, 84000, 93500, 103500, 114000, 125000, 
+        137000, 150000, 164000, 179000, 195000, 212000, 230000, 249000, 269000, 290000, 
+        312000, 335000, 359000, 384000, 410000, 437000, 465000, 494000, 524000, 555000, 
+        587000, 620000, 654000, 689000, 725000, 762000, 800000, 839000, 879000, 43000000
+    ];
+    if (level >= 50) return { progress: 1, nextLevelExp: EXP_TABLE[50] };
+    
+    const requiredForNext = EXP_TABLE[level + 1];
+    const requiredForCurrent = EXP_TABLE[level];
+    const expInCurrentLevel = currentExp - requiredForCurrent;
+    const totalExpForLevel = requiredForNext - requiredForCurrent;
+    
+    return {
+        progress: totalExpForLevel > 0 ? expInCurrentLevel / totalExpForLevel : 0,
+        nextLevelExp: requiredForNext
+    };
+}
+
+function getRefinementBonusDescription(item) {
+    if (!item || !item.refinement || item.refinement.level <= 0) return '';
+    const level = item.refinement.level;
+    const bonusPerLevel = { weapon: 2, armor: 2, accessory: 0.2 };
+    const itemTypeForBonus = item.accessoryType ? 'accessory' : item.type;
+    const effectValue = level * (bonusPerLevel[itemTypeForBonus] || 0);
+    
+    if(item.type === 'weapon') return `추가 데미지 +${effectValue.toFixed(1)}%`;
+    if (item.type === 'armor') return `보호막 +${effectValue.toFixed(1)}%`;
+    if (item.type === 'accessory') return `왜곡(회피) +${effectValue.toFixed(1)}%`;
+    return '';
+}
+
+function getRefineAuraClass(level) {
+    if (!level || level <= 0) return '';
+    if (level >= 41) return 'refine-aura-primal';
+    if (level >= 21) return 'refine-aura-orange';
+    if (level >= 11) return 'refine-aura-purple';
+    if (level >= 1) return 'refine-aura-blue';
+    return '';
+}
+
 const createItemHTML = (item, options = {}) => {
     const { showName = true, showEffect = true, forTooltip = false, showEnchantments = true } = options;
     if (!item) return '';
@@ -406,6 +451,14 @@ const createItemHTML = (item, options = {}) => {
     }
 
     const nameAndDescriptionHTML = `${nameHTML}${prefixDescription}`;
+	
+	 let refinementText = '';
+    if (item.refinement && item.refinement.level > 0) {
+        const expInfo = getExpForNextLevelClient(item.refinement.level, item.refinement.exp);
+        const expPercent = (expInfo.progress * 100).toFixed(0);
+        refinementText = `<div class="item-refinement-level">[+${item.refinement.level}(${expPercent}%)]</div>`;
+    }
+	
     const enhanceText = item.enhancement ? `<div class="item-enhancement-level">[+${item.enhancement}]</div>` : '';
     const quantityText = item.quantity > 1 && !forTooltip ? `<div class="item-quantity">x${item.quantity}</div>` : '';
     const imageHTML = item.image ? `<div class="item-image"><img src="/image/${item.image}" alt="${item.name}" draggable="false"></div>` : '<div class="item-image"></div>';
@@ -459,7 +512,9 @@ const createItemHTML = (item, options = {}) => {
         soulstoneStatsHTML += `</div>`;
     }
 
-    return `${imageHTML}<div class="item-info">${nameAndDescriptionHTML}${effectHTML}${enchantmentsHTML}${scrollStatsHTML}${soulstoneStatsHTML}</div>${quantityText}${enhanceText}`;
+   
+ return `${imageHTML}${refinementText}<div class="item-info">${nameAndDescriptionHTML}${effectHTML}${enchantmentsHTML}${scrollStatsHTML}${soulstoneStatsHTML}</div>${quantityText}${enhanceText}`;
+ 
 };
 
 function createPlayerPanelHTML(player) {
@@ -563,6 +618,17 @@ function createScrollTabViewHTML(item) {
         const bonusesText = `공+${item.soulstoneBonuses.attack || 0}% | 체+${item.soulstoneBonuses.hp || 0}% | 방+${item.soulstoneBonuses.defense || 0}%`;
         statsList.push(`<div><span class="stat-name">☆ 소울스톤</span><span class="stat-value" style="color: var(--primal-color); font-size: 0.9em;">${bonusesText}</span></div>`);
     }
+	
+	 if (item.refinement && item.refinement.level > 0) {
+        statsList.push(`<hr style="border-color: var(--border-color); margin: 5px 0;">`);
+        const effectDescription = getRefinementBonusDescription(item);
+        const expInfo = getExpForNextLevelClient(item.refinement.level, item.refinement.exp);
+        statsList.push(`<div><span class="stat-name">🌀 영혼 제련 Lvl</span><span class="stat-value" style="color: var(--primal-color);">${item.refinement.level}</span></div>`);
+        if (item.refinement.level < 50) {
+            statsList.push(`<div><span class="stat-name">🌀 경험치</span><span class="stat-value">${item.refinement.exp.toLocaleString()} / ${expInfo.nextLevelExp.toLocaleString()}</span></div>`);
+        }
+        statsList.push(`<div><span class="stat-name">🌀 제련 효과</span><span class="stat-value" style="font-size: 0.9em;">${effectDescription}</span></div>`);
+    }
 
     const statsListHTML = `<div class="modal-stats-list" style="display: flex; flex-direction: column; gap: 8px; font-size: 1em; flex-grow: 1; justify-content: center;">${statsList.join('')}</div>`;
     const detailsHTML = `<div style="flex-grow: 1; display: flex; flex-direction: column;">${nameHTML}${statsListHTML}</div>`;
@@ -578,9 +644,192 @@ function initializeGame(socket) {
     let currentPostId = null; 
     let selectedItemUidForAction = null;
     let returnCooldownTimer = null;
+	
+	  let dpsTimerInterval = null;
+    let currentViewedDpsRecord = null;
+	
 let currentEssenceItem = null;
+
 let selectedScrollItem = null;
 let selectedTargetItem = null;
+function renderDpsResult(record, isNewBest, isTop3, isViewingDetails = false) {
+    const { modals } = elements;
+    currentViewedDpsRecord = record; 
+
+    let titleText = '📊 전투 성적표';
+    if (isViewingDetails) {
+        titleText = `📊 ${record.username}님의 기록`;
+    } else if (isNewBest) {
+        titleText = '🎉 최고 기록 갱신! 전투 성적표 🎉';
+    }
+    modals.dpsResult.title.textContent = titleText;
+
+    const details = record.details || {};
+    const breakdown = details.damageBreakdown || {};
+    const metrics = details.skillMetrics || {};
+    const combatStats = details.combatStats || {};
+
+    let breakdownHTML = '';
+    const totalDamageForBreakdown = record.totalDamage - (breakdown.refinement || 0);
+    const breakdownMap = { basic: '기본 공격', critBonus: '치명타 추가분', predator: '🐺 [포식] 피해', doom: '💀 [파멸] 피해' };
+    Object.entries(breakdownMap).forEach(([key, name]) => {
+        const value = breakdown[key] || 0;
+        if (value > 0) {
+            const percent = totalDamageForBreakdown > 0 ? ((value / totalDamageForBreakdown) * 100).toFixed(2) : 0;
+            breakdownHTML += `<p>${name}: <span>${Math.floor(value).toLocaleString()} (${percent}%)</span></p>`;
+        }
+    });
+    
+    if (breakdown.refinement > 0) {
+        const percent = ((breakdown.refinement / record.totalDamage) * 100).toFixed(2);
+        breakdownHTML += `<p style="color: #3498db;">🌀 [제련] 추가 피해: <span>${Math.floor(breakdown.refinement).toLocaleString()} (${percent}%)</span></p>`;
+    }
+
+    const actualCritRate = combatStats.totalHits > 0 ? ((combatStats.critHits / combatStats.totalHits) * 100).toFixed(2) : '0.00';
+    const awakeningUptime = metrics.awakeningDuration ? ((metrics.awakeningDuration / (record.duration || 180)) * 100).toFixed(1) : 0;
+    
+    const contentHTML = `
+        <div class="dps-result-overview" style="text-align: center; margin-bottom: 20px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+            <h3 style="font-size: 1.5em; color: var(--text-muted);">💥 총 피해량</h3>
+            <div style="font-size: 3em; font-weight: bold; color: var(--damage-color);">${Math.floor(record.totalDamage).toLocaleString()}</div>
+            <h4 style="font-size: 1.2em; color: var(--text-muted); margin-top: 15px;">⏱️ 평균 DPS</h4>
+            <div style="font-size: 2em; font-weight: bold; color: var(--success-color);">${Math.floor(record.dps).toLocaleString()} /초</div>
+        </div>
+        <div class="dps-result-details" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="dps-stat-block" style="padding: 15px; background: rgba(0,0,0,0.1); border-radius: 8px;">
+                <h4>📊 피해량 기여도 분석</h4>
+                ${breakdownHTML || '<p>데이터 없음</p>'}
+            </div>
+            <div class="dps-stat-block" style="padding: 15px; background: rgba(0,0,0,0.1); border-radius: 8px;">
+                <h4>✨ 스킬 및 전투 통계</h4>
+                <p style="color: #c0392b;">🩸 피의 갈망 발동: <span>${metrics.bloodthirstCount || 0}회</span></p>
+                <p>✨ 각성 가동률: <span>${awakeningUptime}% (${metrics.awakeningDuration || 0}초)</span></p>
+                <p>🎯 총 공격 횟수: <span>${combatStats.totalHits || 0}회</span></p>
+                <p>💥 실질 치명타율: <span>${actualCritRate}%</span></p>
+            </div>
+        </div>
+    `;
+
+    modals.dpsResult.container.innerHTML = contentHTML;
+
+
+    modals.dpsResult.snapshotContainer.style.display = 'none';
+    modals.dpsResult.snapshotContainer.innerHTML = ''; 
+
+    if (record.snapshot) {
+        modals.dpsResult.snapshotBtn.style.display = 'block';
+        modals.dpsResult.snapshotBtn.textContent = '📸 장비 스냅샷 보기';
+    } else {
+        modals.dpsResult.snapshotBtn.style.display = 'none';
+    }
+
+}
+
+
+function fetchAndRenderDpsRanking() {
+    const { modals } = elements;
+    socket.emit('dps:getRankingData', (response) => {
+        if (!response.success) {
+            modals.dpsRanking.leaderboardList.innerHTML = `<li>${response.message}</li>`;
+            return;
+        }
+
+        if (response.leaderboard.length === 0) {
+            modals.dpsRanking.leaderboardList.innerHTML = '<li>아직 랭킹 기록이 없습니다.</li>';
+        } else {
+            modals.dpsRanking.leaderboardList.innerHTML = response.leaderboard.map((p, i) => {
+                const rank = i + 1;
+                const userHtml = createFameUserHtml(p.username, p.snapshot?.fameScore || 0);
+                const damageHtml = `<span class="rank-value">${Math.floor(p.totalDamage).toLocaleString()}</span>`;
+                return `<li class="dps-ranking-entry" data-record-id="${p.recordId}" style="cursor: pointer;">
+                            <span class="rank-badge rank-${rank}">${rank}</span> ${userHtml} 님: 총 피해량 ${damageHtml}
+                        </li>`;
+            }).join('');
+        }
+
+        if (response.personalTop3.length === 0) {
+            modals.dpsRanking.personalList.innerHTML = '<li>아직 내 기록이 없습니다. 수련장에 도전해보세요!</li>';
+        } else {
+            modals.dpsRanking.personalList.innerHTML = response.personalTop3.map((p, i) => {
+                const rank = i + 1;
+                const damageHtml = `<span class="rank-value">${Math.floor(p.totalDamage).toLocaleString()}</span>`;
+                const dateHtml = new Date(p.createdAt).toLocaleDateString('ko-KR');
+                return `<li class="dps-ranking-entry" data-record-id="${p._id}" style="cursor: pointer;">
+                            <span class="rank-badge rank-${rank}">${rank}.</span> ${damageHtml}
+                        </li>`;
+            }).join('');
+        }
+
+        document.querySelectorAll('.dps-ranking-entry').forEach(li => {
+            li.addEventListener('click', () => {
+                const recordId = li.dataset.recordId;
+                fetchAndRenderDpsRecordDetail(recordId);
+            });
+        });
+    });
+}
+
+function fetchAndRenderDpsRecordDetail(recordId) {
+    socket.emit('dps:getRecordDetail', recordId, (response) => {
+        if (response.success && response.record) {
+            renderDpsResult(response.record, false, false, true);
+            elements.modals.dpsResult.overlay.style.display = 'flex';
+        } else {
+            alert(response.message || '기록을 불러오는 데 실패했습니다.');
+        }
+    });
+}
+
+function renderDpsSnapshot(record) {
+    const snapshot = record.snapshot;
+    const container = elements.modals.dpsResult.snapshotContainer;
+
+    if (!snapshot) {
+        container.innerHTML = '<p>스냅샷 정보가 없습니다.</p>';
+        return;
+    }
+
+    const weaponHTML = snapshot.equipment?.weapon ? createItemHTML(snapshot.equipment.weapon) : '⚔️';
+    const armorHTML = snapshot.equipment?.armor ? createItemHTML(snapshot.equipment.armor) : '🛡️';
+    const petHTML = snapshot.equippedPet ? createItemHTML(snapshot.equippedPet) : '🐾';
+    const necklaceHTML = snapshot.equipment?.necklace ? createItemHTML(snapshot.equipment.necklace) : '💍';
+    const earringHTML = snapshot.equipment?.earring ? createItemHTML(snapshot.equipment.earring) : '👂';
+    const wristwatchHTML = snapshot.equipment?.wristwatch ? createItemHTML(snapshot.equipment.wristwatch) : '⏱️';
+    
+    const stats = snapshot.stats?.total || {};
+    const titleHtml = snapshot.title ? `<span class="title">${snapshot.title}</span>` : '';
+
+    const contentHTML = `
+        <div class="character-panel" style="background: none; box-shadow: none; padding: 0;">
+            <div class="character-header" style="padding-bottom: 10px;">
+                <h3>${titleHtml} ${createFameUserHtml(record.username, snapshot.fameScore || 0)} 님의 당시 정보</h3>
+            </div>
+            <div style="display: flex; gap: 20px;">
+                <div class="stat-info-monster" style="flex: 1;">
+                    <div class="stat-row-monster"><span>❤️ 총 체력</span><span class="stat-value">${Math.floor(stats.hp || 0).toLocaleString()}</span></div>
+                    <div class="stat-row-monster"><span>⚔️ 총 공격력</span><span class="stat-value">${Math.floor(stats.attack || 0).toLocaleString()}</span></div>
+                    <div class="stat-row-monster"><span>🛡️ 총 방어력</span><span class="stat-value">${Math.floor(stats.defense || 0).toLocaleString()}</span></div>
+                    <div class="stat-row-monster"><span>💥 치명타 확률</span><span class="stat-value">${((snapshot.stats?.critChance || 0) * 100).toFixed(2)}%</span></div>
+                    <div class="stat-row-monster"><span>🎯 집중</span><span class="stat-value">${(snapshot.focus || 0).toFixed(1)}%</span></div>
+                    <div class="stat-row-monster"><span>💎 관통</span><span class="stat-value">${(snapshot.penetration || 0).toFixed(1)}%</span></div>
+                    <div class="stat-row-monster"><span>🛡️ 강인함</span><span class="stat-value">${(snapshot.tenacity || 0).toFixed(1)}%</span></div>
+                </div>
+                <div class="equipment-section" style="flex: 1; margin-top: 0;">
+                    <div class="equipment-slots" style="gap: 10px;">
+                        <div class="slot snapshot-slot" style="height: 100px;">${weaponHTML}</div>
+                        <div class="slot snapshot-slot" style="height: 100px;">${armorHTML}</div>
+                        <div class="slot snapshot-slot" style="height: 100px;">${petHTML}</div>
+                        <div class="slot snapshot-slot" style="height: 100px;">${necklaceHTML}</div>
+                        <div class="slot snapshot-slot" style="height: 100px;">${earringHTML}</div>
+                        <div class="slot snapshot-slot" style="height: 100px;">${wristwatchHTML}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    container.innerHTML = contentHTML;
+}
+
 function updateScrollEnhancementPanel(targetItem) {
     const { scroll } = elements;
     selectedTargetItem = targetItem;
@@ -730,6 +979,9 @@ function selectScrollMaterial(materialItem) {
             panel: document.querySelector('.player-panel'), 
             hpBar: document.getElementById('player-hp-bar'), 
             hpText: document.getElementById('player-hp-text'), 
+			shieldContainer: document.getElementById('player-shield-container'),
+            shieldBar: document.getElementById('player-shield-bar'),
+            shieldText: document.getElementById('player-shield-text'),
             totalHp: document.getElementById('total-hp'), 
             totalAttack: document.getElementById('total-attack'), 
             totalDefense: document.getElementById('total-defense'),
@@ -746,7 +998,8 @@ function selectScrollMaterial(materialItem) {
             barrierBar: document.getElementById('monster-barrier-bar'),
             barrierText: document.getElementById('monster-barrier-text'),
             abilityIcons: document.getElementById('monster-ability-icons'),
-            leaveRaidBtn: document.getElementById('leave-raid-btn')
+            leaveRaidBtn: document.getElementById('leave-raid-btn'),
+			abortDpsBtn: document.getElementById('abort-dps-btn')
         },
         equipment: { 
             weapon: document.getElementById('weapon-slot'), 
@@ -877,6 +1130,22 @@ researchDetail: {
                 overlay: document.getElementById('item-info-modal'),
                 content: document.getElementById('item-info-modal-content')
             },
+			
+			dpsRanking: {
+                button: document.getElementById('dps-ranking-button'),
+                overlay: document.getElementById('dps-ranking-modal'),
+                leaderboardList: document.getElementById('dps-leaderboard-list'),
+                personalList: document.getElementById('dps-personal-list')
+            },
+            dpsResult: {
+                overlay: document.getElementById('dps-result-modal'),
+                title: document.getElementById('dps-result-title'),
+                container: document.getElementById('dps-result-container'),
+                boastBtn: document.getElementById('dps-boast-button'),
+snapshotBtn: document.getElementById('dps-view-snapshot-button'), 
+                snapshotContainer: document.getElementById('dps-snapshot-container') 
+            },
+			
 autoSell: {
     button: document.getElementById('auto-sell-button'),
     overlay: document.getElementById('auto-sell-modal'),
@@ -924,8 +1193,32 @@ autoSell: {
             container: document.getElementById('floor-controls'),
             safeZoneBtn: document.getElementById('safe-zone-btn'),
             frontlineBtn: document.getElementById('frontline-btn'),
-            personalRaidBtn: document.getElementById('personal-raid-btn')
+            personalRaidBtn: document.getElementById('personal-raid-btn'),
+			startDpsBtn: document.getElementById('start-dps-btn')
         },
+		
+		 foundry: {
+            toggleBtn: document.getElementById('foundry-toggle-btn')
+        },
+        refinement: {
+            tab: document.querySelector('.tab-button[data-tab="refinement-tab"]'),
+            placeholder: document.getElementById('refinement-target-placeholder'),
+            display: document.getElementById('refinement-target-display'),
+            slot: document.getElementById('refinement-target-slot'),
+            infoPanel: document.getElementById('refinement-info-panel'),
+            name: document.getElementById('refinement-item-name'),
+            levelText: document.getElementById('refinement-level-text'),
+            expBar: document.querySelector('.refinement-exp-bar'),
+            expBarInner: document.getElementById('refinement-exp-bar-inner'),
+            expBarText: document.getElementById('refinement-exp-bar-text'),
+            effectText: document.getElementById('refinement-effect-text'),
+            materialsInput: document.getElementById('refinement-materials-input'),
+            autofillBtn: document.getElementById('refinement-autofill-btn'),
+            infuseBtn: document.getElementById('refinement-infuse-btn'),
+            extractBtn: document.getElementById('refinement-extract-btn'),
+            grid: document.getElementById('refinement-material-grid')
+        },
+		
 scroll: {
     tab: document.getElementById('scroll-tab'),
     placeholder: document.getElementById('scroll-target-placeholder'),
@@ -943,7 +1236,8 @@ scroll: {
 	
 	const abyssalShopItems = [
     { id: 'bahamut_essence', name: '바하무트의 정수', description: '바하무트의 정수. 바하무트에게 전달시 궁극의 존재로 진화한다', price: 2000, image: 'pure_blood_crystal.png', grade: 'Primal' },
-    { id: 'soulstone_attack', name: '파괴자의 소울스톤', description: '공격력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'power_stone.png', grade: 'Primal' },
+{ id: 'pet_egg_mythic', name: '신화종 알', description: '부화시키면 신화 등급의 펫을 얻습니다.', price: 2000, image: 'pet_egg_mythic.png', grade: 'Mystic' },   
+   { id: 'soulstone_attack', name: '파괴자의 소울스톤', description: '공격력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'power_stone.png', grade: 'Primal' },
     { id: 'soulstone_hp', name: '선구자의 소울스톤', description: '체력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'hp_stone.png', grade: 'Primal' },
     { id: 'soulstone_defense', name: '통찰자의 소울스톤', description: '방어력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'def_stone.png', grade: 'Primal' },
     { id: 'w005', name: '태초의 파편', description: '미스틱 무기', price: 100, image: 'sword5.png', grade: 'Mystic' },
@@ -951,7 +1245,7 @@ scroll: {
     { id: 'acc_necklace_01', name: '윤회의 목걸이', description: '미스틱 목걸이.', price: 100, image: 'necklace_01.png', grade: 'Mystic' },
     { id: 'acc_earring_01', name: '찰나의 각성 이어링', description: '미스틱 귀걸이.', price: 100, image: 'earring_01.png', grade: 'Mystic' },
     { id: 'acc_wristwatch_01', name: '통찰자의 크로노그래프', description: '미스틱 손목시계', price: 100, image: 'wristwatch_01.png', grade: 'Mystic' },
-    { id: 'golden_hammer', name: '헤파이스토스의 황금 망치', description: '주문서 강화 실패 횟수를 1회 복구합니다.', price: 200, image: 'goldenhammer.png', grade: 'Mystic' },
+    { id: 'golden_hammer', name: '헤파이스토스의 황금 망치', description: '주문서 강화 실패 횟수를 1회 복구합니다.', price: 100, image: 'goldenhammer.png', grade: 'Mystic' },
     { id: 'star_scroll_10', name: '10% 별의 주문서', description: '기본 능력치를 +1,000,000 상승시킵니다.', price: 50, image: 'return_scroll.png', grade: 'Mystic' },
     { id: 'star_scroll_30', name: '30% 별의 주문서', description: '기본 능력치를 +600,000 상승시킵니다.', price: 40, image: 'return_scroll.png', grade: 'Epic' },
     { id: 'star_scroll_70', name: '70% 별의 주문서', description: '기본 능력치를 +300,000 상승시킵니다.', price: 30, image: 'return_scroll.png', grade: 'Legendary' },
@@ -1038,7 +1332,10 @@ elements.modals.spiritSummon.summonBtn.addEventListener('click', () => {
 const abyssalShopModal = document.getElementById('abyssal-shop-modal');
 const abyssalShardCountSpan = document.getElementById('abyssal-shard-count');
 const abyssalShopGrid = document.getElementById('abyssal-shop-grid');
-
+  const createItemImageHTML = (item) => {
+        if (!item || !item.image) return '';
+        return `<div class="item-image"><img src="/image/${item.image}" alt="${item.name}" draggable="false"></div>`;
+    };
 if (abyssalShopButton) {
     abyssalShopButton.addEventListener('click', () => {
         renderAbyssalShop();
@@ -1197,6 +1494,46 @@ function renderAbyssalShop() {
     elements.modals.loot.button.addEventListener('click', () => { elements.modals.loot.overlay.style.display = 'flex'; });
     elements.modals.enhancement.button.addEventListener('click', () => { elements.modals.enhancement.overlay.style.display = 'flex'; });
     elements.modals.online.button.addEventListener('click', () => { socket.emit('requestOnlineUsers'); elements.modals.online.overlay.style.display = 'flex'; });
+
+
+ if (elements.floorControls.startDpsBtn) {
+        elements.floorControls.startDpsBtn.addEventListener('click', () => {
+            if (confirm('3분간 DPS 측정을 시작하시겠습니까?\n측정 중에는 다른 행동이 제한됩니다.')) {
+                socket.emit('dps:start');
+            }
+        });
+    }
+
+    if (elements.monster.abortDpsBtn) {
+        elements.monster.abortDpsBtn.addEventListener('click', () => {
+            if (confirm('진행 중인 DPS 측정을 중단하시겠습니까?\n중단된 기록은 저장되지 않습니다.')) {
+                socket.emit('dps:abort');
+            }
+        });
+    }
+
+    if (elements.modals.dpsRanking.button) {
+        elements.modals.dpsRanking.button.addEventListener('click', () => {
+            fetchAndRenderDpsRanking();
+            elements.modals.dpsRanking.overlay.style.display = 'flex';
+        });
+    }
+
+
+    elements.modals.dpsResult.snapshotBtn.addEventListener('click', () => {
+        const container = elements.modals.dpsResult.snapshotContainer;
+        if (container.style.display === 'none') {
+            if (currentViewedDpsRecord && currentViewedDpsRecord.snapshot) {
+                renderDpsSnapshot(currentViewedDpsRecord);
+                container.style.display = 'block';
+                elements.modals.dpsResult.snapshotBtn.textContent = '📸 장비 스냅샷 숨기기';
+            }
+        } else {
+            container.style.display = 'none';
+            elements.modals.dpsResult.snapshotBtn.textContent = '📸 장비 스냅샷 보기';
+        }
+    });
+
 
 const accountStorageTabBtn = document.querySelector('.tab-button[data-tab="account-storage-tab"]');
 if(accountStorageTabBtn) {
@@ -1410,6 +1747,74 @@ if(accountStorageTabBtn) {
         currentPlayerState.fameScore = newFameScore;
         updateTopBarInfo(currentPlayerState);
     });
+	
+	socket.on('dps:started', ({ duration }) => {
+        const startTime = Date.now();
+        const endTime = startTime + duration;
+
+        if (dpsTimerInterval) clearInterval(dpsTimerInterval);
+
+      
+        if (elements.monster.level) {
+            elements.monster.level.innerHTML = `<span style="color:#e67e22; font-weight: bold;">[측정 시작] 동기화 중...</span>`;
+        }
+
+        dpsTimerInterval = setInterval(() => {
+            const now = Date.now();
+            const remaining = Math.max(0, endTime - now);
+
+            if (remaining <= 0) {
+                clearInterval(dpsTimerInterval);
+                if (elements.monster.level) {
+                    elements.monster.level.innerHTML = `<span style="color:#e67e22; font-weight: bold;">[수련장] 결과 분석 중...</span>`;
+                }
+                return;
+            }
+
+            if (currentPlayerState) {
+                const session = currentPlayerState.dpsSession;
+                const isActive = session && session.isActive;
+                const isAborted = session && session.aborted;
+
+                if (!isActive || isAborted) {
+                    if (isAborted || (!isActive && (now - startTime > 2000))) {
+                       clearInterval(dpsTimerInterval);
+                       return;
+                    }
+                }
+            }
+
+
+            const elapsedSeconds = (now - startTime) / 1000;
+
+            let totalDamage = 0;
+            if (currentPlayerState && currentPlayerState.dpsSession && currentPlayerState.dpsSession.isActive && currentPlayerState.dpsSession.totalDamage !== undefined) {
+                totalDamage = currentPlayerState.dpsSession.totalDamage;
+            }
+
+            const currentDps = elapsedSeconds > 0 ? totalDamage / elapsedSeconds : 0;
+            const remainingSeconds = Math.ceil(remaining / 1000);
+
+            if (elements.monster.level) {
+                elements.monster.level.innerHTML = `
+                    <span style="color:#e67e22; font-weight: bold;">[측정 중] 남은 시간: ${remainingSeconds}초</span><br>
+                    <span style="font-size: 0.9em;">현재 DPS: ${formatInt(currentDps)} | 총 피해: ${formatInt(totalDamage)}</span>
+                `;
+            }
+        }, 500); 
+    });
+
+
+    socket.on('dps:result', ({ record, isNewBest, isTop3 }) => {
+        if (dpsTimerInterval) clearInterval(dpsTimerInterval);
+        renderDpsResult(record, isNewBest, isTop3);
+        elements.modals.dpsResult.overlay.style.display = 'flex';
+    });
+	
+	  socket.on('dps:aborted', () => {
+        if (dpsTimerInterval) clearInterval(dpsTimerInterval);
+
+    });
 
     socket.on('onlineUsersData', ({ playersList, totalUsers, subAccountCount }) => {
         const list = elements.modals.online.list;
@@ -1479,9 +1884,10 @@ if(accountStorageTabBtn) {
 
     const renderItemInSlot = (slotElement, item, defaultText, type) => {
         slotElement.innerHTML = '';
+		slotElement.className = `slot ${getRefineAuraClass(item?.refinement?.level)}`;
         if (item) {
             const itemDiv = document.createElement('div');
-            itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)}`;
+itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRefineAuraClass(item.refinement?.level)}`;
             itemDiv.dataset.uid = item.uid;
             itemDiv.draggable = true;
             itemDiv.dataset.itemType = (item.type === 'accessory') ? item.accessoryType : type;
@@ -1498,8 +1904,8 @@ if(accountStorageTabBtn) {
             slotElement.innerHTML = defaultText;
         }
     };
-
-const updateUI = ({ player, monster, isInRaid = false }) => {
+	
+	const updateUI = ({ player, monster, isInRaid = false }) => {
     currentPlayerState = player;
     if (!currentPlayerState.spiritInventory) currentPlayerState.spiritInventory = []; 
     updateTopBarInfo(player);
@@ -1515,6 +1921,16 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
 
     elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
     elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
+
+   if (player.shield !== undefined && player.stats.shield > 0) {
+        elements.player.shieldContainer.style.display = 'block';
+        const shieldPercent = (player.shield / player.stats.shield) * 100;
+        elements.player.shieldBar.style.width = `${shieldPercent}%`;
+        elements.player.shieldText.textContent = `${formatFloat(player.shield)} / ${formatFloat(player.stats.shield)}`;
+    } else {
+        elements.player.shieldContainer.style.display = 'none';
+    }
+    
     const baseHp = player.stats.base.hp;
     const totalHp = player.stats.total.hp;
     const bonusHp = Math.max(0, totalHp - baseHp);
@@ -1530,19 +1946,7 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
     const bonusDefense = Math.max(0, totalDefense - baseDefense);
     elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${formatInt(bonusDefense)})`;
 
-    if (isInRaid) {
-        elements.monster.level.innerHTML = `<span style="color:#c0392b; font-weight:bold;">[개인 레이드 ${monster.floor}층] ${monster.name}</span>`;
-        elements.floorControls.container.style.display = 'none';
-        elements.monster.leaveRaidBtn.style.display = 'block';
-    } else {
-        elements.monster.level.innerHTML = monster.isBoss 
-            ? `<span style="color:var(--fail-color); font-weight:bold;">${formatInt(monster.level)}층 보스</span>` 
-            : `${formatInt(monster.level)}층 몬스터`;
-        elements.floorControls.container.style.display = 'flex';
-        elements.monster.leaveRaidBtn.style.display = 'none';
-    }
-
-     if (elements.player.specialStatsGrid) {
+    if (elements.player.specialStatsGrid) {
         elements.player.specialStatsGrid.innerHTML = `
             <div>💥 치명타: <strong>${(player.stats.critChance * 100).toFixed(2)}%</strong></div>
             <div>🔰 치명 저항: <strong>${(player.stats.critResistance * 100).toFixed(2)}%</strong></div>
@@ -1551,41 +1955,119 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
             <div>🛡️ 강 인 함: <strong style="color: var(--primal-color);">${(player.tenacity || 0).toFixed(2)}%</strong></div>
             <div>🩸 피의 갈망: <strong style="color: #c0392b;">${((player.stats.total.bloodthirst || 0)).toFixed(1)}%</strong></div>
             <div>👑 명성 효과: <strong style="color: var(--gold-color);">${(player.stats.fameBonusPercent || 0).toFixed(2)}%</strong></div>
+            <div>⚔️ 추가 데미지: <strong style="color: #3498db;">+${(player.stats.additiveDamage || 0).toFixed(2)}%</strong></div>
+            <div>🛡️ 보호막: <strong style="color: #af52de;">+${(player.stats.shield > 0 ? (player.stats.shield / player.stats.total.hp * 100).toFixed(2) : '0.00')}%</strong></div>
+            <div>🌀 왜곡(회피): <strong style="color: #2ecc71;">${(player.stats.dodgeChance || 0).toFixed(2)}%</strong></div>
         `;
     }
 
-    elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
-    elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
-    elements.monster.totalHp.textContent = formatFloat(monster.hp);
-    elements.monster.attack.textContent = formatFloat(monster.attack);
-    elements.monster.defense.textContent = formatFloat(monster.defense);
+    const foundryBtn = elements.foundry.toggleBtn;
+    const floorActionButtons = document.querySelector('.floor-action-buttons');
 
-    const showAbilities = monster.distortion > 0 || monster.empoweredAttack > 0;
-    const barrierContainer = document.getElementById('monster-barrier-container');
-    elements.monster.abilityIcons.style.display = showAbilities ? 'flex' : 'none';
-    if(barrierContainer) barrierContainer.style.display = monster.barrier > 0 ? 'block' : 'none';
+    if (player.dpsSession && player.dpsSession.isActive) {
+        elements.monster.hpBar.style.width = `100%`;
+        elements.monster.hpText.textContent = `측정 중...`;
+        elements.monster.totalHp.textContent = '∞';
+        elements.monster.attack.textContent = '0';
+        elements.monster.defense.textContent = '0'; 
 
-    if (showAbilities || monster.barrier > 0) {
-        const maxBarrier = monster.barrier;
-        const currentBarrier = monster.currentBarrier;
-        const barrierPercent = maxBarrier > 0 ? (currentBarrier / maxBarrier) * 100 : 0;
-        elements.monster.barrierBar.style.width = `${barrierPercent}%`;
-        elements.monster.barrierText.textContent = `${formatFloat(currentBarrier)} / ${formatFloat(maxBarrier)}`;
-        elements.monster.abilityIcons.innerHTML = `
-            ${monster.barrier > 0 ? `<span title="보호막: 이 몬스터는 추가 체력을 가지고 있습니다. 보호막을 모두 파괴해야 본체에 피해를 줄 수 있습니다.">🛡️</span>` : ''}
-            ${monster.distortion > 0 ? `<span title="왜곡: 이 몬스터는 ${monster.distortion}% 확률로 모든 공격을 회피합니다.">💨</span>` : ''}
-            ${monster.empoweredAttack > 0 ? `<span title="권능 공격: 이 몬스터의 모든 공격은 당신의 최대 체력 ${monster.empoweredAttack}%에 해당하는 추가 피해를 입힙니다.">💀</span>` : ''}
-        `;
-    }
+        document.getElementById('monster-barrier-container').style.display = 'none';
+        document.getElementById('monster-ability-icons').style.display = 'none';
 
-    if (elements.floorControls.container && !isInRaid) {
-        const { safeZoneBtn, frontlineBtn } = elements.floorControls;
+        if (floorActionButtons) floorActionButtons.style.display = 'none';
+        if (foundryBtn) foundryBtn.style.display = 'none';
+        elements.monster.leaveRaidBtn.style.display = 'none';
+        elements.monster.abortDpsBtn.style.display = 'block';
+
+    } else if (player.isInFoundryOfTime) {
+
+        elements.monster.level.innerHTML = `<span style="color:#8e44ad; font-weight:bold;">시간의 제련소</span>`;
+
+        if (currentFoundryMonster) {
+            const maxHp = currentFoundryMonster.maxHp;
+            elements.monster.hpBar.style.width = `${(currentFoundryMonster.hp / maxHp) * 100}%`;
+            elements.monster.hpText.textContent = `HP: ${currentFoundryMonster.hp} / ${maxHp}`;
+            elements.monster.totalHp.textContent = maxHp.toLocaleString();
+            elements.monster.level.innerHTML = `<span style="color:#8e44ad; font-weight:bold;">${currentFoundryMonster.name}</span>`;
+        } else {
+             elements.monster.hpBar.style.width = `100%`;
+             elements.monster.hpText.textContent = `HP: 1 / 1`;
+             elements.monster.totalHp.textContent = '1';
+        }
+        elements.monster.attack.textContent = '0';
+        elements.monster.defense.textContent = '0';
+        document.getElementById('monster-barrier-container').style.display = 'none';
+        document.getElementById('monster-ability-icons').style.display = 'none';
+
+        if (floorActionButtons) {
+            floorActionButtons.style.display = 'flex';
+
+            const personalRaidBtn = document.getElementById('personal-raid-btn');
+            const startDpsBtn = document.getElementById('start-dps-btn');
+            if (personalRaidBtn) personalRaidBtn.style.display = 'none';
+            if (startDpsBtn) startDpsBtn.style.display = 'none';
+        }
+
+        if (foundryBtn) {
+            foundryBtn.textContent = '등반 복귀';
+            foundryBtn.style.backgroundColor = 'var(--fail-color)';
+            foundryBtn.style.display = 'block';
+        }
+        
+        elements.monster.leaveRaidBtn.style.display = 'none';
+        elements.monster.abortDpsBtn.style.display = 'none';
+
+    } else if (isInRaid) {
+
+        elements.monster.level.innerHTML = `<span style="color:#c0392b; font-weight:bold;">[개인 레이드 ${monster.floor}층] ${monster.name}</span>`;
+        elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
+        elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
+        elements.monster.totalHp.textContent = formatFloat(monster.hp);
+        elements.monster.attack.textContent = formatFloat(monster.attack);
+        elements.monster.defense.textContent = formatFloat(monster.defense);
+
+        if (floorActionButtons) floorActionButtons.style.display = 'none';
+        if (foundryBtn) foundryBtn.style.display = 'none';
+        elements.monster.leaveRaidBtn.style.display = 'block';
+        elements.monster.abortDpsBtn.style.display = 'none';
+
+    } else {
+
+        elements.monster.level.innerHTML = monster.isBoss 
+            ? `<span style="color:var(--fail-color); font-weight:bold;">${formatInt(monster.level)}층 보스</span>` 
+            : `${formatInt(monster.level)}층 몬스터`;
+        elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
+        elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
+        elements.monster.totalHp.textContent = formatFloat(monster.hp);
+        elements.monster.attack.textContent = formatFloat(monster.attack);
+        elements.monster.defense.textContent = formatFloat(monster.defense);
+
+        if (floorActionButtons) {
+            floorActionButtons.style.display = 'flex';
+            const personalRaidBtn = document.getElementById('personal-raid-btn');
+            const startDpsBtn = document.getElementById('start-dps-btn');
+            if (personalRaidBtn) personalRaidBtn.style.display = 'block';
+            if (startDpsBtn) startDpsBtn.style.display = 'block';
+        }
+
+        if (foundryBtn) {
+            foundryBtn.textContent = '시간의 제련소';
+            foundryBtn.style.backgroundColor = '#8e44ad';
+            foundryBtn.style.display = 'block';
+        }
+        
+        elements.monster.leaveRaidBtn.style.display = 'none';
+        elements.monster.abortDpsBtn.style.display = 'none';
+
         const canUseFrontline = player.maxLevel >= 1000000;
+        const safeZoneBtn = document.getElementById('safe-zone-btn');
+        const frontlineBtn = document.getElementById('frontline-btn');
         safeZoneBtn.style.display = 'none';
         frontlineBtn.style.display = 'none';
         if (canUseFrontline) {
-            if (player.level >= 1000000) { safeZoneBtn.style.display = 'block'; } 
-            else {
+            if (player.level >= 1000000) { 
+                safeZoneBtn.style.display = 'block'; 
+            } else {
                 frontlineBtn.style.display = 'block';
                 const cooldown = player.safeZoneCooldownUntil ? new Date(player.safeZoneCooldownUntil) : null;
                 if (cooldown && cooldown > new Date()) {
@@ -1605,7 +2087,7 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
         }
     }
 
-   const buffsContainer = document.getElementById('player-buffs-container');
+    const buffsContainer = document.getElementById('player-buffs-container');
     buffsContainer.innerHTML = ''; 
     if (player.buffs && player.buffs.length > 0) {
         player.buffs.forEach(buff => {
@@ -1636,7 +2118,6 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
     if (activeTab && activeTab.dataset.tab === 'research-tab') {
         renderResearchTab(player); 
     }
-	
 	
 	 const setEffectDisplay = document.getElementById('set-effect-display');
     const weapon = player.equipment.weapon;
@@ -2269,31 +2750,34 @@ const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' |
     });
 	
 	
+socket.on('stateUpdate', (data) => {
+    if (!currentPlayerState || !data || !data.player) return;
 
-    socket.on('stateUpdate', (data) => {
-        if (!currentPlayerState || !data || !data.player) {
-            return;
-        }
-        Object.assign(currentPlayerState, data.player);
-        updateUI(data);
-    });
+    Object.assign(currentPlayerState, data.player);
+    updateUI(data);
+});
 
-   socket.on('inventoryUpdate', (data) => {
+socket.on('inventoryUpdate', (data) => {
     if (!currentPlayerState || !data) return;
+
     currentPlayerState.inventory = data.inventory;
     currentPlayerState.petInventory = data.petInventory;
     currentPlayerState.incubators = data.incubators; 
     currentPlayerState.spiritInventory = data.spiritInventory;
+
     renderAllInventories(currentPlayerState);
     renderIncubators(currentPlayerState.incubators); 
- const abyssalShopModal = document.getElementById('abyssal-shop-modal');
+
+    const abyssalShopModal = document.getElementById('abyssal-shop-modal');
     if (abyssalShopModal && abyssalShopModal.style.display === 'flex') {
         renderAbyssalShop();
     }
-if (document.getElementById('scroll-tab').classList.contains('active') && selectedTargetItem) {
-    const updatedTargetItem = findItemInState(selectedTargetItem.uid);
-    updateScrollEnhancementPanel(updatedTargetItem || null);
-}
+    
+    if (document.getElementById('scroll-tab').classList.contains('active') && selectedTargetItem) {
+        const updatedTargetItem = findItemInState(selectedTargetItem.uid);
+        updateScrollEnhancementPanel(updatedTargetItem || null);
+    }
+
 });
 
     socket.on('logUpdate', (logs) => {
@@ -2451,16 +2935,21 @@ document.getElementById('account-storage-grid').addEventListener('click', (e) =>
             updateEnhancementPanel(item);
         }, 50);
     }
-
-function handleItemClick(e) {
+	
+	
+	function handleItemClick(e) {
     const card = e.target.closest('.inventory-item');
-    if (!card || card.closest('#auction-grid') || card.closest('#account-storage-grid') || card.closest('.scroll-material-item')) return;
+    
+    if (!card || card.closest('#auction-grid') || card.closest('#account-storage-grid') || card.closest('.scroll-material-item') || card.closest('#refinement-material-grid')) {
+        return;
+    }
 
     const uid = card.dataset.uid;
     const item = findItemInState(uid);
     if (!item) return;
 
     const isScrollTabActive = document.getElementById('scroll-tab').classList.contains('active');
+    const isRefinementTabActive = elements.refinement.tab.classList.contains('active');
     const isEquipped = Object.values(currentPlayerState.equipment).some(eq => eq && eq.uid === uid) || (currentPlayerState.equippedPet && currentPlayerState.equippedPet.uid === uid);
 
     if (isScrollTabActive && isEquipped) {
@@ -2470,9 +2959,17 @@ function handleItemClick(e) {
             return; 
         }
     }
+    
+    if (isRefinementTabActive) {
+        if (['weapon', 'armor', 'accessory'].includes(item.type)) {
+            updateRefinementPanel(item);
+            return;
+        }
+    }
+    
     selectedItemUidForAction = uid;
 
-    if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet' || item.type === 'accessory' || item.type === 'Spirit') {
+    if (item.type === 'weapon' || item.type === 'armor' || item.type === 'pet' || item.type === 'Spirit' || item.type === 'accessory') {
         openItemActionModal(item);
     } else {
         handleLegacyItemSelection(item);
@@ -3007,8 +3504,9 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
         }
         modal.style.display = 'flex';
     });
-function addChatMessage(data) {
-    const { type, username, role, message, isSystem, fameScore, itemData, title, isHelper } = data;
+	
+	function addChatMessage(data) {
+    const { type, username, role, message, isSystem, fameScore, itemData, title, isHelper, recordId } = data;
     const item = document.createElement('li');
     const isScrolledToBottom = elements.chat.messages.scrollHeight - elements.chat.messages.clientHeight <= elements.chat.messages.scrollTop + 1;
 
@@ -3020,12 +3518,19 @@ function addChatMessage(data) {
         } else {
             item.innerHTML = message;
         }
+    } else if (type === 'great_success') {
+        item.classList.add('system-message', 'great-success-chat');
+        item.innerHTML = `🎉 ${message} 🎉`;
+    } else if (type === 'dps_boast' && recordId) {
+        item.classList.add('dps-boast-message');
+        item.innerHTML = message;
+        item.dataset.recordId = recordId;
+        item.style.cursor = 'pointer';
     } else if (type === 'item_show_off' && itemData) {
         const userHtml = createFameUserHtml(username, fameScore || 0);
         const itemLink = `<span class="item-link ${itemData.grade}" data-iteminfo='${JSON.stringify(itemData)}'>[${itemData.name}]</span>`;
         const titleHtml = title ? `<span class="title ${getGradeByTitle(title)}">${title}</span>` : '';
         item.innerHTML = `<span class="username" data-username="${username}">${titleHtml}${userHtml}:</span>님이 ${itemLink} 아이템을 자랑합니다!`;
-
     } else if (type === 'primal_drop') { 
         item.className = 'primal-drop-message';
         const userHtml = createFameUserHtml(username, fameScore || 0);
@@ -3072,9 +3577,14 @@ function addChatMessage(data) {
     }
 
     elements.chat.messages.appendChild(item);
+    
+    if (type === 'dps_boast' && recordId) {
+        item.addEventListener('click', () => {
+            fetchAndRenderDpsRecordDetail(recordId);
+        });
+    }
 
     const MAX_CHAT_MESSAGES = 40;
-
     if (elements.chat.messages.children.length > MAX_CHAT_MESSAGES) {
         elements.chat.messages.firstChild.remove();
     }
@@ -3085,7 +3595,9 @@ function addChatMessage(data) {
 }
     
     socket.on('chatHistory', (history) => { elements.chat.messages.innerHTML = ''; history.forEach(msg => addChatMessage(msg)); });
-    socket.on('chatMessage', (data) => addChatMessage(data));
+  
+
+  socket.on('chatMessage', (data) => addChatMessage(data));
     let announcementTimer = null;
     elements.announcementBanner.addEventListener('click', (e) => {
         if (e.target.id === 'announcement-close-btn') {
@@ -3096,30 +3608,35 @@ function addChatMessage(data) {
         }
     });
 
-    socket.on('globalAnnouncement', (notice, options) => {
+  socket.on('globalAnnouncement', (notice, options) => {
     const banner = elements.announcementBanner;
     if (banner) {
-        if (announcementTimer) {
-            clearTimeout(announcementTimer);
+        if (window.announcementTimer) {
+            clearTimeout(window.announcementTimer);
         }
         
+
         banner.className = 'announcement-banner';
         banner.style.background = '';
         banner.style.color = '';
         banner.style.textShadow = '';
 
         banner.innerHTML = `📢 <span>${notice}</span> <span id="announcement-close-btn">&times;</span>`;
-        
+
         if (options && options.style === 'primal') {
             banner.classList.add('primal');
+        } else if (options && options.style === 'great-success') {
+            banner.classList.add('great-success'); 
         } else {
+
             banner.style.background = 'linear-gradient(45deg, var(--secondary-color), gold)';
             banner.style.color = '#000';
         }
 
+
         banner.classList.add('active');
 
-        announcementTimer = setTimeout(() => {
+        window.announcementTimer = setTimeout(() => {
             banner.classList.remove('active');
         }, 10000); 
     }
@@ -3485,6 +4002,393 @@ function openResearchDetailModal(playerData, specializationId, techId) {
     modal.summonBtn.disabled = (item.quantity || 0) < 100;
     modal.overlay.style.display = 'flex';
 }
+
+  elements.foundry.toggleBtn.addEventListener('click', () => {
+        const player = currentPlayerState;
+        if (player.raidState && player.raidState.isActive) {
+            return alert('개인 레이드 중에는 입장할 수 없습니다.');
+        }
+        if (player.isInFoundryOfTime) {
+
+            player.isInFoundryOfTime = false; 
+            elements.foundry.toggleBtn.textContent = '시간의 제련소';
+            elements.foundry.toggleBtn.style.backgroundColor = '#8e44ad';
+            socket.emit('foundry:toggle', player);
+        } else {
+
+            if (confirm('시간의 제련소에 입장하시겠습니까?\n모든 스탯이 1로 고정되며, 이곳에서는 영혼석만 획득할 수 있습니다.')) {
+                player.isInFoundryOfTime = true; 
+                elements.foundry.toggleBtn.textContent = '일반 필드 복귀';
+                elements.foundry.toggleBtn.style.backgroundColor = 'var(--fail-color)';
+                socket.emit('foundry:toggle', player);
+            }
+        }
+    });
+
+    let selectedRefinementTarget = null;
+    let refinementMaterialUids = [];
+	
+	
+function updateRefinementPanel(targetItem) {
+    const { refinement } = elements;
+     if (targetItem && !['Mystic', 'Primal'].includes(targetItem.grade)) {
+        alert('영혼 제련은 미스틱(Mystic) 등급 이상의 장비만 가능합니다.');
+        updateRefinementPanel(null); 
+        return; 
+    }
+    if (selectedRefinementTarget?.uid !== targetItem?.uid) {
+        refinementMaterialUids = [];
+    }
+    selectedRefinementTarget = targetItem;
+
+    if (!targetItem || !['weapon', 'armor', 'accessory'].includes(targetItem.type)) {
+        refinement.placeholder.style.display = 'block';
+        refinement.display.style.display = 'none';
+        refinement.grid.innerHTML = '<p class="inventory-tip">제련할 장착 아이템 또는 인벤토리 아이템을 선택하세요.</p>';
+        updateRefinementInputSlots();
+        return;
+    }
+
+    refinement.placeholder.style.display = 'none';
+    refinement.display.style.display = 'flex';
+    refinement.slot.innerHTML = createItemImageHTML(targetItem);
+
+    const refData = targetItem.refinement || { level: 0, exp: 0 };
+    const isMaxLevel = refData.level >= 50;
+    
+    refinement.name.innerHTML = `<span class="${targetItem.grade}">${targetItem.name}</span>`;
+    refinement.levelText.textContent = `제련 레벨: ${refData.level} / 50`;
+    
+    if (isMaxLevel) {
+        refinement.expBarInner.style.width = '100%';
+        refinement.expBarText.textContent = `MAX LEVEL`;
+    } else {
+        const expInfo = getExpForNextLevelClient(refData.level, refData.exp);
+        refinement.expBarInner.style.width = `${expInfo.progress * 100}%`;
+        refinement.expBarText.textContent = `${refData.exp.toLocaleString()} / ${expInfo.nextLevelExp.toLocaleString()} EXP`;
+    }
+
+    let effectValue = 0;
+    let effectName = '';
+    const bonusPerLevel = { weapon: 2, armor: 2, accessory: 0.2 };
+    const itemTypeForBonus = targetItem.accessoryType ? 'accessory' : targetItem.type;
+
+    effectValue = refData.level * (bonusPerLevel[itemTypeForBonus] || 0);
+    
+    if(targetItem.type === 'weapon') effectName = `추가 데미지 +${effectValue.toFixed(1)}%`;
+    else if (targetItem.type === 'armor') effectName = `보호막 +${effectValue.toFixed(1)}%`;
+    else if (targetItem.type === 'accessory') effectName = `왜곡(회피) +${effectValue.toFixed(1)}%`;
+
+    refinement.effectText.textContent = `현재 효과: ${effectName}`;
+
+    const materials = currentPlayerState.inventory.filter(i => i.category === 'RefinementMaterial' || i.category === 'Essence');
+    
+    const usedCounts = refinementMaterialUids.reduce((acc, uid) => {
+        const item = findItemInState(uid);
+        if (item) acc[item.uid] = (acc[item.uid] || 0) + 1;
+        return acc;
+    }, {});
+    
+    if (materials.length > 0) {
+        refinement.grid.innerHTML = materials.map(item => {
+            const usedCount = usedCounts[item.uid] || 0;
+            const visualQuantity = item.quantity - usedCount;
+            const visualItem = { ...item, quantity: visualQuantity };
+            const itemHtml = createItemHTML(visualItem);
+            const isDepleted = visualQuantity <= 0;
+            
+            return `
+            <div class="inventory-item refinement-material-item ${isDepleted ? 'disabled' : ''}" data-uid="${item.uid}" style="${isDepleted ? 'opacity:0.4; pointer-events:none;' : ''}">
+                ${itemHtml}
+            </div>`;
+        }).join('');
+    } else {
+        refinement.grid.innerHTML = '<p class="inventory-tip">보유한 재료가 없습니다.</p>';
+    }
+    
+    updateRefinementInputSlots();
+}
+	
+	
+	  const REFINEMENT_CONFIG_CLIENT = {
+        SOULSTONE_EXP: { soulstone_faint: 100, soulstone_glowing: 1000, soulstone_radiant: 10000 },
+    };
+	
+ function updateRefinementInputSlots() {
+        const { refinement } = elements;
+        refinement.materialsInput.innerHTML = '';
+        let totalExp = 0;
+        
+        const materialCounts = {};
+        refinementMaterialUids.forEach(uid => {
+            const item = findItemInState(uid);
+            if(item) {
+                if (materialCounts[item.id]) {
+                    materialCounts[item.id].uids.push(uid);
+                } else {
+                    materialCounts[item.id] = { item: item, uids: [uid] };
+                }
+            }
+        });
+
+        for (let i = 0; i < 10; i++) {
+            const uid = refinementMaterialUids[i];
+            const slot = document.createElement('div');
+            slot.className = 'refinement-material-slot';
+            if (uid) {
+                const item = findItemInState(uid);
+                if (item) {
+                    slot.innerHTML = createItemImageHTML(item);
+                    if(item.category === 'RefinementMaterial') totalExp += (REFINEMENT_CONFIG_CLIENT.SOULSTONE_EXP[item.id] || 0);
+                    if(item.category === 'Essence') totalExp += (item.refinementData?.exp || 0);
+                }
+            }
+            refinement.materialsInput.appendChild(slot);
+        }
+        
+        refinement.infuseBtn.disabled = refinementMaterialUids.length === 0;
+        refinement.infuseBtn.textContent = `영혼 주입 (+${totalExp.toLocaleString()} EXP)`;
+    }
+    
+
+ elements.refinement.grid.addEventListener('click', (e) => {
+    e.stopPropagation();
+
+    const card = e.target.closest('.refinement-material-item');
+    if (card && !card.classList.contains('disabled') && selectedRefinementTarget && refinementMaterialUids.length < 10) {
+        const uid = card.dataset.uid;
+        const materialItem = findItemInState(uid);
+
+        if (!materialItem) return;
+
+        if (materialItem.category === 'Essence' && materialItem.refinementData) {
+            const targetPart = selectedRefinementTarget.accessoryType ? 'accessory' : selectedRefinementTarget.type;
+            const essencePart = materialItem.refinementData.part;
+
+            if (essencePart !== targetPart) {
+                const partNameMap = { weapon: '무기', armor: '방어구', accessory: '악세사리' };
+                alert(`이 정수는 [${partNameMap[targetPart] || targetPart}] 부위에는 사용할 수 없습니다.`);
+                return;
+            }
+        }
+
+        
+        refinementMaterialUids.push(uid);
+        updateRefinementPanel(selectedRefinementTarget);
+    }
+});
+
+
+   elements.refinement.materialsInput.addEventListener('click', () => {
+        if(refinementMaterialUids.length > 0) {
+            refinementMaterialUids.pop();
+            updateRefinementPanel(selectedRefinementTarget);
+        }
+    });
+	
+	
+	
+elements.refinement.infuseBtn.addEventListener('click', () => {
+    if (selectedRefinementTarget && refinementMaterialUids.length > 0) {
+        elements.refinement.infuseBtn.disabled = true;
+
+        socket.emit('refinement:infuse', {
+            targetUid: selectedRefinementTarget.uid,
+            materialUids: refinementMaterialUids
+        }, (response) => {
+            if (response && response.success) {
+                const newItem = response.updatedItem;
+
+                if (currentPlayerState) {
+                    let foundAndUpdated = false;
+                    for (const slot in currentPlayerState.equipment) {
+                        if (currentPlayerState.equipment[slot] && currentPlayerState.equipment[slot].uid === newItem.uid) {
+                            currentPlayerState.equipment[slot] = newItem;
+                            foundAndUpdated = true;
+                            break;
+                        }
+                    }
+                    if (!foundAndUpdated) {
+                        const invIndex = currentPlayerState.inventory.findIndex(i => i.uid === newItem.uid);
+                        if (invIndex > -1) {
+                            currentPlayerState.inventory[invIndex] = newItem;
+                        }
+                    }
+                }
+                
+               
+                updateRefinementPanel(newItem);
+
+            } else {
+                alert(response.message || '영혼 주입 중 오류가 발생했습니다.');
+            }
+            
+            elements.refinement.infuseBtn.disabled = false;
+        });
+
+        refinementMaterialUids = [];
+        updateRefinementInputSlots();
+    }
+});
+	
+	elements.refinement.autofillBtn.addEventListener('click', () => {
+        if (!selectedRefinementTarget || refinementMaterialUids.length >= 10) return;
+
+        const availableMaterials = [];
+
+        currentPlayerState.inventory.forEach(item => {
+            if (item.category === 'RefinementMaterial' || item.category === 'Essence') {
+
+                const countInSelection = refinementMaterialUids.filter(uid => {
+                     const selectedItem = findItemInState(uid);
+
+                     return selectedItem && selectedItem.id === item.id;
+                }).length;
+
+                const availableQuantity = item.quantity - countInSelection;
+                for (let i = 0; i < availableQuantity; i++) {
+
+                    availableMaterials.push(item);
+                }
+            }
+        });
+
+        const gradeOrder = ['Rare', 'Epic', 'Mystic', 'Primal'];
+        availableMaterials.sort((a, b) => gradeOrder.indexOf(a.grade) - gradeOrder.indexOf(b.grade));
+        
+        const slotsToFill = 10 - refinementMaterialUids.length;
+        const itemsToFill = availableMaterials.slice(0, slotsToFill);
+        
+        itemsToFill.forEach(item => refinementMaterialUids.push(item.uid));
+        
+        updateRefinementPanel(selectedRefinementTarget); 
+    });
+    
+    elements.refinement.extractBtn.addEventListener('click', () => {
+        if (selectedRefinementTarget && confirm(`[${selectedRefinementTarget.name}]의 모든 제련 경험치를 추출하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 아이템의 제련 레벨과 경험치는 0으로 초기화됩니다.`)) {
+            socket.emit('refinement:extract', selectedRefinementTarget.uid);
+            updateRefinementPanel(null); 
+        }
+    });
+
+
+ let currentFoundryMonster = null;
+
+    socket.on('foundry:monsterUpdate', (monsterData) => {
+        if (currentPlayerState && currentPlayerState.isInFoundryOfTime) {
+            currentFoundryMonster = monsterData;
+
+            const foundryMonsterForUI = {
+                name: monsterData.name,
+                level: '??',
+                hp: monsterData.hp,
+                currentHp: monsterData.hp, 
+                attack: 0,
+                defense: 0,
+                isBoss: monsterData.isBoss
+            };
+            updateUI({ player: currentPlayerState, monster: foundryMonsterForUI });
+        }
+    });
+	
+	  socket.on('foundry:tick', ({ currentHp, maxHp }) => {
+        if (currentPlayerState && currentPlayerState.isInFoundryOfTime && currentFoundryMonster && currentFoundryMonster.isBoss) {
+            currentFoundryMonster.hp = currentHp;
+            elements.monster.hpBar.style.width = `${(currentHp / maxHp) * 100}%`;
+            elements.monster.hpText.textContent = `HP: ${currentHp.toLocaleString()} / ${maxHp.toLocaleString()}`;
+        }
+    });
+
+    socket.on('foundry:enter', (monsterData) => {
+        if (currentPlayerState) {
+            currentPlayerState.isInFoundryOfTime = true;
+            currentFoundryMonster = monsterData;
+            const foundryMonsterForUI = {
+                name: monsterData.name,
+                level: '??',
+                hp: monsterData.hp,
+                currentHp: monsterData.hp,
+                attack: 0,
+                defense: 0,
+                isBoss: monsterData.isBoss
+            };
+            updateUI({ player: currentPlayerState, monster: foundryMonsterForUI });
+        }
+    });
+	
+	socket.on('refinement:greatSuccess', () => {
+    const { slot, expBarInner } = elements.refinement;
+    if (!slot) return;
+
+    const existingText = slot.querySelector('.refinement-great-success');
+    if (existingText) existingText.remove();
+    slot.classList.remove('refinement-great-success-aura');
+    if (expBarInner) expBarInner.classList.remove('great-success-bar');
+
+    slot.classList.add('refinement-great-success-aura');
+
+    if (expBarInner) {
+        expBarInner.classList.add('great-success-bar');
+    }
+
+    const successText = document.createElement('div');
+    successText.className = 'refinement-great-success';
+    successText.textContent = '대성공!';
+    slot.appendChild(successText);
+
+    setTimeout(() => {
+        slot.classList.remove('refinement-great-success-aura');
+        successText.remove();
+        if (expBarInner) {
+            expBarInner.classList.remove('great-success-bar');
+        }
+    }, 3000); 
+});
+	
+ socket.on('playerStatsOnlyUpdate', (data) => {
+        if (!currentPlayerState) return;
+
+        currentPlayerState.stats = data.stats;
+        currentPlayerState.currentHp = data.currentHp;
+        currentPlayerState.shield = data.shield;
+        
+        const currentMonsterObject = currentPlayerState.isInFoundryOfTime
+            ? currentFoundryMonster
+            : (currentPlayerState.raidState && currentPlayerState.raidState.isActive ? currentPlayerState.raidState.monster : currentPlayerState.monster);
+
+        updateUI({
+            player: currentPlayerState,
+            monster: currentMonsterObject,
+            isInRaid: currentPlayerState.raidState && currentPlayerState.raidState.isActive
+        });
+    });
+
+
+socket.on('refinement:itemUpdated', ({ updatedItem }) => {
+    if (!currentPlayerState || !updatedItem) return;
+
+    let itemFound = false;
+    for (const slot in currentPlayerState.equipment) {
+        if (currentPlayerState.equipment[slot] && currentPlayerState.equipment[slot].uid === updatedItem.uid) {
+            currentPlayerState.equipment[slot] = updatedItem;
+            itemFound = true;
+            break;
+        }
+    }
+    if (!itemFound) {
+        const invIndex = currentPlayerState.inventory.findIndex(i => i.uid === updatedItem.uid);
+        if (invIndex > -1) {
+            currentPlayerState.inventory[invIndex] = updatedItem;
+        }
+    }
+
+    updateEquipmentAndArtifacts(currentPlayerState);
+
+    const activeTab = document.querySelector('.tab-button.active');
+    if (activeTab && activeTab.dataset.tab === 'refinement-tab') {
+        updateRefinementPanel(updatedItem);
+    }
+});
 
 }
 function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, completionPercentage }) {
@@ -4259,3 +5163,4 @@ function updateAdminEventStatus(activeEvents) {
         window.adminEventTimers.push(intervalId); 
     });
 }
+

@@ -27,6 +27,50 @@
     </div>
 </div>
 
+
+ <div id="dps-ranking-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 900px;">
+            <span class="close-button">&times;</span>
+            <h2>🥊 무한의 수련장 랭킹</h2>
+            <div class="dps-ranking-container" style="display: flex; gap: 20px; flex-grow: 1; min-height: 0;">
+                <div style="flex: 2; display: flex; flex-direction: column;">
+                    <h3>🏆 서버 전체 랭킹 (Top 50)</h3>
+                    <ul id="dps-leaderboard-list" class="feed-list" style="flex-grow: 1; overflow-y: auto;">
+                        <li>랭킹 정보를 불러오는 중...</li>
+                    </ul>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column;">
+                    <h3>🏅 내 최고 기록 (Top 3)</h3>
+                    <ul id="dps-personal-list" class="feed-list" style="flex-grow: 1; overflow-y: auto;">
+                        <li>기록 정보를 불러오는 중...</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dps-result-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="max-width: 900px;">
+            <span class="close-button">&times;</span>
+            <h2 id="dps-result-title">📊 전투 성적표</h2>
+			
+            <div id="dps-result-container">
+
+            </div>
+
+            <div id="dps-snapshot-container" style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color); overflow-y: auto;">
+            </div>
+
+            <div class="modal-actions" style="margin-top: 20px; display: flex; justify-content: center; gap: 15px;">
+
+                <button id="dps-view-snapshot-button" class="action-btn">📸 장비 스냅샷 보기</button>
+            </div>
+        </div>
+    </div>
+
+
+
+
     <div id="auth-container">
         <div class="auth-box">
             <h1 id="auth-title">로그인</h1>
@@ -85,6 +129,7 @@
 <button id="title-codex-button">📜 칭호</button>
 <button id="auto-sell-button">🤖 자판기</button>
 <button id="abyssal-shop-button" style="background-color: #6a0dad; color: white;">🌌 심연</button>
+<button id="dps-ranking-button" style="background-color: #e67e22; color: white;">🥊 DPS랭킹</button>
             </div>
             <div class="top-bar-right">
 <div id="player-event-timers"></div>
@@ -123,6 +168,14 @@
                             <div class="hp-bar-inner" id="player-hp-bar"></div>
                             <div class="hp-bar-text" id="player-hp-text"></div>
                         </div>
+						<div class="hp-bar" id="player-shield-container" style="display: none; margin-top: -5px;">
+                            <div class="hp-bar-inner" id="player-shield-bar" style="background: linear-gradient(to right, #af52de, #c774e8);"></div>
+                            <div class="hp-bar-text" id="player-shield-text"></div>
+                        </div>
+						
+						
+						
+						
                         <div class="stat-info-combined">
                             <div class="stat-row" data-stat-row="hp"><span class="stat-name">❤️ 총 체력</span>
 		<span class="stat-value" id="total-hp"></span>
@@ -178,16 +231,26 @@
                     </div>
                     
                     <div class="character-panel monster-panel">
-                        <div class="character-header">
-                            <div class="monster-header-controls">
-                                <h2><span id="monster-level"></span></h2>
-<button id="leave-raid-btn" class="action-btn sell-btn" style="display: none;">등반 복귀</button>
-<div id="floor-controls" style="display: none;">
-    <button id="personal-raid-btn" class="action-btn" style="background-color: #c0392b;">개인 레이드</button> <button id="safe-zone-btn" class="action-btn sell-btn">안전지대 복귀</button>
-    <button id="frontline-btn" class="action-btn list-auction-btn">최전선 복귀</button>
-</div>
-                            </div>
-                        </div>
+					
+					
+<div class="character-header">
+
+   <div class="monster-header-controls">
+    <h2><span id="monster-level"></span></h2>
+    <button id="leave-raid-btn" class="action-btn sell-btn" style="display: none;">등반 복귀</button>
+	<button id="abort-dps-btn" class="action-btn sell-btn" style="display: none;">측정 중단</button>
+    <div class="floor-action-buttons">
+        <div id="floor-controls" style="display: flex;">
+            <button id="personal-raid-btn" class="action-btn" style="background-color: #c0392b;">개인 레이드</button>
+        </div>
+        <button id="foundry-toggle-btn" class="action-btn" style="background-color: #8e44ad;">시간의 제련소</button>
+        <button id="safe-zone-btn" class="action-btn sell-btn">안전지대 복귀</button>
+        <button id="frontline-btn" class="action-btn list-auction-btn">최전선 복귀</button>
+		<button id="start-dps-btn" class="action-btn" style="background-color: #e67e22;">🥊 DPS 측정 (3분)</button>
+    </div>
+    </div>
+	</div>
+
                         <div class="hp-bar">
                             <div class="hp-bar-inner" id="monster-hp-bar"></div>
                             <div class="hp-bar-text" id="monster-hp-text"></div>
@@ -221,6 +284,7 @@
                         <button class="tab-button" data-tab="chat-tab">채팅</button>
 <button class="tab-button" data-tab="research-tab">연구소</button>
 <button class="tab-button" data-tab="scroll-tab">주문서</button>
+<button class="tab-button" data-tab="refinement-tab">영혼 제련</button>
 <button class="tab-button" data-tab="spirit-tab">정령</button>
                     </div>
 
@@ -381,6 +445,45 @@
         </div>
     </div>
 </div>
+
+
+<div class="tab-content" id="refinement-tab">
+    <div id="refinement-container">
+        <div id="refinement-target-sector">
+            <div id="refinement-target-placeholder">
+                제련할 장비(무기, 방어구, 악세사리)를 선택하세요.
+            </div>
+            <div id="refinement-target-display" style="display: none;">
+                <div id="refinement-target-slot" class="enhancement-slot"></div>
+                <div id="refinement-info-panel">
+                    <h3 id="refinement-item-name"></h3>
+                    <div id="refinement-level-text"></div>
+                    <div class="refinement-exp-bar">
+                        <div id="refinement-exp-bar-inner" class="refinement-exp-bar-inner"></div>
+                        <div id="refinement-exp-bar-text" class="refinement-exp-bar-text"></div>
+                    </div>
+                    <div id="refinement-effect-text"></div>
+                </div>
+            </div>
+            <div id="refinement-materials-input">
+                </div>
+            <div id="refinement-action-buttons">
+                <button id="refinement-autofill-btn" class="action-btn">자동 등록</button>
+                <button id="refinement-infuse-btn" class="enhance-execute-btn" disabled>영혼 주입</button>
+                <button id="refinement-extract-btn" class="action-btn sell-btn">영혼 추출</button>
+            </div>
+        </div>
+        <div id="refinement-material-sector">
+            <h4>보유 재료</h4>
+            <div id="refinement-material-grid" class="inventory-grid">
+                </div>
+        </div>
+    </div>
+</div>
+
+
+
+
 
                 </main>
             </div>

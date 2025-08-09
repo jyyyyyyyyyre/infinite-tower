@@ -170,6 +170,8 @@ raidState: {
     floor: { type: Number, default: 1 }
 },
 
+isInFoundryOfTime: { type: Boolean, default: false },
+
     titleCounters: {
         destroyCount: { type: Number, default: 0 },
         enhancementFailCount: { type: Number, default: 0 },
@@ -227,6 +229,10 @@ const CommentSchema = new mongoose.Schema({
     likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
+
+
+
+
 const GameSettingsSchema = new mongoose.Schema({
     settingId: { type: String, default: 'main_settings', unique: true },
     dropTable: { type: Object, required: true },
@@ -251,6 +257,37 @@ const AdminLogSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
+const DpsRecordSchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    username: { type: String, required: true },
+    totalDamage: { type: Number, required: true, index: true },
+    dps: { type: Number, required: true },
+    duration: { type: Number, default: 180 },
+    details: {
+        damageBreakdown: Object, 
+        skillMetrics: Object,    
+        combatStats: Object      
+    },
+
+    snapshot: {
+        equipment: Object,
+        equippedPet: Object,
+        stats: Object,
+        title: String,
+        research: Object,
+        fameScore: Number
+    },
+}, { timestamps: true });
+
+
+const DpsLeaderboardSchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+    username: String,
+    totalDamage: Number,
+    dps: Number,
+    snapshot: Object, 
+    recordId: { type: mongoose.Schema.Types.ObjectId, ref: 'DpsRecord' },
+}, { timestamps: true });
 
 const PostSchema = new mongoose.Schema({
     authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -275,6 +312,8 @@ const Post = mongoose.model('Post', PostSchema);
 const Comment = mongoose.model('Comment', CommentSchema);
 const GameSettings = mongoose.model('GameSettings', GameSettingsSchema);
 const AdminLog = mongoose.model('AdminLog', AdminLogSchema);
+const DpsRecord = mongoose.model('DpsRecord', DpsRecordSchema);
+const DpsLeaderboard = mongoose.model('DpsLeaderboard', DpsLeaderboardSchema);
 
 
 mongoose.connect(MONGO_URI).then(() => {
@@ -394,6 +433,10 @@ const adminItemAlias = {
 };
 
 const itemData = {
+soulstone_faint: { name: '희미한 영혼석', type: 'Special', category: 'RefinementMaterial', grade: 'Rare', description: '영혼 제련 경험치를 100 부여합니다.', image: 'soulstone_faint.png', tradable: false },
+    soulstone_glowing: { name: '빛나는 영혼석', type: 'Special', category: 'RefinementMaterial', grade: 'Epic', description: '영혼 제련 경험치를 1,000 부여합니다.', image: 'soulstone_glowing.png', tradable: false },
+    soulstone_radiant: { name: '찬란한 영혼석', type: 'Special', category: 'RefinementMaterial', grade: 'Mystic', description: '영혼 제련 경험치를 10,000 부여합니다.', image: 'soulstone_radiant.png', tradable: false },
+    condensed_soul_essence: { name: '응축된 영혼의 정수', type: 'Special', category: 'Essence', grade: 'Primal', description: '장비의 영혼 제련 경험치가 담겨있습니다.', image: 'condensed_soul_essence.png', tradable: true },
 'abyssal_box': { name: '심연의 상자', type: 'Special', category: 'Consumable', grade: 'Mystic', description: '사용 시 심연 상점에서 판매하는 아이템 중 하나를 획득합니다.', image: 'box100.png', tradable: true },
 'rift_shard_abyss': { name: '심연의 파편', type: 'Special', category: 'Material', grade: 'Primal', description: '100만 층 이상의 심연에서만 발견되는 순수한 에너지의 결정체.', image: 'rift_shard_abyss.png', tradable: true },
 'bahamut_essence': { name: '바하무트의 정수', type: 'Special', category: 'Material', grade: 'Primal', description: '바하무트의 잠재력을 최대로 끌어올릴 수 있는 신화적인 재료.', image: 'pure_blood_crystal.png', tradable: true },
@@ -527,6 +570,359 @@ function grantTitle(player, titleName) {
         }
 
     }
+}
+
+
+const DPS_DURATION_MS = 180 * 1000; // 3분 (요구사항 1)
+
+
+function addBuff(player, buff) {
+    if (!player || !buff) return;
+    player.buffs = player.buffs || [];
+
+    const existingBuffIndex = player.buffs.findIndex(b => b.id === buff.id);
+    const endTime = new Date(Date.now() + buff.duration);
+
+    if (existingBuffIndex > -1) {
+
+        if (endTime > new Date(player.buffs[existingBuffIndex].endTime)) {
+            player.buffs[existingBuffIndex].endTime = endTime;
+        }
+    } else {
+
+        player.buffs.push({
+            id: buff.id,
+            name: buff.name,
+            endTime: endTime,
+            effects: buff.effects || {}
+        });
+    }
+
+}
+
+function updateBuffs(player) {
+    if (!player || !player.buffs) return;
+    const now = Date.now();
+    const initialBuffCount = player.buffs.length;
+
+    player.buffs = player.buffs.filter(buff => new Date(buff.endTime) > now);
+    
+    if (player.buffs.length !== initialBuffCount) {
+
+        calculateTotalStats(player);
+    }
+}
+
+async function startDpsSession(player) {
+    if (!player) return;
+
+    if (player.dpsSession) {
+        pushLog(player, '[수련장] 이미 DPS 측정이 진행 중이거나 처리 중입니다.');
+        return;
+    }
+    if ((player.raidState && player.raidState.isActive) || player.isInFoundryOfTime) {
+        pushLog(player, '[수련장] 현재 콘텐츠 진행 중에는 입장할 수 없습니다.');
+        return;
+    }
+
+    const stateBeforeDps = player.isExploring ? 'exploring' : 'climbing';
+    player.isExploring = false;
+
+    player.buffs = []; 
+    calculateTotalStats(player);
+    player.currentHp = player.stats.total.hp;
+	player.shield = player.stats.shield || 0;
+
+    const snapshot = {
+        equipment: JSON.parse(JSON.stringify(player.equipment)),
+        equippedPet: JSON.parse(JSON.stringify(player.equippedPet)),
+        stats: JSON.parse(JSON.stringify(player.stats)),
+        title: player.equippedTitle,
+        research: JSON.parse(JSON.stringify(player.research, (key, value) => {
+            if (value instanceof Map) {
+                return Object.fromEntries(value);
+            }
+            return value;
+        })),
+        fameScore: player.fameScore
+    };
+
+    player.dpsSession = {
+        isActive: true,
+        startTime: Date.now(),
+        endTime: Date.now() + DPS_DURATION_MS,
+        totalDamage: 0,
+        stateBeforeDps: stateBeforeDps,
+        snapshot: snapshot,
+        aborted: false,
+        details: {
+            damageBreakdown: { basic: 0, critBonus: 0, predator: 0, doom: 0, refinement: 0 },
+            skillMetrics: { bloodthirstCount: 0, awakeningDuration: 0, rageDuration: 0, predatorBuffDuration: 0, revelationDuration: 0 },
+            combatStats: { totalHits: 0, critHits: 0 }
+        }
+    };
+
+    pushLog(player, `[수련장] DPS 측정을 시작합니다. (3분간 진행)`);
+    
+    if (player.socket) {
+        player.socket.emit('dps:started', { duration: DPS_DURATION_MS });
+        sendPlayerState(player);
+        player.stateSentThisTick = true; 
+    }
+
+    setTimeout(() => {
+        if (player && player.dpsSession && player.dpsSession.isActive && !player.dpsSession.aborted) {
+            endDpsSession(player);
+        }
+    }, DPS_DURATION_MS + 5000);
+}
+
+function runDpsSimulation(player) {
+    if (!player || !player.dpsSession || !player.dpsSession.isActive) return;
+
+    const session = player.dpsSession;
+    const now = Date.now();
+
+    if (now >= session.endTime) {
+        endDpsSession(player);
+        return;
+    }
+    
+
+    calculateTotalStats(player); 
+
+    const stats = player.stats.total;
+    const weapon = player.equipment.weapon;
+    const armor = player.equipment.armor;
+    const m = { 
+        defense: 0, 
+        isBoss: true,
+    }; 
+    let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
+    let titleBossDamageBonus = (titleEffects && titleEffects.bossDamage) ? (1 + titleEffects.bossDamage) : 1;
+
+    let pDmg = 0;
+    let finalAttack = stats.attack;
+
+    let trackPredator = 0;
+    let trackBaseAndCrit = 0;
+    let trackRefinement = 0;
+    let trackDoom = 0;
+    let isCrit = false;
+
+
+    if (hasBuff(player, 'awakening') || hasBuff(player, 'awakening_earring')) session.details.skillMetrics.awakeningDuration = (session.details.skillMetrics.awakeningDuration || 0) + 1;
+    if (hasBuff(player, 'predator_state')) session.details.skillMetrics.predatorBuffDuration = (session.details.skillMetrics.predatorBuffDuration || 0) + 1;
+
+    if (hasBuff(player, 'fury_attack')) {
+        session.details.skillMetrics.rageDuration = (session.details.skillMetrics.rageDuration || 0) + 1;
+        finalAttack *= 1.5; 
+    }
+
+
+    if (hasBuff(player, 'predator_state')) {
+        trackPredator = finalAttack * 2.0;
+        pDmg += trackPredator;
+    }
+
+    session.details.combatStats.totalHits += 1;
+
+    if (Math.random() < player.stats.critChance) {
+        isCrit = true;
+        session.details.combatStats.critHits += 1;
+        const critMultiplier = 1.5 + (stats.critDamage || 0);
+        trackBaseAndCrit = finalAttack * critMultiplier;
+    } else {
+        const effectiveDefense = m.defense * (1 - (stats.defPenetration || 0));
+        trackBaseAndCrit = Math.max(0, finalAttack - effectiveDefense);
+    }
+    pDmg += trackBaseAndCrit;
+    if (player.stats.additiveDamage > 0) {
+        trackRefinement = pDmg * (player.stats.additiveDamage / 100);
+        pDmg += trackRefinement;
+    }
+    
+    if (m.isBoss) { 
+        pDmg *= titleBossDamageBonus; 
+    }
+
+    if (stats.lowHpAttackPercent > 0 && player.currentHp < stats.hp) {
+        const missingHpPercent = (stats.hp - player.currentHp) / stats.hp;
+        const damageMultiplier = 1 + (missingHpPercent * 100 * stats.lowHpAttackPercent);
+        pDmg *= damageMultiplier;
+    }
+
+
+    if (stats.bloodthirst > 0 && Math.random() < stats.bloodthirst / 100) {
+        session.details.skillMetrics.bloodthirstCount = (session.details.skillMetrics.bloodthirstCount || 0) + 1;
+        player.currentHp = stats.hp;
+        if (weapon?.prefix === '포식자') {
+            const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
+            addBuff(player, 'predator_state', '포식', duration, {});
+        }
+        if (armor?.prefix === '포식자') {
+            addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+        }
+    }
+
+    if (weapon) {
+
+        if (weapon.prefix === '격노' && Math.random() < 0.05) {
+            const duration = (armor?.prefix === '격노') ? 7000 : 5000;
+            addBuff(player, 'fury_attack', '격노(공)', duration, {});
+        }
+        if (weapon.prefix === '파멸' && Math.random() < 0.02) {
+            const bonusDamageMultiplier = (armor?.prefix === '파멸') ? 3.0 : 2.0;
+            trackDoom = stats.attack * bonusDamageMultiplier;
+            pDmg += trackDoom;
+        }
+        if (weapon.prefix === '계시' && Math.random() < 0.002) {
+            const duration = (armor?.prefix === '계시') ? 7000 : 5000;
+            applyAwakeningBuff(player, duration);
+        }
+    }
+
+    if (pDmg > 0) {
+        if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) {
+            applyEarringAwakeningBuff(player, 10000);
+        }
+        if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) {
+            applyEarringAwakeningBuff(player, 15000);
+        }
+    }
+
+    session.totalDamage += pDmg;
+
+    const totalBeforeMultipliers = trackPredator + trackBaseAndCrit + trackRefinement;
+    const damageExcludingDoom = pDmg - trackDoom;
+
+    const multiplier = (totalBeforeMultipliers > 0) ? damageExcludingDoom / totalBeforeMultipliers : 1;
+
+    session.details.damageBreakdown.predator = (session.details.damageBreakdown.predator || 0) + (trackPredator * multiplier);
+    session.details.damageBreakdown.refinement = (session.details.damageBreakdown.refinement || 0) + (trackRefinement * multiplier);
+    session.details.damageBreakdown.doom = (session.details.damageBreakdown.doom || 0) + trackDoom;
+
+    const finalBaseAndCrit = trackBaseAndCrit * multiplier;
+    if (isCrit) {
+        const critMultiplier = 1.5 + (stats.critDamage || 0);
+        const basicPortion = finalBaseAndCrit / critMultiplier;
+        const critBonusPortion = finalBaseAndCrit - basicPortion;
+        session.details.damageBreakdown.basic = (session.details.damageBreakdown.basic || 0) + basicPortion;
+        session.details.damageBreakdown.critBonus = (session.details.damageBreakdown.critBonus || 0) + critBonusPortion;
+    } else {
+        session.details.damageBreakdown.basic = (session.details.damageBreakdown.basic || 0) + finalBaseAndCrit;
+    }
+
+    if (player.buffs && player.buffs.length > 0) {
+        const initialBuffCount = player.buffs.length;
+        player.buffs = player.buffs.filter(buff => new Date(buff.endTime) > now);
+        if (player.buffs.length < initialBuffCount) {
+
+            const hpBefore = player.stats.total.hp || 1;
+            const originalCurrentHp = player.currentHp;
+            calculateTotalStats(player); 
+            const newMaxHp = player.stats.total.hp;
+            player.currentHp = Math.min(originalCurrentHp, newMaxHp);
+			const healthPercent = originalCurrentHp / hpBefore;
+
+            player.shield = (player.stats.shield || 0) * healthPercent;
+        }
+    }
+}
+
+async function endDpsSession(player, aborted = false) {
+
+    if (!player || !player.dpsSession || (!player.dpsSession.isActive && !aborted)) return;
+
+    const session = player.dpsSession;
+    session.isActive = false;
+
+    session.aborted = aborted || session.aborted; 
+
+
+    if (session.stateBeforeDps === 'exploring') {
+        player.isExploring = true;
+    }
+
+
+    player.buffs = [];
+    calculateTotalStats(player);
+    
+    if (session.aborted) {
+        pushLog(player, '[수련장] DPS 측정을 중단했습니다. 기록은 저장되지 않습니다.');
+        if (player.socket) {
+            player.socket.emit('dps:aborted');
+            sendPlayerState(player);
+        }
+        player.dpsSession = null;
+        return;
+    }
+
+    const durationSeconds = DPS_DURATION_MS / 1000;
+    const finalDps = session.totalDamage / durationSeconds;
+    
+    const resultData = {
+        totalDamage: session.totalDamage,
+        dps: finalDps,
+        duration: durationSeconds,
+        details: session.details,
+        snapshot: session.snapshot
+    };
+
+    const { isNewBest, recordId, isTop3 } = await updateDpsRecordsAndLeaderboard(player, resultData);
+
+    pushLog(player, `[수련장] DPS 측정 종료. 총 피해량: ${Math.floor(session.totalDamage).toLocaleString()}, 평균 DPS: ${Math.floor(finalDps).toLocaleString()}`);
+
+    if (player.socket) {
+        player.socket.emit('dps:result', { record: { ...resultData, _id: recordId, username: player.username }, isNewBest, isTop3 });
+        sendPlayerState(player);
+    }
+
+    player.dpsSession = null; 
+}
+
+async function updateDpsRecordsAndLeaderboard(player, resultData) {
+    let isNewBest = false;
+    let isTop3 = false;
+
+    const newRecord = new DpsRecord({
+        userId: player.user,
+        username: player.username,
+        ...resultData
+    });
+    await newRecord.save();
+    const userRecords = await DpsRecord.find({ userId: player.user }).sort({ totalDamage: -1 }).limit(4);
+    
+    if (userRecords.length <= 3) {
+        isTop3 = true;
+    } else if (userRecords.some(r => r._id.equals(newRecord._id))) {
+        isTop3 = true;
+        await DpsRecord.findByIdAndDelete(userRecords[3]._id);
+    }
+
+    const currentBest = await DpsLeaderboard.findOne({ userId: player.user });
+
+    if (!currentBest || resultData.totalDamage > currentBest.totalDamage) {
+        isNewBest = true;
+        await DpsLeaderboard.findOneAndUpdate(
+            { userId: player.user },
+            {
+                username: player.username,
+                totalDamage: resultData.totalDamage,
+                dps: resultData.dps,
+                snapshot: resultData.snapshot,
+                recordId: newRecord._id 
+            },
+            { upsert: true, new: true }
+        );
+        if (!currentBest) {
+            pushLog(player, '[수련장] 첫 DPS 기록을 축하합니다!');
+        } else {
+            pushLog(player, '[수련장] 🎉 개인 최고 기록을 갱신했습니다! 🎉');
+        }
+    }
+
+    return { isNewBest, recordId: newRecord._id.toString(), isTop3 };
 }
 
 function checkStateBasedTitles(player) {
@@ -980,7 +1376,6 @@ function handleItemStacking(player, item) {
     }
     checkStateBasedTitles(player);
 }
-
 function calculateTotalStats(player) {
     if (!player || !player.stats) return;
     const base = player.stats.base;
@@ -1041,6 +1436,11 @@ function calculateTotalStats(player) {
     player.focus = 0;
     player.penetration = 0;
     player.tenacity = 0;
+
+    player.stats.additiveDamage = 0;
+    player.stats.shield = 0;
+    player.stats.dodgeChance = 0;
+
 
     let petDefPenetration = 0;
     let enchantAttackPercent = 1;
@@ -1107,6 +1507,19 @@ function calculateTotalStats(player) {
             }
         }
     }
+
+    if (player.equipment.weapon && player.equipment.weapon.refinement) {
+        player.stats.additiveDamage = getRefinementBonus(player.equipment.weapon);
+    }
+    if (player.equipment.armor && player.equipment.armor.refinement) {
+
+    }
+    ['necklace', 'earring', 'wristwatch'].forEach(slot => {
+        if (player.equipment[slot] && player.equipment[slot].refinement) {
+            player.stats.dodgeChance += getRefinementBonus(player.equipment[slot]);
+        }
+    });
+
 
     player.focus += moonScrollBonus;
     player.penetration += moonScrollBonus;
@@ -1183,15 +1596,21 @@ function calculateTotalStats(player) {
         if (petBonuses.defense > 0) totalDefense *= (1 + petBonuses.defense / 100);
     }
 
-
-  const fameBonusPercent = (player.fameScore || 0) / 300;
-    player.stats.fameBonusPercent = fameBonusPercent; // UI 표시를 위해 값 저장
+    const fameBonusPercent = (player.fameScore || 0) / 300;
+    player.stats.fameBonusPercent = fameBonusPercent; 
 
     const fameBonusMultiplier = 1 + (fameBonusPercent / 100);
 
     totalHp *= fameBonusMultiplier;
     totalAttack *= fameBonusMultiplier;
     totalDefense *= fameBonusMultiplier;
+    
+
+    if (player.equipment.armor && player.equipment.armor.refinement) {
+        const armorRefinementBonus = getRefinementBonus(player.equipment.armor);
+        player.stats.shield = totalHp * (armorRefinementBonus / 100);
+    }
+
 
     player.stats.total = {
         hp: totalHp,
@@ -1202,6 +1621,8 @@ function calculateTotalStats(player) {
         lowHpAttackPercent: researchBonuses.lowHpAttackPercent,
         bloodthirst: (player.bloodthirst || 0) + (researchBonuses.bloodthirst || 0)
     };
+	
+	
 }
 
 
@@ -1282,7 +1703,24 @@ io.on('connection', async (socket) => {
     }
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
+  if (gameData && gameData.inventory) {
+        let wasUpdated = false;
+        const soulstoneIds = ['soulstone_faint', 'soulstone_glowing', 'soulstone_radiant'];
+        
+        gameData.inventory.forEach(item => {
+            if (item && soulstoneIds.includes(item.id) && item.category !== 'RefinementMaterial') {
+                item.category = 'RefinementMaterial';
+                wasUpdated = true;
+            }
+        });
 
+        if (wasUpdated) {
+            await GameData.updateOne({ user: socket.userId }, { $set: { inventory: gameData.inventory } });
+            console.log(`[데이터 보정] ${gameData.username}님의 영혼석 카테고리를 업데이트했습니다.`);
+        }
+    }
+	
+	
  if (gameData) {
         let updatesToSave = {};
         const totalCodexItems = getTotalCodexItemCount();
@@ -1454,7 +1892,8 @@ isHelper: user.isHelper,
         socket: socket, 
         buffs: [] ,
 isStorageTransacting: false,
-autoSellList: gameData.autoSellList || [] 
+autoSellList: gameData.autoSellList || [],
+dpsSession: null 
     };
 	
 	if (!onlinePlayers[socket.userId].autoSellList) {
@@ -1490,6 +1929,7 @@ if (gameData.raidState && gameData.raidState.isActive) {
 checkStateBasedTitles(onlinePlayers[socket.userId]);
     if (!onlinePlayers[socket.userId].stats.total) onlinePlayers[socket.userId].stats.total = {};
     onlinePlayers[socket.userId].currentHp = onlinePlayers[socket.userId].stats.total.hp;
+	onlinePlayers[socket.userId].shield = onlinePlayers[socket.userId].stats.shield;
     
     const chatHistory = await ChatMessage.find().sort({ timestamp: -1 }).limit(50).lean();
     socket.emit('chatHistory', chatHistory.reverse());
@@ -1517,6 +1957,7 @@ socket.emit('enhancementData', {
 socket.emit('eventStatusUpdate', activeEvents);
 
     socket
+	.on('dps:start', () => startDpsSession(onlinePlayers[socket.userId]))
         .on('upgradeStat', data => upgradeStat(onlinePlayers[socket.userId], data))
 .on('personalRaid:start', () => startPersonalRaid(onlinePlayers[socket.userId]))
 .on('personalRaid:leave', () => endPersonalRaid(onlinePlayers[socket.userId], false))
@@ -2319,6 +2760,47 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
             pushLog(player, `[시스템] 최전선(100만층)으로 복귀합니다.`);
             sendState(socket, player, newMonster);
         })
+		
+.on('dps:abort', () => {
+            const player = onlinePlayers[socket.userId];
+            if (player && player.dpsSession && player.dpsSession.isActive) {
+                endDpsSession(player, true); 
+            }
+        })
+
+        .on('dps:getRankingData', async (callback) => {
+            try {
+
+                const leaderboard = await DpsLeaderboard.find().sort({ totalDamage: -1 }).limit(50).lean();
+
+                const personalTop3 = await DpsRecord.find({ userId: socket.userId }).sort({ totalDamage: -1 }).limit(3).lean();
+
+                callback({ success: true, leaderboard, personalTop3 });
+            } catch (error) {
+                console.error('DPS 랭킹 데이터 조회 오류:', error);
+                callback({ success: false, message: '데이터 조회 중 오류가 발생했습니다.' });
+            }
+        })
+
+        .on('dps:getRecordDetail', async (recordId, callback) => {
+            if (!recordId) return callback({ success: false });
+            try {
+
+                const record = await DpsRecord.findById(recordId).lean();
+                if (record) {
+                    callback({ success: true, record });
+                } else {
+
+                    callback({ success: false, message: '기록을 찾을 수 없습니다.' });
+                }
+            } catch (error) {
+                console.error('DPS 기록 상세 조회 오류:', error);
+                callback({ success: false, message: '서버 오류가 발생했습니다.' });
+            }
+        })
+
+    
+		
 .on('admin:getDashboardData', async (callback) => {
             if (socket.role !== 'admin') return;
             try {
@@ -2803,6 +3285,7 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
 
     const shopItems = {
         'bahamut_essence': { price: 2000 },
+		'pet_egg_mythic': { price: 2000 },
         'soulstone_attack': { price: 50 },
         'soulstone_hp': { price: 50 },
         'soulstone_defense': { price: 50 },
@@ -2811,7 +3294,7 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
         'acc_necklace_01': { price: 100 },
         'acc_earring_01': { price: 100 },
         'acc_wristwatch_01': { price: 100 },
-        'golden_hammer': { price: 200 },
+        'golden_hammer': { price: 100 },
         'star_scroll_10': { price: 50 },
         'star_scroll_30': { price: 40 },
         'star_scroll_70': { price: 30 },
@@ -2821,6 +3304,7 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
         'moon_scroll_70': { price: 30 },
         'moon_scroll_100': { price: 20 },
         'abyssal_box': { price: 100 }
+
     };
 
     const itemToBuy = shopItems[itemId];
@@ -2877,6 +3361,206 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
     sendInventoryUpdate(player);
     sendPlayerState(player);
 })
+
+ .on('foundry:toggle', () => {
+            const player = onlinePlayers[socket.userId];
+            if (!player) return;
+
+            player.isInFoundryOfTime = !player.isInFoundryOfTime;
+            const message = player.isInFoundryOfTime ? '시간의 제련소에 입장합니다.' : '일반 필드로 복귀합니다.';
+            pushLog(player, `[시스템] ${message}`);
+            
+            if (player.isInFoundryOfTime) {
+        
+                player.foundryMonster = { name: '시간의 잔상', hp: 1, maxHp: 1, isBoss: false };
+                socket.emit('foundry:enter', player.foundryMonster);
+                
+            } else {
+                sendState(socket, player, calcMonsterStats(player));
+            }
+        })
+		
+	.on('refinement:infuse', ({ targetUid, materialUids }, callback) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player) return;
+
+    if (player.isBusy) {
+        return; 
+    }
+    player.isBusy = true; 
+
+    try {
+
+
+        let targetItem = null;
+        Object.values(player.equipment).forEach(item => {
+            if (item && item.uid === targetUid) targetItem = item;
+        });
+        if (player.equippedPet && player.equippedPet.uid === targetUid) targetItem = player.equippedPet;
+        if (!targetItem) {
+            targetItem = player.inventory.find(i => i.uid === targetUid);
+        }
+
+        if (!targetItem || !['weapon', 'armor', 'accessory'].includes(targetItem.type)) {
+            if (typeof callback === 'function') callback({ success: false, message: "제련할 수 없는 아이템입니다." });
+            return pushLog(player, "[영혼 제련] 제련할 수 없는 아이템입니다.");
+        }
+        
+        initializeRefinement(targetItem);
+        if (targetItem.refinement.level >= REFINEMENT_CONFIG.MAX_LEVEL) {
+            if (typeof callback === 'function') callback({ success: false, message: "이미 최대 레벨입니다." });
+            return pushLog(player, "[영혼 제련] 이미 최대 레벨입니다.");
+        }
+
+        const materialCounts = {};
+        materialUids.forEach(uid => {
+            materialCounts[uid] = (materialCounts[uid] || 0) + 1;
+        });
+
+        let totalExpGained = 0;
+        
+        for (const uid in materialCounts) {
+            const requiredCount = materialCounts[uid];
+            const materialStack = player.inventory.find(i => i.uid === uid);
+            if (!materialStack || materialStack.quantity < requiredCount) {
+                if (typeof callback === 'function') callback({ success: false, message: "재료가 부족합니다." });
+                return pushLog(player, `[영혼 제련] 재료(${materialStack ? materialStack.name : '알수없음'})가 부족합니다.`);
+            }
+        }
+
+        for (const uid in materialCounts) {
+            const requiredCount = materialCounts[uid];
+            const materialStack = player.inventory.find(i => i.uid === uid);
+            for (let i = 0; i < requiredCount; i++) {
+                if (materialStack.category === 'RefinementMaterial') {
+                    let exp = REFINEMENT_CONFIG.SOULSTONE_EXP[materialStack.id] || 0;
+                    if (Math.random() < REFINEMENT_CONFIG.RESONANCE_CHANCE) {
+                        exp *= REFINEMENT_CONFIG.RESONANCE_MULTIPLIER;
+                        pushLog(player, `[영혼의 공명] <span class="Mystic">대성공!</span> ${materialStack.name}의 기운이 증폭됩니다!`);
+                        const successMessage = `✨ [영혼 제련] ${player.username}님이 대성공하여 엄청난 힘을 얻었습니다! ✨`;
+                        io.emit('globalAnnouncement', successMessage, { style: 'great-success' });
+                        io.emit('chatMessage', { type: 'great_success', message: successMessage });
+                        player.socket.emit('refinement:greatSuccess');
+                    }
+                    totalExpGained += exp;
+                } else if (materialStack.category === 'Essence' && materialStack.refinementData) {
+                    const targetPart = targetItem.accessoryType ? 'accessory' : targetItem.type;
+                    if (materialStack.refinementData.part === targetPart) {
+                        totalExpGained += materialStack.refinementData.exp;
+                    }
+                }
+            }
+            materialStack.quantity -= requiredCount;
+        }
+
+        player.inventory = player.inventory.filter(i => i.quantity > 0);
+
+        if (totalExpGained > 0) {
+            targetItem.refinement.exp += totalExpGained;
+            const oldLevel = targetItem.refinement.level;
+            targetItem.refinement.level = getRefinementLevelFromExp(targetItem.refinement.exp);
+            if (targetItem.refinement.level > oldLevel) {
+                pushLog(player, `[영혼 제련] <span class="Primal">${targetItem.name}</span>의 제련 레벨이 ${targetItem.refinement.level}로 상승했습니다!`);
+            }
+            pushLog(player, `[영혼 제련] 총 ${totalExpGained.toLocaleString()}의 경험치를 주입했습니다.`);
+        }
+
+        calculateTotalStats(player);
+        socket.emit('refinement:itemUpdated', { updatedItem: targetItem });
+
+        if (player.isInFoundryOfTime) {
+            socket.emit('playerStatsOnlyUpdate', {
+                stats: player.stats,
+                currentHp: player.currentHp,
+                shield: player.shield
+            });
+        } else {
+            sendState(socket, player, calcMonsterStats(player));
+        }
+        sendInventoryUpdate(player);
+        
+        if (typeof callback === 'function') {
+            callback({
+                success: true,
+                updatedItem: targetItem
+            });
+        }
+   
+    } finally {
+        if (player) player.isBusy = false; 
+    }
+
+})
+    
+		
+        .on('refinement:extract', (targetUid) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player) return;
+
+    if (player.isBusy) {
+        return;
+    }
+    player.isBusy = true;
+
+    try {
+
+
+        let targetItem = null;
+        let itemLocation = null;
+        let itemIndex = -1;
+
+        Object.keys(player.equipment).forEach(slot => {
+            if (player.equipment[slot] && player.equipment[slot].uid === targetUid) {
+                targetItem = player.equipment[slot];
+                itemLocation = 'equipment';
+            }
+        });
+        if (!targetItem) {
+             itemIndex = player.inventory.findIndex(i => i.uid === targetUid);
+             if (itemIndex !== -1) {
+                 targetItem = player.inventory[itemIndex];
+                 itemLocation = 'inventory';
+             }
+        }
+
+        if (!targetItem || !targetItem.refinement || targetItem.refinement.exp === 0) {
+            return pushLog(player, "[영혼 추출] 추출할 경험치가 없는 아이템입니다.");
+        }
+
+        const essence = createCondensedSoulEssence(targetItem);
+        handleItemStacking(player, essence);
+        
+        pushLog(player, `[영혼 추출] ${targetItem.name}의 영혼을 추출하여 <span class="Primal">${essence.name}</span>을 획득했습니다.`);
+        
+        targetItem.refinement = { level: 0, exp: 0 };
+
+        socket.emit('refinement:itemUpdated', { updatedItem: targetItem });
+
+        calculateTotalStats(player);
+        
+        if (player.isInFoundryOfTime) {
+            socket.emit('playerStatsOnlyUpdate', {
+                stats: player.stats,
+                currentHp: player.currentHp,
+                shield: player.shield
+            });
+        } else {
+            sendState(socket, player, calcMonsterStats(player));
+        }
+        sendInventoryUpdate(player);
+
+  
+    } finally {
+        if (player) player.isBusy = false;
+    }
+
+})
+
+
+
+
+
+
       .on('disconnect', async () => { 
             console.log(`[연결 해제] 유저: ${socket.username}`);
             const player = onlinePlayers[socket.userId];
@@ -2955,343 +3639,412 @@ function hasBuff(player, buffId) {
     if (!player.buffs) return false;
     return player.buffs.some(b => b.id === buffId && new Date(b.endTime) > Date.now());
 }
+
+
 function gameTick(player) {
-    if (!player || !player.socket) return;
+   if (!player || !player.socket) return;
+    player.stateSentThisTick = false;
 
-    const weapon = player.equipment.weapon;
-    const armor = player.equipment.armor;
-
-    if (player.buffs && player.buffs.length > 0) {
-        const now = Date.now();
-        const initialBuffCount = player.buffs.length;
-        player.buffs = player.buffs.filter(buff => new Date(buff.endTime) > now);
-        if (player.buffs.length < initialBuffCount) {
-            const originalCurrentHp = player.currentHp;
-            calculateTotalStats(player); 
-            const newMaxHp = player.stats.total.hp;
-            player.currentHp = Math.min(originalCurrentHp, newMaxHp);
-        }
-    }
-    if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) onPetFusionComplete(player);
-    if (player.incubators && player.incubators.length > 0) {
-        for (let i = 0; i < player.incubators.length; i++) {
-            const slot = player.incubators[i];
-            if (slot && slot.hatchCompleteTime && new Date() >= new Date(slot.hatchCompleteTime)) {
-                onHatchComplete(player, i);
-            }
-        }
-    }
-    if (player.raidState && player.raidState.isActive) {
-        const raidBoss = player.raidState.monster;
-        let pDmg = 0;
-        let mDmg = 0;
-
-        const effectiveDistortion = raidBoss.distortion * (1 - (player.focus || 0) / 100);
-        const hitChance = 1 - Math.max(0, effectiveDistortion) / 100;
-
-        if (Math.random() <= hitChance) {
-            let finalAttack = player.stats.total.attack;
-
-            if (hasBuff(player, 'fury_attack')) {
-                finalAttack *= 1.5;
-            }
-
-            if (hasBuff(player, 'predator_state')) {
-                pDmg += finalAttack * 2.0;
-            }
-            const playerCritRoll = Math.random();
-            if (playerCritRoll < player.stats.critChance) {
-                const critMultiplier = 1.5 + (player.stats.total.critDamage || 0);
-                pDmg += finalAttack * critMultiplier;
-            } else {
-                pDmg += Math.max(0, finalAttack - (raidBoss.defense * (1 - (player.stats.total.defPenetration || 0))));
-            }
-        }
-
-        if (player.stats.total.lowHpAttackPercent > 0 && player.currentHp < player.stats.total.hp) {
-            const missingHpPercent = (player.stats.total.hp - player.currentHp) / player.stats.total.hp;
-            const damageMultiplier = 1 + (missingHpPercent * 100 * player.stats.total.lowHpAttackPercent);
-            pDmg *= damageMultiplier;
-        }
-
-        const empoweredDamageReduction = 1 - ((player.tenacity || 0) / 100);
-        const empoweredDamage = player.stats.total.hp * (raidBoss.empoweredAttack / 100) * empoweredDamageReduction;
-        mDmg = Math.max(0, raidBoss.attack - player.stats.total.defense) + empoweredDamage;
-        
-        if (hasBuff(player, 'fury_defense')) {
-            mDmg = Math.max(0, raidBoss.attack - (player.stats.total.defense * 2.0)) + empoweredDamage;
-        }
-        if (hasBuff(player, 'predator_endurance')) {
-            mDmg *= 0.7; 
-        }
-
-        player.currentHp -= mDmg;
-
-        if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
-            const bloodthirstDamage = raidBoss.hp * 0.50;
-            pDmg += bloodthirstDamage; 
-            player.currentHp = player.stats.total.hp; 
-            pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
-
-            if (weapon?.prefix === '포식자') {
-                const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
-                addBuff(player, 'predator_state', '포식', duration, {});
-            }
-            if (armor?.prefix === '포식자') {
-                addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
-            }
-        }
-        
-
-        if (weapon) {
-            if (weapon.prefix === '격노' && Math.random() < 0.05) {
-                const duration = (armor?.prefix === '격노') ? 7000 : 5000;
-                addBuff(player, 'fury_attack', '격노(공)', duration, {});
-            }
-            if (weapon.prefix === '파멸' && Math.random() < 0.02) {
-                const bonusDamageMultiplier = (armor?.prefix === '파멸') ? 3.0 : 2.0;
-                pDmg += player.stats.total.attack * bonusDamageMultiplier;
-            }
-            if (weapon.prefix === '계시' && Math.random() < 0.002) {
-                const duration = (armor?.prefix === '계시') ? 7000 : 5000;
-                applyAwakeningBuff(player, duration);
-            }
-        }
-        if (armor) {
-            if (armor.prefix === '격노' && mDmg > 0 && Math.random() < 0.05) {
-                const duration = (weapon?.prefix === '격노' && armor.prefix === '격노') ? 7000 : 5000;
-                addBuff(player, 'fury_defense', '격노(방)', duration, {});
-            }
-            if (armor.prefix === '계시' && mDmg > 0 && Math.random() < 0.002) {
-                const duration = (weapon?.prefix === '계시' && armor.prefix === '계시') ? 7000 : 5000;
-                applyAwakeningBuff(player, duration);
-            }
-        }
-
-
-        player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg });
-
-        if (player.currentHp <= 0) {
-            return endPersonalRaid(player, true);
-        }
-
-        if (raidBoss.currentBarrier > 0) {
-            const barrierDamage = pDmg * (1 + (player.penetration || 0) / 100);
-            raidBoss.currentBarrier -= barrierDamage;
-            if (raidBoss.currentBarrier < 0) {
-                raidBoss.currentHp += raidBoss.currentBarrier;
-                raidBoss.currentBarrier = 0;
-            }
-        } else {
-            raidBoss.currentHp -= pDmg;
-        }
-
-        if (raidBoss.currentHp <= 0) {
-            onPersonalRaidFloorClear(player);
-        }
-
-        const { socket: _, ...playerStateForClient } = player;
-        player.socket.emit('stateUpdate', { player: playerStateForClient, monster: player.raidState.monster, isInRaid: true });
-        return;
-    }
-    
-    let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
-    let titleBossDamageBonus = (titleEffects && titleEffects.bossDamage) ? (1 + titleEffects.bossDamage) : 1;
-    let titleWBBonus = (titleEffects && titleEffects.worldBossDamage) ? (1 + titleEffects.worldBossDamage) : 1;
-    let titleWBContributionBonus = (titleEffects && titleEffects.worldBossContribution) ? (1 + titleEffects.worldBossContribution) : 1;
-
-    if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
-        let pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
-        
-        if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
-            const bloodthirstDamage = worldBossState.maxHp * 0.003;
-            pDmg += bloodthirstDamage;
-            player.currentHp = player.stats.total.hp;
-            pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
-         
-            if (weapon?.prefix === '포식자') {
-                const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
-                addBuff(player, 'predator_state', '포식', duration, {});
-            }
-            if (armor?.prefix === '포식자') {
-                addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
-            }
-        }
-        
-        pDmg *= titleWBBonus;
-        worldBossState.currentHp = Math.max(0, (worldBossState.currentHp || 0) - pDmg);
-
-        if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 10000);
-        if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 15000);
-        
-        const userId = player.user.toString();
-        const participant = worldBossState.participants.get(userId) || { username: player.username, damageDealt: 0 };
-        const contributionDamage = pDmg * titleWBContributionBonus;
-        participant.damageDealt = (participant.damageDealt || 0) + contributionDamage;
-        worldBossState.participants.set(userId, participant);
-        const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + (p.damageDealt || 0), 0);
-        const myShare = totalDamage > 0 ? (participant.damageDealt / totalDamage) * 100 : 0;
-        player.socket.emit('myBossContributionUpdate', { myContribution: participant.damageDealt, myShare: myShare });
-        if (!player.worldBossContribution) player.worldBossContribution = { damageDealt: 0, bossId: null };
-        player.worldBossContribution.damageDealt = participant.damageDealt;
-        player.worldBossContribution.bossId = worldBossState.bossId;
-        if (worldBossState.currentHp <= 0) { 
-            worldBossState.lastHitter = player.user.toString();
-            onWorldBossDefeated(); 
-        }
+    if (player.dpsSession && player.dpsSession.isActive) {
+        runDpsSimulation(player);
         sendState(player.socket, player, calcMonsterStats(player));
         return;
     }
-    
-    calculateTotalStats(player);
-    const m = calcMonsterStats(player);
-    if (player.monster.lastCalculatedLevel !== player.level) {
-        player.monster.currentHp = m.hp;
-        player.monster.currentBarrier = m.barrier;
-        player.monster.lastCalculatedLevel = player.level;
-    }
-    let pDmg = 0, mDmg = 0;
-    
-    const effectiveDistortion = (m.distortion || 0) * (1 - (player.focus || 0) / 100);
-    const hitChance = 1 - Math.max(0, effectiveDistortion) / 100;
 
-    if (Math.random() > hitChance) { pDmg += 0; } 
-    else {
-        let finalAttack = player.stats.total.attack;
+    if (player.isInFoundryOfTime) {
+         if (!player.foundryMonster || player.foundryMonster.hp <= 0) {
+             if (Math.random() < 0.01) { 
+                 player.foundryMonster = { name: '시간의 균열 감시자', hp: 50, maxHp: 50, isBoss: true };
+             } else {
+                 player.foundryMonster = { name: '시간의 잔상', hp: 1, maxHp: 1, isBoss: false };
+             }
+             player.socket.emit('foundry:monsterUpdate', player.foundryMonster);
+         }
+         
+         player.foundryMonster.hp -= 1;
+         
 
-        if (hasBuff(player, 'fury_attack')) {
-            finalAttack *= 1.5;
-        }
-
-        if (hasBuff(player, 'predator_state')) {
-            pDmg += finalAttack * 2.0;
-        }
-
-        const playerCritRoll = Math.random();
-        if (playerCritRoll < player.stats.critChance) {
-            const critMultiplier = 1.5 + (player.stats.total.critDamage || 0);
-            pDmg += finalAttack * critMultiplier;
-        } else {
-            pDmg += Math.max(0, finalAttack - (m.defense * (1 - (player.stats.total.defPenetration || 0))));
-        }
-    }
-    if (m.isBoss) { pDmg *= titleBossDamageBonus; }
-    
-    if (player.stats.total.lowHpAttackPercent > 0 && player.currentHp < player.stats.total.hp) {
-        const missingHpPercent = (player.stats.total.hp - player.currentHp) / player.stats.total.hp;
-        const damageMultiplier = 1 + (missingHpPercent * 100 * player.stats.total.lowHpAttackPercent);
-        pDmg *= damageMultiplier;
-    }
-
-    const monsterCritConfig = monsterCritRateTable.find(r => m.level <= r.maxLevel);
-    const monsterCritChance = m.isBoss ? monsterCritConfig.boss : monsterCritConfig.normal;
-    const finalMonsterCritChance = Math.max(0, monsterCritChance - player.stats.critResistance);
-    const monsterCritRoll = Math.random();
-    
-    let finalDefense = m.isBoss ? (player.stats.total.defense * 0.5) : player.stats.total.defense;
-    if (hasBuff(player, 'fury_defense')) {
-        finalDefense *= 2.0;
-    }
-
-    if (monsterCritRoll < finalMonsterCritChance) { mDmg = m.attack; } 
-    else { mDmg = Math.max(0, m.attack - finalDefense); }
-
-    if (m.empoweredAttack > 0) {
-        const empoweredDamageReduction = 1 - ((player.tenacity || 0) / 100);
-        const empoweredDamage = player.stats.total.hp * (m.empoweredAttack / 100) * empoweredDamageReduction;
-        mDmg += empoweredDamage;
-    }
-    
-    if (hasBuff(player, 'predator_endurance')) {
-        mDmg *= 0.7;
-    }
-
-    player.currentHp -= mDmg;
-    if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
-        const bloodthirstDamage = m.hp * 0.50;
-        pDmg += bloodthirstDamage;
-        player.currentHp = player.stats.total.hp;
-
-        if (weapon?.prefix === '포식자') {
-            const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
-            addBuff(player, 'predator_state', '포식', duration, {});
-        }
-        if (armor?.prefix === '포식자') {
-            addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
-        }
-    }
-
-    if (weapon) {
-        if (weapon.prefix === '격노' && Math.random() < 0.05) {
-            const duration = (armor?.prefix === '격노') ? 7000 : 5000;
-            addBuff(player, 'fury_attack', '격노(공)', duration, {});
-        }
-        if (weapon.prefix === '파멸' && Math.random() < 0.02) {
-            const bonusDamageMultiplier = (armor?.prefix === '파멸') ? 3.0 : 2.0;
-            pDmg += player.stats.total.attack * bonusDamageMultiplier;
-        }
-        if (weapon.prefix === '계시' && Math.random() < 0.002) {
-            const duration = (armor?.prefix === '계시') ? 7000 : 5000;
-            applyAwakeningBuff(player, duration);
-        }
-    }
-    if (armor) {
-        if (armor.prefix === '격노' && mDmg > 0 && Math.random() < 0.05) {
-            const duration = (weapon?.prefix === '격노' && armor.prefix === '격노') ? 7000 : 5000;
-            addBuff(player, 'fury_defense', '격노(방)', duration, {});
-        }
-        if (armor.prefix === '계시' && mDmg > 0 && Math.random() < 0.002) {
-            const duration = (weapon?.prefix === '계시' && armor.prefix === '계시') ? 7000 : 5000;
-            applyAwakeningBuff(player, duration);
-        }
-    }
+         player.socket.emit('combatResult', { playerTook: 0, monsterTook: 1 });
+         player.socket.emit('foundry:tick', { 
+             currentHp: player.foundryMonster.hp, 
+             maxHp: player.foundryMonster.maxHp 
+         });
 
 
-    if (pDmg > 0 || mDmg > 0) { player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg }); }
+         if (player.foundryMonster.hp <= 0) {
+             if (player.foundryMonster.isBoss) {
+                 handleItemStacking(player, createItemInstance('soulstone_glowing'));
+                 if (Math.random() < 0.10) {
+                     handleItemStacking(player, createItemInstance('soulstone_radiant'));
+                 }
+             } else {
+                 if (Math.random() < 0.01) {
+                     handleItemStacking(player, createItemInstance('soulstone_faint'));
+                 }
+                 if (Math.random() < 0.001) {
+                     handleItemStacking(player, createItemInstance('soulstone_glowing'));
+                 }
+             }
+             sendInventoryUpdate(player);
+         }
+         return; 
+     }
+     
+     const weapon = player.equipment.weapon;
+     const armor = player.equipment.armor;
 
-if (pDmg > 0 && player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) {
-    applyEarringAwakeningBuff(player, 10000);
-}
-if (pDmg > 0 && player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) {
-    applyEarringAwakeningBuff(player, 15000);
-}
-    
-    if (player.currentHp <= 0) {
-        const reviveEffect = player.equippedPet?.effects?.revive;
-        if (reviveEffect && (!player.petReviveCooldown || new Date() > new Date(player.petReviveCooldown))) {
-            player.currentHp = player.stats.total.hp * reviveEffect.percent;
-            player.petReviveCooldown = new Date(Date.now() + reviveEffect.cooldown);
-            pushLog(player, `[${player.equippedPet.name}]의 힘으로 죽음의 문턱에서 돌아옵니다!`);
-        } else {
-            let deathMessage, returnFloor = 1;
-            if (player.level >= 1000000) { deathMessage = `[${player.level}층] 심연의 균열에서 패배하여 100만층으로 귀환합니다.`; returnFloor = 1000000; } 
-            else { deathMessage = m.isBoss ? `[${player.level}층 보스]에게 패배하여 1층으로 귀환합니다.` : `[${player.level}층] 몬스터에게 패배하여 1층으로 귀환합니다.`; }
-            resetPlayer(player, deathMessage, returnFloor);
-        }
-    } else {
-        if (player.monster.currentBarrier > 0) {
-            const barrierDamage = pDmg * (1 + (player.penetration || 0) / 100);
-            if (barrierDamage >= player.monster.currentBarrier) {
-                const remainingDamage = barrierDamage - player.monster.currentBarrier;
-                player.monster.currentBarrier = 0;
-                player.monster.currentHp -= remainingDamage;
-            } else { player.monster.currentBarrier -= barrierDamage; }
-        } else { player.monster.currentHp -= pDmg; }
-        if (player.monster.currentHp <= 0) {
-            player.level++;
-            player.maxLevel = Math.max(player.maxLevel, player.level);
-            if (player.level > (player.previousMaxLevel || player.maxLevel -1)) updateFameScore(player.socket, player);
-            player.previousMaxLevel = player.maxLevel;
-            onClearFloor(player);
-            calculateTotalStats(player);
-            player.currentHp = player.stats.total.hp;
-            const newMonster = calcMonsterStats(player);
-            player.monster.currentHp = newMonster.hp;
-            player.monster.currentBarrier = newMonster.barrier;
-            player.monster.lastCalculatedLevel = player.level;
-        }
-    }
-    sendState(player.socket, player, m);
+    if (player.buffs && player.buffs.length > 0) {
+         const now = Date.now();
+         const initialBuffCount = player.buffs.length;
+         player.buffs = player.buffs.filter(buff => new Date(buff.endTime) > now);
+         if (player.buffs.length < initialBuffCount) {
+			const hpBefore = player.stats.total.hp || 1;
+             const originalCurrentHp = player.currentHp;
+             calculateTotalStats(player); 
+             const newMaxHp = player.stats.total.hp;
+             player.currentHp = Math.min(originalCurrentHp, newMaxHp);
+			const healthPercent = originalCurrentHp / hpBefore;
+             player.shield = player.stats.shield * healthPercent;
+         }
+     }
+     if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) onPetFusionComplete(player);
+     if (player.incubators && player.incubators.length > 0) {
+         for (let i = 0; i < player.incubators.length; i++) {
+             const slot = player.incubators[i];
+             if (slot && slot.hatchCompleteTime && new Date() >= new Date(slot.hatchCompleteTime)) {
+                 onHatchComplete(player, i);
+             }
+         }
+     }
+     if (player.raidState && player.raidState.isActive) {
+         const raidBoss = player.raidState.monster;
+         let pDmg = 0;
+         let mDmg = 0;
+
+         const effectiveDistortion = raidBoss.distortion * (1 - (player.focus || 0) / 100);
+         const hitChance = 1 - Math.max(0, effectiveDistortion) / 100;
+
+         if (Math.random() <= hitChance) {
+             let finalAttack = player.stats.total.attack;
+
+             if (hasBuff(player, 'fury_attack')) {
+                 finalAttack *= 1.5;
+             }
+
+             if (hasBuff(player, 'predator_state')) {
+                 pDmg += finalAttack * 2.0;
+             }
+             const playerCritRoll = Math.random();
+             if (playerCritRoll < player.stats.critChance) {
+                 const critMultiplier = 1.5 + (player.stats.total.critDamage || 0);
+                 pDmg += finalAttack * critMultiplier;
+             } else {
+                 pDmg += Math.max(0, finalAttack - (raidBoss.defense * (1 - (player.stats.total.defPenetration || 0))));
+             }
+         }
+
+         if (player.stats.total.lowHpAttackPercent > 0 && player.currentHp < player.stats.total.hp) {
+             const missingHpPercent = (player.stats.total.hp - player.currentHp) / player.stats.total.hp;
+             const damageMultiplier = 1 + (missingHpPercent * 100 * player.stats.total.lowHpAttackPercent);
+             pDmg *= damageMultiplier;
+         }
+
+         const empoweredDamageReduction = 1 - ((player.tenacity || 0) / 100);
+         const empoweredDamage = player.stats.total.hp * (raidBoss.empoweredAttack / 100) * empoweredDamageReduction;
+         mDmg = Math.max(0, raidBoss.attack - player.stats.total.defense) + empoweredDamage;
+         
+         if (hasBuff(player, 'fury_defense')) {
+             mDmg = Math.max(0, raidBoss.attack - (player.stats.total.defense * 2.0)) + empoweredDamage;
+         }
+         if (hasBuff(player, 'predator_endurance')) {
+             mDmg *= 0.7; 
+         }
+
+         player.currentHp -= mDmg;
+
+         if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
+             const bloodthirstDamage = raidBoss.hp * 0.50;
+             pDmg += bloodthirstDamage; 
+             player.currentHp = player.stats.total.hp; 
+             pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
+
+             if (weapon?.prefix === '포식자') {
+                 const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
+                 addBuff(player, 'predator_state', '포식', duration, {});
+             }
+             if (armor?.prefix === '포식자') {
+                 addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+             }
+         }
+         
+
+         if (weapon) {
+             if (weapon.prefix === '격노' && Math.random() < 0.05) {
+                 const duration = (armor?.prefix === '격노') ? 7000 : 5000;
+                 addBuff(player, 'fury_attack', '격노(공)', duration, {});
+             }
+             if (weapon.prefix === '파멸' && Math.random() < 0.02) {
+                 const bonusDamageMultiplier = (armor?.prefix === '파멸') ? 3.0 : 2.0;
+                 pDmg += player.stats.total.attack * bonusDamageMultiplier;
+             }
+             if (weapon.prefix === '계시' && Math.random() < 0.002) {
+                 const duration = (armor?.prefix === '계시') ? 7000 : 5000;
+                 applyAwakeningBuff(player, duration);
+             }
+         }
+         if (armor) {
+             if (armor.prefix === '격노' && mDmg > 0 && Math.random() < 0.05) {
+                 const duration = (weapon?.prefix === '격노' && armor.prefix === '격노') ? 7000 : 5000;
+                 addBuff(player, 'fury_defense', '격노(방)', duration, {});
+             }
+             if (armor.prefix === '계시' && mDmg > 0 && Math.random() < 0.002) {
+                 const duration = (weapon?.prefix === '계시' && armor.prefix === '계시') ? 7000 : 5000;
+                 applyAwakeningBuff(player, duration);
+             }
+         }
+
+
+         player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg });
+
+         if (player.currentHp <= 0) {
+             return endPersonalRaid(player, true);
+         }
+
+         if (raidBoss.currentBarrier > 0) {
+             const barrierDamage = pDmg * (1 + (player.penetration || 0) / 100);
+             raidBoss.currentBarrier -= barrierDamage;
+             if (raidBoss.currentBarrier < 0) {
+                 raidBoss.currentHp += raidBoss.currentBarrier;
+                 raidBoss.currentBarrier = 0;
+             }
+         } else {
+             raidBoss.currentHp -= pDmg;
+         }
+
+         if (raidBoss.currentHp <= 0) {
+             onPersonalRaidFloorClear(player);
+         }
+
+         const { socket: _, ...playerStateForClient } = player;
+         player.socket.emit('stateUpdate', { player: playerStateForClient, monster: player.raidState.monster, isInRaid: true });
+         return;
+     }
+     
+     let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
+     let titleBossDamageBonus = (titleEffects && titleEffects.bossDamage) ? (1 + titleEffects.bossDamage) : 1;
+     let titleWBBonus = (titleEffects && titleEffects.worldBossDamage) ? (1 + titleEffects.worldBossDamage) : 1;
+     let titleWBContributionBonus = (titleEffects && titleEffects.worldBossContribution) ? (1 + titleEffects.worldBossContribution) : 1;
+
+     if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
+         let pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
+         
+         if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
+             const bloodthirstDamage = worldBossState.maxHp * 0.003;
+             pDmg += bloodthirstDamage;
+             player.currentHp = player.stats.total.hp;
+             pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
+          
+             if (weapon?.prefix === '포식자') {
+                 const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
+                 addBuff(player, 'predator_state', '포식', duration, {});
+             }
+             if (armor?.prefix === '포식자') {
+                 addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+             }
+         }
+         
+         pDmg *= titleWBBonus;
+         worldBossState.currentHp = Math.max(0, (worldBossState.currentHp || 0) - pDmg);
+
+         if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 10000);
+         if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 15000);
+         
+         const userId = player.user.toString();
+         const participant = worldBossState.participants.get(userId) || { username: player.username, damageDealt: 0 };
+         const contributionDamage = pDmg * titleWBContributionBonus;
+         participant.damageDealt = (participant.damageDealt || 0) + contributionDamage;
+         worldBossState.participants.set(userId, participant);
+         const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + (p.damageDealt || 0), 0);
+         const myShare = totalDamage > 0 ? (participant.damageDealt / totalDamage) * 100 : 0;
+         player.socket.emit('myBossContributionUpdate', { myContribution: participant.damageDealt, myShare: myShare });
+         if (!player.worldBossContribution) player.worldBossContribution = { damageDealt: 0, bossId: null };
+         player.worldBossContribution.damageDealt = participant.damageDealt;
+         player.worldBossContribution.bossId = worldBossState.bossId;
+         if (worldBossState.currentHp <= 0) { 
+             worldBossState.lastHitter = player.user.toString();
+             onWorldBossDefeated(); 
+         }
+         sendState(player.socket, player, calcMonsterStats(player));
+         return;
+     }
+     
+     calculateTotalStats(player);
+     const m = calcMonsterStats(player);
+     if (player.monster.lastCalculatedLevel !== player.level) {
+         player.monster.currentHp = m.hp;
+         player.monster.currentBarrier = m.barrier;
+         player.monster.lastCalculatedLevel = player.level;
+     }
+     let pDmg = 0, mDmg = 0;
+     
+     const effectiveDistortion = (m.distortion || 0) * (1 - (player.focus || 0) / 100);
+     const hitChance = 1 - Math.max(0, effectiveDistortion) / 100;
+
+     if (Math.random() > hitChance) { pDmg += 0; } 
+     else {
+         let finalAttack = player.stats.total.attack;
+
+         if (hasBuff(player, 'fury_attack')) {
+             finalAttack *= 1.5;
+         }
+
+         if (hasBuff(player, 'predator_state')) {
+             pDmg += finalAttack * 2.0;
+         }
+
+         const playerCritRoll = Math.random();
+         if (playerCritRoll < player.stats.critChance) {
+             const critMultiplier = 1.5 + (player.stats.total.critDamage || 0);
+             pDmg += finalAttack * critMultiplier;
+         } else {
+             pDmg += Math.max(0, finalAttack - (m.defense * (1 - (player.stats.total.defPenetration || 0))));
+         }
+     }
+     
+     if (player.stats.additiveDamage > 0) {
+         pDmg = pDmg + (pDmg * (player.stats.additiveDamage / 100));
+     }
+     
+     if (m.isBoss) { pDmg *= titleBossDamageBonus; }
+     
+     if (player.stats.total.lowHpAttackPercent > 0 && player.currentHp < player.stats.total.hp) {
+         const missingHpPercent = (player.stats.total.hp - player.currentHp) / player.stats.total.hp;
+         const damageMultiplier = 1 + (missingHpPercent * 100 * player.stats.total.lowHpAttackPercent);
+         pDmg *= damageMultiplier;
+     }
+
+     const monsterCritConfig = monsterCritRateTable.find(r => m.level <= r.maxLevel);
+     const monsterCritChance = m.isBoss ? monsterCritConfig.boss : monsterCritConfig.normal;
+     const finalMonsterCritChance = Math.max(0, monsterCritChance - player.stats.critResistance);
+     const monsterCritRoll = Math.random();
+     
+     let finalDefense = m.isBoss ? (player.stats.total.defense * 0.5) : player.stats.total.defense;
+     if (hasBuff(player, 'fury_defense')) {
+         finalDefense *= 2.0;
+     }
+
+     if (monsterCritRoll < finalMonsterCritChance) { mDmg = m.attack; } 
+     else { mDmg = Math.max(0, m.attack - finalDefense); }
+
+     if (m.empoweredAttack > 0) {
+         const empoweredDamageReduction = 1 - ((player.tenacity || 0) / 100);
+         const empoweredDamage = player.stats.total.hp * (m.empoweredAttack / 100) * empoweredDamageReduction;
+         mDmg += empoweredDamage;
+     }
+     
+     if (hasBuff(player, 'predator_endurance')) {
+         mDmg *= 0.7;
+     }
+
+     if (player.stats.dodgeChance > 0 && Math.random() < (player.stats.dodgeChance / 100)) {
+         mDmg = 0;
+     }
+
+     if (player.shield > 0) {
+         if (mDmg <= player.shield) {
+             player.shield -= mDmg;
+             mDmg = 0;
+         } else {
+             mDmg -= player.shield;
+             player.shield = 0;
+         }
+     }
+     player.currentHp -= mDmg;
+
+     if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
+         const bloodthirstDamage = m.hp * 0.50;
+         pDmg += bloodthirstDamage;
+         player.currentHp = player.stats.total.hp;
+
+         if (weapon?.prefix === '포식자') {
+             const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
+             addBuff(player, 'predator_state', '포식', duration, {});
+         }
+         if (armor?.prefix === '포식자') {
+             addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+         }
+     }
+
+     if (weapon) {
+         if (weapon.prefix === '격노' && Math.random() < 0.05) {
+             const duration = (armor?.prefix === '격노') ? 7000 : 5000;
+             addBuff(player, 'fury_attack', '격노(공)', duration, {});
+         }
+         if (weapon.prefix === '파멸' && Math.random() < 0.02) {
+             const bonusDamageMultiplier = (armor?.prefix === '파멸') ? 3.0 : 2.0;
+             pDmg += player.stats.total.attack * bonusDamageMultiplier;
+         }
+         if (weapon.prefix === '계시' && Math.random() < 0.002) {
+             const duration = (armor?.prefix === '계시') ? 7000 : 5000;
+             applyAwakeningBuff(player, duration);
+         }
+     }
+     if (armor) {
+         if (armor.prefix === '격노' && mDmg > 0 && Math.random() < 0.05) {
+             const duration = (weapon?.prefix === '격노' && armor.prefix === '격노') ? 7000 : 5000;
+             addBuff(player, 'fury_defense', '격노(방)', duration, {});
+         }
+         if (armor.prefix === '계시' && mDmg > 0 && Math.random() < 0.002) {
+             const duration = (weapon?.prefix === '계시' && armor.prefix === '계시') ? 7000 : 5000;
+             applyAwakeningBuff(player, duration);
+         }
+     }
+
+     if (pDmg > 0 || mDmg > 0) { player.socket.emit('combatResult', { playerTook: mDmg, monsterTook: pDmg }); }
+
+     if (pDmg > 0 && player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) {
+         applyEarringAwakeningBuff(player, 10000);
+     }
+     if (pDmg > 0 && player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) {
+         applyEarringAwakeningBuff(player, 15000);
+     }
+     
+     if (player.currentHp <= 0) {
+         const reviveEffect = player.equippedPet?.effects?.revive;
+         if (reviveEffect && (!player.petReviveCooldown || new Date() > new Date(player.petReviveCooldown))) {
+             player.currentHp = player.stats.total.hp * reviveEffect.percent;
+             player.petReviveCooldown = new Date(Date.now() + reviveEffect.cooldown);
+             pushLog(player, `[${player.equippedPet.name}]의 힘으로 죽음의 문턱에서 돌아옵니다!`);
+         } else {
+             let deathMessage, returnFloor = 1;
+             if (player.level >= 1000000) { deathMessage = `[${player.level}층] 심연의 균열에서 패배하여 100만층으로 귀환합니다.`; returnFloor = 1000000; } 
+             else { deathMessage = m.isBoss ? `[${player.level}층 보스]에게 패배하여 1층으로 귀환합니다.` : `[${player.level}층] 몬스터에게 패배하여 1층으로 귀환합니다.`; }
+             resetPlayer(player, deathMessage, returnFloor);
+         }
+     } else {
+         if (player.monster.currentBarrier > 0) {
+             const barrierDamage = pDmg * (1 + (player.penetration || 0) / 100);
+             if (barrierDamage >= player.monster.currentBarrier) {
+                 const remainingDamage = barrierDamage - player.monster.currentBarrier;
+                 player.monster.currentBarrier = 0;
+                 player.monster.currentHp -= remainingDamage;
+             } else { player.monster.currentBarrier -= barrierDamage; }
+         } else { player.monster.currentHp -= pDmg; }
+         if (player.monster.currentHp <= 0) {
+             player.level++;
+             player.maxLevel = Math.max(player.maxLevel, player.level);
+             if (player.level > (player.previousMaxLevel || player.maxLevel -1)) updateFameScore(player.socket, player);
+             player.previousMaxLevel = player.maxLevel;
+             onClearFloor(player);
+             calculateTotalStats(player);
+             player.currentHp = player.stats.total.hp;
+             const newMonster = calcMonsterStats(player);
+             player.monster.currentHp = newMonster.hp;
+             player.monster.currentBarrier = newMonster.barrier;
+             player.monster.lastCalculatedLevel = player.level;
+         }
+     }
+     sendState(player.socket, player, m);
 }
 
 setInterval(() => { for (const userId in onlinePlayers) { gameTick(onlinePlayers[userId]); } }, TICK_RATE);
@@ -3307,6 +4060,9 @@ setInterval(() => {
         io.emit('worldBossUpdate', lightWeightState);
     }
 }, 2000);
+
+
+
 function onClearFloor(p) {
     const titleEffects = p.equippedTitle ? titleData[p.equippedTitle]?.effect : null;
     let titleGoldGainBonus = 1;
@@ -3531,6 +4287,9 @@ else if (clearedFloor >= 1000000) {
         }
     }
 	
+	 if (p.stats.shield > 0) {
+        p.shield = p.stats.shield; 
+    }
 	
 	if (p.level >= 1000000) {
     const scrollDropTable = [
@@ -3538,7 +4297,7 @@ else if (clearedFloor >= 1000000) {
         { id: 'star_scroll_70', chance: 0.0002 },
         { id: 'star_scroll_30', chance: 0.0001 },
         { id: 'star_scroll_10', chance: 0.00005 },
-        { id: 'golden_hammer', chance: 0.00001 }, // 고정석 확률정도? 어짜피 잘안붙으니.
+        { id: 'golden_hammer', chance: 0.00003 }, // 고정석 확률정도? 어짜피 잘안붙으니.
         { id: 'moon_scroll_100', chance: 0.0007 }, 
         { id: 'moon_scroll_70', chance: 0.0002 },
         { id: 'moon_scroll_30', chance: 0.0001 },
@@ -3557,6 +4316,8 @@ else if (clearedFloor >= 1000000) {
         }
     }
 }
+
+
 }
 
 async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
@@ -3938,6 +4699,9 @@ if (p.raidState && p.raidState.isActive) {
     p.level = returnFloor;
     calculateTotalStats(p);
     p.currentHp = p.stats.total.hp;
+	 if (p.stats.shield > 0) {
+        p.shield = p.stats.shield; 
+    }
     const newMonster = calcMonsterStats(p);
     p.monster.currentHp = newMonster.hp;
     p.monster.currentBarrier = newMonster.barrier;
@@ -4461,7 +5225,9 @@ incubators: player.incubators,
         personalRaid: player.personalRaid,
  kakaoId: player.kakaoId,
         research: serializableResearch, 
-        researchEssence: player.researchEssence || 0 
+        researchEssence: player.researchEssence || 0 ,
+		shield: player.shield ,
+		dpsSession: player.dpsSession
     };
 
     const monsterStateForClient = {
@@ -5195,6 +5961,9 @@ function onPersonalRaidFloorClear(player) {
 
     calculateTotalStats(player);
     player.currentHp = player.stats.total.hp;
+	 if (player.stats.shield > 0) {
+        player.shield = player.stats.shield;
+    }
 }
 
 scheduleDailyReset(io); 
@@ -5608,6 +6377,92 @@ function useGoldenHammer(player, { itemUid, hammerUid, typeToRestore }) {
     player.socket.emit('scrollEnhancementResult', { result: 'restored', item: targetItem });
     sendPlayerState(player);
     sendInventoryUpdate(player);
+}
+
+const REFINEMENT_CONFIG = {
+    MAX_LEVEL: 50,
+    EXP_TABLE: [
+        0, 1500, 3500, 6000, 9000, 12500, 16500, 21000, 26000, 31500, 
+        37500, 44000, 51000, 58500, 66500, 75000, 84000, 93500, 103500, 114000, 
+        125000, 137000, 150000, 164000, 179000, 195000, 212000, 230000, 249000, 269000, 
+        290000, 312000, 335000, 359000, 384000, 410000, 437000, 465000, 494000, 524000, 
+        555000, 587000, 620000, 654000, 689000, 725000, 762000, 800000, 839000, 879000, 43000000
+    ],
+    WEAPON_BONUS_PER_LEVEL: 2,    // 추가 데미지 +2% per level
+    ARMOR_BONUS_PER_LEVEL: 2,     // 보호막 +2% per level
+    ACCESSORY_BONUS_PER_LEVEL: 0.2, // 왜곡 +0.2% per level
+    SOULSTONE_EXP: {
+        soulstone_faint: 100,
+        soulstone_glowing: 1000,
+        soulstone_radiant: 10000,
+    },
+    RESONANCE_CHANCE: 0.05, // 대성공 확률 5%
+    RESONANCE_MULTIPLIER: 5,  // 대성공 시 경험치 5배
+};
+
+
+function getRefinementLevelFromExp(exp) {
+    if (exp >= REFINEMENT_CONFIG.EXP_TABLE[50]) return 50;
+    for (let i = 0; i < REFINEMENT_CONFIG.EXP_TABLE.length -1; i++) {
+        if (exp < REFINEMENT_CONFIG.EXP_TABLE[i + 1]) {
+            return i;
+        }
+    }
+    return 50;
+}
+
+
+function getExpForNextLevel(level, currentExp) {
+    if (level >= REFINEMENT_CONFIG.MAX_LEVEL) {
+        return { needed: 0, progress: 1 };
+    }
+    const requiredForNext = REFINEMENT_CONFIG.EXP_TABLE[level + 1];
+    const requiredForCurrent = REFINEMENT_CONFIG.EXP_TABLE[level];
+    const expInCurrentLevel = currentExp - requiredForCurrent;
+    const totalExpForLevel = requiredForNext - requiredForCurrent;
+    return {
+        needed: totalExpForLevel - expInCurrentLevel,
+        progress: expInCurrentLevel / totalExpForLevel
+    };
+}
+
+function initializeRefinement(item) {
+    if (!item.refinement) {
+        item.refinement = { level: 0, exp: 0 };
+    }
+}
+
+function getRefinementBonus(item) {
+    if (!item || !item.refinement) return 0;
+    const level = item.refinement.level;
+    switch (item.type) {
+        case 'weapon':
+            return level * REFINEMENT_CONFIG.WEAPON_BONUS_PER_LEVEL;
+        case 'armor':
+            return level * REFINEMENT_CONFIG.ARMOR_BONUS_PER_LEVEL;
+        case 'accessory':
+            return level * REFINEMENT_CONFIG.ACCESSORY_BONUS_PER_LEVEL;
+        default:
+            return 0;
+    }
+}
+
+
+function createCondensedSoulEssence(item) {
+    const essence = createItemInstance('condensed_soul_essence');
+    essence.refinementData = {
+        exp: item.refinement.exp,
+        part: item.accessoryType ? 'accessory' : item.type
+    };
+    
+    let partName = '';
+    if (essence.refinementData.part === 'weapon') partName = '무기';
+    else if (essence.refinementData.part === 'armor') partName = '방어구';
+    else if (essence.refinementData.part === 'accessory') partName = '악세사리';
+
+    essence.name = `응축된 영혼의 정수 [${partName}]`;
+    essence.description = `${item.refinement.exp.toLocaleString()} EXP가 저장된 플레이어의 정수입니다.`;
+    return essence;
 }
 
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));

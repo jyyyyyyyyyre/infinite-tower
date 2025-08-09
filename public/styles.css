@@ -2849,3 +2849,378 @@ body.auth-view {
     justify-content: space-between;
     align-items: center;
 }
+
+
+/* ======================================================================= */
+/* 영혼 제련 (Soul Refinement) 시스템 스타일                               */
+/* ======================================================================= */
+
+#refinement-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: 10px;
+    padding: 10px;
+}
+
+#refinement-target-sector {
+    flex: 1.5;
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    min-height: 0; /* flex 자식 요소의 넘침 방지를 위해 추가 */
+    overflow-y: auto; /* 내용이 길어지면 자동으로 스크롤바 생성 */
+}
+
+#refinement-target-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    width: 100%;
+    max-width: 400px;
+}
+
+#refinement-info-panel {
+    width: 100%;
+    text-align: center;
+}
+
+#refinement-info-panel h3 {
+    font-size: 1.4em;
+    margin-bottom: 8px;
+}
+
+#refinement-level-text {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--success-color);
+    margin-bottom: 8px;
+}
+
+.refinement-exp-bar {
+    width: 100%;
+    height: 25px;
+    background-color: rgba(0,0,0,0.4);
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #000;
+    margin-bottom: 8px;
+}
+
+.refinement-exp-bar-inner {
+    height: 100%;
+    background: linear-gradient(to right, #3498db, #2ecc71);
+    transition: width 2s ease-in-out;
+}
+
+.refinement-exp-bar-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 1px 1px 2px #000;
+}
+
+#refinement-effect-text {
+    font-size: 1.1em;
+    color: var(--text-muted);
+    font-weight: bold;
+}
+
+#refinement-materials-input {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    width: 100%;
+    max-width: 400px;
+    min-height: 120px; /* 최소 높이 확보 */
+}
+
+.refinement-material-slot {
+    width: 100%;
+    aspect-ratio: 1/1;
+    background-color: rgba(0,0,0,0.3);
+    border: 1px dashed var(--border-color);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.refinement-material-slot .item-image img {
+    padding: 4px;
+}
+
+#refinement-action-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    width: 100%;
+    max-width: 400px;
+}
+
+#refinement-action-buttons .action-btn {
+    flex: 1;
+}
+
+#refinement-action-buttons .enhance-execute-btn {
+    flex: 2;
+    padding: 15px;
+    font-size: 1.2em;
+}
+
+#refinement-material-sector {
+    flex: 1;
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+#refinement-material-sector h4 {
+    text-align: center;
+    margin-bottom: 10px;
+    color: var(--text-muted);
+}
+
+#refinement-material-grid {
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+/* 제련 레벨/경험치 텍스트 스타일 */
+.item-refinement-level {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    font-size: 0.8em;
+    font-weight: 700;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 2px 5px;
+    border-radius: 4px;
+    z-index: 1;
+}
+
+/* 제련 오라 효과 */
+.slot.refine-aura-blue { box-shadow: 0 0 15px 3px #3498db, inset 0 0 10px 2px rgba(52, 152, 219, 0.5); }
+.slot.refine-aura-purple { box-shadow: 0 0 20px 4px var(--epic-color), inset 0 0 12px 3px rgba(175, 82, 222, 0.5); animation: pulse-purple 2s infinite; }
+.slot.refine-aura-orange { box-shadow: 0 0 25px 5px var(--legendary-color), inset 0 0 15px 4px rgba(255, 149, 0, 0.5); animation: pulse-orange 1.5s infinite; }
+.slot.refine-aura-primal {
+    box-shadow: 0 0 30px 6px var(--primal-color), inset 0 0 18px 5px rgba(0, 230, 210, 0.6);
+    animation: sparkle-rainbow-15 4s linear infinite, lightning 2s linear infinite;
+}
+
+.floor-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+
+.refinement-great-success {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 4em;
+    font-weight: 900;
+    pointer-events: none;
+    z-index: 10;
+    animation: great-success-pop 1.5s cubic-bezier(.25, .46, .45, .94) forwards;
+    background: linear-gradient(45deg, var(--primal-color), #ffd700, var(--mystic-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 
+        0 0 5px rgba(255, 255, 255, 0.8),
+        0 0 10px var(--primal-color),
+        0 0 20px #ffd700;
+}
+
+@keyframes great-success-pop {
+    0% { transform: translate(-50%, -50%) scale(.5); opacity: 0; }
+    40% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+    to { transform: translate(-50%, -50%) scale(1.2); opacity: 0; }
+}
+
+.item-refinement-level {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    font-size: 0.8em;
+    font-weight: 700;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 2px 5px;
+    border-radius: 4px;
+    z-index: 1;
+    color: var(--primal-color); /* 제련 레벨은 태초 색상으로 표시 */
+}
+
+/* 장착 슬롯 및 인벤토리 아이템 공용 아우라 효과 */
+.slot.refine-aura-blue, .inventory-item.refine-aura-blue { box-shadow: 0 0 15px 3px #3498db, inset 0 0 10px 2px rgba(52, 152, 219, 0.5); }
+.slot.refine-aura-purple, .inventory-item.refine-aura-purple { box-shadow: 0 0 20px 4px var(--epic-color), inset 0 0 12px 3px rgba(175, 82, 222, 0.5); animation: pulse-purple 2s infinite; }
+.slot.refine-aura-orange, .inventory-item.refine-aura-orange { box-shadow: 0 0 25px 5px var(--legendary-color), inset 0 0 15px 4px rgba(255, 149, 0, 0.5); animation: pulse-orange 1.5s infinite; }
+.slot.refine-aura-primal, .inventory-item.refine-aura-primal {
+    box-shadow: 0 0 30px 6px var(--primal-color), inset 0 0 18px 5px rgba(0, 230, 210, 0.6);
+    animation: sparkle-rainbow-15 4s linear infinite, lightning 2s linear infinite;
+}
+
+@keyframes pulse-success {
+    0% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.7); }
+    70% { box-shadow: 0 0 15px 20px rgba(52, 199, 89, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0); }
+}
+
+.refinement-infused-animation {
+    animation: pulse-success 0.7s ease-out;
+}
+
+.refinement-great-success-aura {
+    /* 기존 태초 등급 애니메이션을 활용하여 화려한 효과를 한 번만 재생합니다. */
+    animation: sparkle-rainbow-15 2s linear 1, lightning 1.5s linear 1;
+    border-style: solid !important; /* 효과가 잘 보이도록 테두리 스타일을 강조합니다. */
+    border-width: 3px !important;   /* 테두리 두께를 강조합니다. */
+}
+
+@keyframes great-success-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+/* 대성공 시 게이지 바에 적용될 스타일 */
+.great-success-bar {
+    background: linear-gradient(
+        120deg, 
+        #ffd700, 
+        #ffab00, 
+        var(--primal-color), 
+        #ffd700,
+        #ffab00
+    );
+    background-size: 200% 100%;
+    animation: great-success-shimmer 2s linear infinite;
+}
+
+
+#announcement-banner.great-success {
+    background: linear-gradient(
+        135deg, 
+        #ffde59, /* 밝은 금색 */
+        #ff9500, /* 주황색 */
+        #ff2d55, /* 미스틱 핑크 */
+        #af52de, /* 에픽 보라 */
+        #00e6d2, /* 태초 청록 */
+        #ffde59
+    );
+    background-size: 300% 300%;
+    color: #ffffff;
+    font-weight: 900;
+    border: 2px solid #fff;
+    box-shadow: 0 0 20px 7px rgba(255, 255, 255, 0.8), 
+                0 0 40px 15px rgba(255, 215, 0, 0.7);
+    animation: great-success-flow 4s ease-in-out infinite; /* <-- 애니메이션 이름 변경 */
+}
+
+
+@keyframes great-success-pulse {
+    0% {
+        box-shadow: 0 0 10px 3px rgba(255, 215, 0, 0.4), 
+                    0 0 20px 8px rgba(255, 255, 255, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 25px 8px rgba(255, 215, 0, 0.9), 
+                    0 0 50px 20px rgba(255, 255, 255, 0.5);
+    }
+    100% {
+        box-shadow: 0 0 10px 3px rgba(255, 215, 0, 0.4), 
+                    0 0 20px 8px rgba(255, 255, 255, 0.3);
+    }
+}
+
+#announcement-banner.great-success {
+    background: linear-gradient(135deg, #28231E, #4A3F35); /* 어두운 황금색 배경 */
+    color: #FFD700; /* 밝은 황금색 텍스트 */
+    font-weight: 900;
+    border: 2px solid #FFD700;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+    animation: great-success-pulse 1.5s ease-in-out infinite; /* 완전히 새로운 애니메이션 적용 */
+}
+
+#announcement-banner.great-success span {
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.8); /* 텍스트 그림자 통일 */
+}
+
+
+/* 2. 기존의 .system-message.great-success-chat 스타일을 모두 삭제하고 아래 코드로 교체하세요. */
+
+.system-message.great-success-chat {
+    background-color: rgba(255, 215, 0, 0.1); /* 은은한 금빛 배경 */
+    border: 1px solid #FFD700; /* 선명한 금색 테두리 */
+    border-radius: 6px;
+    box-shadow: 0 0 5px rgba(255, 215, 0, 0.3); /* 부드러운 그림자 효과 */
+    text-align: center;
+    font-weight: bold;
+    color: #FFD700; /* 가독성 높은 금색 텍스트 */
+    padding: 10px;
+    margin: 8px 0 !important;
+    text-shadow: none; /* <<< 가독성을 위해 텍스트 글로우 효과 제거 */
+    animation: none;   /* <<< 가독성을 위해 배경 애니메이션 제거 */
+}
+
+
+/* ===== DPS 측정 시스템 스타일 시작 ===== */
+
+.dps-result-overview h3, .dps-result-overview h4 {
+    margin: 0;
+}
+
+.dps-stat-block h4 {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+    font-size: 1.2em;
+}
+
+.dps-stat-block p {
+    margin: 8px 0;
+    font-size: 1.1em;
+    display: flex;
+    justify-content: space-between;
+}
+
+.dps-stat-block p span {
+    font-weight: bold;
+}
+
+/* DPS 랭킹 리스트 항목 호버 효과 */
+.dps-ranking-entry:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* 채팅 자랑하기 메시지 스타일 (요구사항 7) */
+#chat-messages li.dps-boast-message {
+    background-color: rgba(230, 126, 34, 0.1);
+    border: 1px solid #e67e22;
+    font-weight: bold;
+    color: var(--primal-color);
+    transition: background-color 0.2s;
+    text-align: center;
+    padding: 8px;
+}
+
+#chat-messages li.dps-boast-message:hover {
+    background-color: rgba(230, 126, 34, 0.2);
+}
+
+/* ===== DPS 측정 시스템 스타일 끝 ===== */
