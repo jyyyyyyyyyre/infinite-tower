@@ -104,6 +104,8 @@ isHelper: { type: Boolean, default: false },
 });
 
 const GameDataSchema = new mongoose.Schema({
+    refinementExpMigrated: { type: Boolean, default: false },
+    refinementLevelRecalculated: { type: Boolean, default: false }, 
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     username: { type: String, required: true },
     gold: { type: Number, default: 0 },
@@ -1695,14 +1697,74 @@ io.on('connection', async (socket) => {
             return;
         }
     }
-    
-    if (onlinePlayers[socket.userId]) {
-        const oldSocket = onlinePlayers[socket.userId].socket;
+
+    const userId = socket.userId;
+    const username = socket.username;
+
+    if (onlinePlayers[userId]) {
+        console.log(`[중복 접속] ${username}님이 새 위치에서 접속했습니다. 이전 연결을 종료합니다.`);
+        const oldSocket = onlinePlayers[userId].socket;
         oldSocket.emit('forceDisconnect', { message: '다른 기기 또는 탭에서 접속하여 연결을 종료합니다.' });
         oldSocket.disconnect(true);
+
+        onlinePlayers[userId].socket = socket;
+        
+        const player = onlinePlayers[userId];
+        const monster = (player.raidState && player.raidState.isActive)
+                        ? player.raidState.monster
+                        : calcMonsterStats(player);
+        sendState(socket, player, monster);
+
+
+        const chatHistory = await ChatMessage.find().sort({ timestamp: -1 }).limit(50).lean();
+        socket.emit('chatHistory', chatHistory.reverse());
+        socket.emit('initialGlobalRecords', globalRecordsCache);
+        socket.emit('enhancementData', { 
+            enhancementTable: gameSettings.enhancementTable, 
+            highEnhancementRate: gameSettings.highEnhancementRate 
+        });
+        socket.emit('eventStatusUpdate', activeEvents);
+
+        return;
     }
+
+
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
+
+ if (gameData && !gameData.refinementLevelRecalculated) {
+        let wasModified = false;
+        
+        const recalculateLevel = (item) => {
+            if (item && item.refinement && typeof item.refinement.exp === 'number') {
+                const currentExp = item.refinement.exp;
+                const correctLevel = getRefinementLevelFromExp(currentExp); 
+                
+                if (item.refinement.level !== correctLevel) {
+                    item.refinement.level = correctLevel;
+                    wasModified = true;
+                }
+            }
+        };
+
+        Object.values(gameData.equipment).forEach(recalculateLevel);
+        gameData.inventory.forEach(recalculateLevel);
+
+        if (wasModified) {
+            gameData.refinementLevelRecalculated = true;
+            await GameData.updateOne({ user: socket.userId }, {
+                $set: {
+                    equipment: gameData.equipment,
+                    inventory: gameData.inventory,
+                    refinementLevelRecalculated: true
+                }
+            });
+
+        }
+    }
+
+
+
   if (gameData && gameData.inventory) {
         let wasUpdated = false;
         const soulstoneIds = ['soulstone_faint', 'soulstone_glowing', 'soulstone_radiant'];
@@ -3390,8 +3452,6 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
     player.isBusy = true; 
 
     try {
-
-
         let targetItem = null;
         Object.values(player.equipment).forEach(item => {
             if (item && item.uid === targetUid) targetItem = item;
@@ -3431,27 +3491,40 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
         for (const uid in materialCounts) {
             const requiredCount = materialCounts[uid];
             const materialStack = player.inventory.find(i => i.uid === uid);
+            let itemsSuccessfullyUsed = 0; // 실제로 사용된 아이템 개수 추적
+
             for (let i = 0; i < requiredCount; i++) {
+                let wasUsedThisIteration = false;
+
                 if (materialStack.category === 'RefinementMaterial') {
                     let exp = REFINEMENT_CONFIG.SOULSTONE_EXP[materialStack.id] || 0;
                     if (Math.random() < REFINEMENT_CONFIG.RESONANCE_CHANCE) {
                         exp *= REFINEMENT_CONFIG.RESONANCE_MULTIPLIER;
                         pushLog(player, `[영혼의 공명] <span class="Mystic">대성공!</span> ${materialStack.name}의 기운이 증폭됩니다!`);
-                        const successMessage = `✨ [영혼 제련] ${player.username}님이 대성공하여 엄청난 힘을 얻었습니다! ✨`;
+                     //   const successMessage = `✨ [영혼 제련] ${player.username}님이 대성공하여 엄청난 힘을 얻었습니다! ✨`;
                         io.emit('globalAnnouncement', successMessage, { style: 'great-success' });
                         io.emit('chatMessage', { type: 'great_success', message: successMessage });
                         player.socket.emit('refinement:greatSuccess');
                     }
                     totalExpGained += exp;
+                    wasUsedThisIteration = true;
                 } else if (materialStack.category === 'Essence' && materialStack.refinementData) {
                     const targetPart = targetItem.accessoryType ? 'accessory' : targetItem.type;
+
                     if (materialStack.refinementData.part === targetPart) {
                         totalExpGained += materialStack.refinementData.exp;
+                        wasUsedThisIteration = true; 
                     }
                 }
+                
+                if (wasUsedThisIteration) {
+                    itemsSuccessfullyUsed++;
+                }
             }
-            materialStack.quantity -= requiredCount;
+
+            materialStack.quantity -= itemsSuccessfullyUsed;
         }
+
 
         player.inventory = player.inventory.filter(i => i.quantity > 0);
 
@@ -3489,7 +3562,6 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
     } finally {
         if (player) player.isBusy = false; 
     }
-
 })
     
 		
@@ -3640,7 +3712,6 @@ function hasBuff(player, buffId) {
     return player.buffs.some(b => b.id === buffId && new Date(b.endTime) > Date.now());
 }
 
-
 function gameTick(player) {
    if (!player || !player.socket) return;
     player.stateSentThisTick = false;
@@ -3717,7 +3788,15 @@ function gameTick(player) {
          }
      }
      if (player.raidState && player.raidState.isActive) {
-         const raidBoss = player.raidState.monster;
+        // ========== FIX STARTS HERE ==========
+        const raidBoss = player.raidState.monster;
+        if (!raidBoss) {
+            console.error(`[CRITICAL] Player ${player.username} is in an active raid (floor ${player.raidState.floor}) but has no monster object. Forcing raid end to prevent crash.`);
+            endPersonalRaid(player, true); // End the raid to fix the state
+            return; // Exit the tick for this player
+        }
+        // ========== FIX ENDS HERE ==========
+
          let pDmg = 0;
          let mDmg = 0;
 
@@ -6382,11 +6461,12 @@ function useGoldenHammer(player, { itemUid, hammerUid, typeToRestore }) {
 const REFINEMENT_CONFIG = {
     MAX_LEVEL: 50,
     EXP_TABLE: [
-        0, 1500, 3500, 6000, 9000, 12500, 16500, 21000, 26000, 31500, 
-        37500, 44000, 51000, 58500, 66500, 75000, 84000, 93500, 103500, 114000, 
-        125000, 137000, 150000, 164000, 179000, 195000, 212000, 230000, 249000, 269000, 
-        290000, 312000, 335000, 359000, 384000, 410000, 437000, 465000, 494000, 524000, 
-        555000, 587000, 620000, 654000, 689000, 725000, 762000, 800000, 839000, 879000, 43000000
+        0, 15000, 32625, 53231, 77207, 104978, 137000, 173775, 215877, 263945, 318685,
+        380885, 451405, 531181, 621218, 722616, 836574, 964375, 1107440, 1267264,
+        1445473, 1643853, 1864327, 2109014, 2380191, 2680325, 3012114, 3378454,
+        3782534, 4227815, 4718038, 5257255, 5850027, 6501282, 7216333, 8000962,
+        8861455, 9804635, 10837830, 11968940, 13206580, 14559980, 16039076,
+        17654519, 19417858, 21341483, 23438692, 25723883, 28212513, 30921003, 43000000
     ],
     WEAPON_BONUS_PER_LEVEL: 2,    // 추가 데미지 +2% per level
     ARMOR_BONUS_PER_LEVEL: 2,     // 보호막 +2% per level
@@ -6396,7 +6476,7 @@ const REFINEMENT_CONFIG = {
         soulstone_glowing: 1000,
         soulstone_radiant: 10000,
     },
-    RESONANCE_CHANCE: 0.05, // 대성공 확률 5%
+    RESONANCE_CHANCE: 0.01, // 대성공 확률 1%
     RESONANCE_MULTIPLIER: 5,  // 대성공 시 경험치 5배
 };
 

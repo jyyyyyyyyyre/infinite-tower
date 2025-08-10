@@ -371,13 +371,16 @@ function computeClientEnhanceBonus(item) {
 
 
 function getExpForNextLevelClient(level, currentExp) {
+    // 수정된 최신 경험치 테이블을 하드코딩합니다.
     const EXP_TABLE = [
-        0, 1500, 3500, 6000, 9000, 12500, 16500, 21000, 26000, 31500, 37500, 
-        44000, 51000, 58500, 66500, 75000, 84000, 93500, 103500, 114000, 125000, 
-        137000, 150000, 164000, 179000, 195000, 212000, 230000, 249000, 269000, 290000, 
-        312000, 335000, 359000, 384000, 410000, 437000, 465000, 494000, 524000, 555000, 
-        587000, 620000, 654000, 689000, 725000, 762000, 800000, 839000, 879000, 43000000
+        0, 15000, 32625, 53231, 77207, 104978, 137000, 173775, 215877, 263945, 318685,
+        380885, 451405, 531181, 621218, 722616, 836574, 964375, 1107440, 1267264,
+        1445473, 1643853, 1864327, 2109014, 2380191, 2680325, 3012114, 3378454,
+        3782534, 4227815, 4718038, 5257255, 5850027, 6501282, 7216333, 8000962,
+        8861455, 9804635, 10837830, 11968940, 13206580, 14559980, 16039076,
+        17654519, 19417858, 21341483, 23438692, 25723883, 28212513, 30921003, 43000000
     ];
+
     if (level >= 50) return { progress: 1, nextLevelExp: EXP_TABLE[50] };
     
     const requiredForNext = EXP_TABLE[level + 1];
@@ -652,6 +655,7 @@ let currentEssenceItem = null;
 
 let selectedScrollItem = null;
 let selectedTargetItem = null;
+let refinementExpTable = [];
 function renderDpsResult(record, isNewBest, isTop3, isViewingDetails = false) {
     const { modals } = elements;
     currentViewedDpsRecord = record; 
@@ -1674,7 +1678,11 @@ if(accountStorageTabBtn) {
         });
     });
   
-     
+      socket.on('gameConfig', (config) => {
+        if (config.refinementExpTable) {
+            refinementExpTable = config.refinementExpTable;
+        }
+    });
 
     socket.on('rankingData', ({ topLevel, topGold, topWeapon, topArmor }) => {
         const list = elements.modals.ranking.list;
@@ -1905,32 +1913,36 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
         }
     };
 	
+
 	const updateUI = ({ player, monster, isInRaid = false }) => {
     currentPlayerState = player;
-    if (!currentPlayerState.spiritInventory) currentPlayerState.spiritInventory = []; 
+    if (!currentPlayerState.spiritInventory) currentPlayerState.spiritInventory = [];
     updateTopBarInfo(player);
 
+    // 재화 업데이트
     const essenceDisplaySpan = document.querySelector('.research-essence-display span');
     if (essenceDisplaySpan) {
         essenceDisplaySpan.textContent = (player.researchEssence || 0).toLocaleString();
     }
 
-    if (elements.gold.textContent !== formatInt(player.gold)) { 
-        elements.gold.textContent = formatInt(player.gold); 
+    if (elements.gold.textContent !== formatInt(player.gold)) {
+        elements.gold.textContent = formatInt(player.gold);
     }
 
+    // 플레이어 HP 및 기본 스탯 업데이트
     elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
     elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
-
-   if (player.shield !== undefined && player.stats.shield > 0) {
-        elements.player.shieldContainer.style.display = 'block';
+    
+    // 플레이어 보호막 (제련 효과)
+    if (player.shield !== undefined && player.stats.shield > 0) {
+        if (elements.player.shieldContainer) elements.player.shieldContainer.style.display = 'block';
         const shieldPercent = (player.shield / player.stats.shield) * 100;
         elements.player.shieldBar.style.width = `${shieldPercent}%`;
         elements.player.shieldText.textContent = `${formatFloat(player.shield)} / ${formatFloat(player.stats.shield)}`;
     } else {
-        elements.player.shieldContainer.style.display = 'none';
+        if (elements.player.shieldContainer) elements.player.shieldContainer.style.display = 'none';
     }
-    
+
     const baseHp = player.stats.base.hp;
     const totalHp = player.stats.total.hp;
     const bonusHp = Math.max(0, totalHp - baseHp);
@@ -1946,6 +1958,7 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
     const bonusDefense = Math.max(0, totalDefense - baseDefense);
     elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${formatInt(bonusDefense)})`;
 
+    // 플레이어 특수 스탯 (Client.js 최신화 반영)
     if (elements.player.specialStatsGrid) {
         elements.player.specialStatsGrid.innerHTML = `
             <div>💥 치명타: <strong>${(player.stats.critChance * 100).toFixed(2)}%</strong></div>
@@ -1961,134 +1974,175 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
         `;
     }
 
+    // --- 게임 상태 관리 및 버튼 로직 정리 ---
+
+    const isDpsActive = player.dpsSession && player.dpsSession.isActive;
+    const isFoundryActive = player.isInFoundryOfTime;
+    // isInRaid는 매개변수로 제공됨
+
+    // 자주 사용되는 요소 캐싱
     const foundryBtn = elements.foundry.toggleBtn;
-    const floorActionButtons = document.querySelector('.floor-action-buttons');
+    // floor-action-buttons는 client.js의 HTML 구조상 레이드/DPS/제련소 버튼을 포함하는 컨테이너로 가정합니다.
+    const floorActionButtons = document.querySelector('.floor-action-buttons'); 
+    const barrierContainer = document.getElementById('monster-barrier-container');
+    const abilityIcons = elements.monster.abilityIcons;
 
-    if (player.dpsSession && player.dpsSession.isActive) {
-        elements.monster.hpBar.style.width = `100%`;
-        elements.monster.hpText.textContent = `측정 중...`;
-        elements.monster.totalHp.textContent = '∞';
-        elements.monster.attack.textContent = '0';
-        elements.monster.defense.textContent = '0'; 
+    // 버튼 및 UI 요소 기본값 초기화 (일반 등반 기준)
+    if (floorActionButtons) floorActionButtons.style.display = 'flex';
+    if (foundryBtn) {
+        foundryBtn.style.display = 'block';
+        foundryBtn.textContent = '시간의 제련소';
+        foundryBtn.style.backgroundColor = '#8e44ad';
+    }
+    if (elements.floorControls.personalRaidBtn) elements.floorControls.personalRaidBtn.style.display = 'block';
+    if (elements.floorControls.startDpsBtn) elements.floorControls.startDpsBtn.style.display = 'block';
+    
+    elements.monster.leaveRaidBtn.style.display = 'none';
+    elements.monster.abortDpsBtn.style.display = 'none';
+    if (barrierContainer) barrierContainer.style.display = 'none';
+    if (abilityIcons) abilityIcons.style.display = 'none';
 
-        document.getElementById('monster-barrier-container').style.display = 'none';
-        document.getElementById('monster-ability-icons').style.display = 'none';
-
+    // 상태별 분기 처리 (몬스터 이름 및 버튼 제어)
+    if (isDpsActive) {
+        // 1. DPS 측정 중
+        // 몬스터 이름은 DPS 타이머가 처리하지만 기본값 설정
+     //   elements.monster.level.innerHTML = `<span style="color:#e67e22; font-weight: bold;">[수련장] 측정 중...</span>`;
+        
         if (floorActionButtons) floorActionButtons.style.display = 'none';
         if (foundryBtn) foundryBtn.style.display = 'none';
-        elements.monster.leaveRaidBtn.style.display = 'none';
         elements.monster.abortDpsBtn.style.display = 'block';
+        // 등반 컨트롤(100만층) 숨김
+        if (elements.floorControls.container) elements.floorControls.container.style.display = 'none';
 
-    } else if (player.isInFoundryOfTime) {
 
-        elements.monster.level.innerHTML = `<span style="color:#8e44ad; font-weight:bold;">시간의 제련소</span>`;
+    } else if (isFoundryActive) {
+        // 2. 시간의 제련소
+        elements.monster.level.innerHTML = `<span style="color:#8e44ad; font-weight:bold;">${monster.name || '시간의 제련소'}</span>`;
 
-        if (currentFoundryMonster) {
-            const maxHp = currentFoundryMonster.maxHp;
-            elements.monster.hpBar.style.width = `${(currentFoundryMonster.hp / maxHp) * 100}%`;
-            elements.monster.hpText.textContent = `HP: ${currentFoundryMonster.hp} / ${maxHp}`;
-            elements.monster.totalHp.textContent = maxHp.toLocaleString();
-            elements.monster.level.innerHTML = `<span style="color:#8e44ad; font-weight:bold;">${currentFoundryMonster.name}</span>`;
-        } else {
-             elements.monster.hpBar.style.width = `100%`;
-             elements.monster.hpText.textContent = `HP: 1 / 1`;
-             elements.monster.totalHp.textContent = '1';
-        }
-        elements.monster.attack.textContent = '0';
-        elements.monster.defense.textContent = '0';
-        document.getElementById('monster-barrier-container').style.display = 'none';
-        document.getElementById('monster-ability-icons').style.display = 'none';
-
-        if (floorActionButtons) {
-            floorActionButtons.style.display = 'flex';
-
-            const personalRaidBtn = document.getElementById('personal-raid-btn');
-            const startDpsBtn = document.getElementById('start-dps-btn');
-            if (personalRaidBtn) personalRaidBtn.style.display = 'none';
-            if (startDpsBtn) startDpsBtn.style.display = 'none';
-        }
-
+        // 레이드/DPS 버튼 숨김
+        if (elements.floorControls.personalRaidBtn) elements.floorControls.personalRaidBtn.style.display = 'none';
+        if (elements.floorControls.startDpsBtn) elements.floorControls.startDpsBtn.style.display = 'none';
+        
+        // 제련소 버튼 -> 등반 복귀로 변경
         if (foundryBtn) {
             foundryBtn.textContent = '등반 복귀';
             foundryBtn.style.backgroundColor = 'var(--fail-color)';
-            foundryBtn.style.display = 'block';
         }
-        
-        elements.monster.leaveRaidBtn.style.display = 'none';
-        elements.monster.abortDpsBtn.style.display = 'none';
+        // 등반 컨트롤(100만층) 숨김
+        if (elements.floorControls.container) elements.floorControls.container.style.display = 'none';
+
 
     } else if (isInRaid) {
-
+        // 3. 개인 레이드
         elements.monster.level.innerHTML = `<span style="color:#c0392b; font-weight:bold;">[개인 레이드 ${monster.floor}층] ${monster.name}</span>`;
-        elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
-        elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
-        elements.monster.totalHp.textContent = formatFloat(monster.hp);
-        elements.monster.attack.textContent = formatFloat(monster.attack);
-        elements.monster.defense.textContent = formatFloat(monster.defense);
-
+        
+        // 다른 버튼 숨기고 레이드 나가기 버튼 표시
         if (floorActionButtons) floorActionButtons.style.display = 'none';
         if (foundryBtn) foundryBtn.style.display = 'none';
         elements.monster.leaveRaidBtn.style.display = 'block';
-        elements.monster.abortDpsBtn.style.display = 'none';
+        // 등반 컨트롤(100만층) 숨김
+        if (elements.floorControls.container) elements.floorControls.container.style.display = 'none';
+
 
     } else {
-
-        elements.monster.level.innerHTML = monster.isBoss 
-            ? `<span style="color:var(--fail-color); font-weight:bold;">${formatInt(monster.level)}층 보스</span>` 
-            : `${formatInt(monster.level)}층 몬스터`;
-        elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
-        elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
-        elements.monster.totalHp.textContent = formatFloat(monster.hp);
-        elements.monster.attack.textContent = formatFloat(monster.attack);
-        elements.monster.defense.textContent = formatFloat(monster.defense);
-
-        if (floorActionButtons) {
-            floorActionButtons.style.display = 'flex';
-            const personalRaidBtn = document.getElementById('personal-raid-btn');
-            const startDpsBtn = document.getElementById('start-dps-btn');
-            if (personalRaidBtn) personalRaidBtn.style.display = 'block';
-            if (startDpsBtn) startDpsBtn.style.display = 'block';
-        }
-
-        if (foundryBtn) {
-            foundryBtn.textContent = '시간의 제련소';
-            foundryBtn.style.backgroundColor = '#8e44ad';
-            foundryBtn.style.display = 'block';
-        }
+        // 4. 일반 등반
+        elements.monster.level.innerHTML = monster.isBoss
+            ? `<span style="color:var(--fail-color); font-weight:bold;">${formatInt(monster.level)}층 보스</span>`
+            : `${formatInt(monster.level)}층`;
         
-        elements.monster.leaveRaidBtn.style.display = 'none';
-        elements.monster.abortDpsBtn.style.display = 'none';
+        // 등반 컨트롤(100만층) 표시
+        if (elements.floorControls.container) elements.floorControls.container.style.display = 'flex';
 
+        // 100만층 이상 전용 컨트롤 (최전선 복귀/안전지대 이동)
+        const { safeZoneBtn, frontlineBtn } = elements.floorControls;
         const canUseFrontline = player.maxLevel >= 1000000;
-        const safeZoneBtn = document.getElementById('safe-zone-btn');
-        const frontlineBtn = document.getElementById('frontline-btn');
-        safeZoneBtn.style.display = 'none';
-        frontlineBtn.style.display = 'none';
+        
+        if (safeZoneBtn) safeZoneBtn.style.display = 'none';
+        if (frontlineBtn) frontlineBtn.style.display = 'none';
+
         if (canUseFrontline) {
-            if (player.level >= 1000000) { 
-                safeZoneBtn.style.display = 'block'; 
+            if (player.level >= 1000000) {
+                if (safeZoneBtn) safeZoneBtn.style.display = 'block';
             } else {
-                frontlineBtn.style.display = 'block';
-                const cooldown = player.safeZoneCooldownUntil ? new Date(player.safeZoneCooldownUntil) : null;
-                if (cooldown && cooldown > new Date()) {
-                    frontlineBtn.disabled = true;
-                    if (returnCooldownTimer) clearInterval(returnCooldownTimer);
-                    returnCooldownTimer = setInterval(() => {
-                        const now = new Date();
-                        if (cooldown <= now) { clearInterval(returnCooldownTimer); frontlineBtn.disabled = false; frontlineBtn.textContent = '최전선 복귀'; } 
-                        else { const remaining = Math.ceil((cooldown - now) / 1000); frontlineBtn.textContent = `최전선 복귀 (${remaining}초)`; }
-                    }, 1000);
-                } else {
-                    if (returnCooldownTimer) clearInterval(returnCooldownTimer);
-                    frontlineBtn.disabled = false;
-                    frontlineBtn.textContent = '최전선 복귀';
+                if (frontlineBtn) {
+                    frontlineBtn.style.display = 'block';
+                    // 쿨타임 처리
+                    const cooldown = player.safeZoneCooldownUntil ? new Date(player.safeZoneCooldownUntil) : null;
+                    if (cooldown && cooldown > new Date()) {
+                        frontlineBtn.disabled = true;
+                        if (returnCooldownTimer) clearInterval(returnCooldownTimer);
+                        returnCooldownTimer = setInterval(() => {
+                            const now = new Date();
+                            if (cooldown <= now) {
+                                clearInterval(returnCooldownTimer);
+                                frontlineBtn.disabled = false;
+                                frontlineBtn.textContent = '최전선 복귀';
+                            } else {
+                                const remaining = Math.ceil((cooldown - now) / 1000);
+                                frontlineBtn.textContent = `최전선 복귀 (${remaining}초)`;
+                            }
+                        }, 1000);
+                    } else {
+                        if (returnCooldownTimer) clearInterval(returnCooldownTimer);
+                        frontlineBtn.disabled = false;
+                        frontlineBtn.textContent = '최전선 복귀';
+                    }
                 }
             }
         }
     }
 
+    // --- 몬스터 스탯 및 보호막(Barrier) 업데이트 ---
+
+    if (isDpsActive) {
+        elements.monster.hpBar.style.width = `100%`;
+        elements.monster.hpText.textContent = `측정 중...`;
+        elements.monster.totalHp.textContent = '∞';
+        elements.monster.attack.textContent = '0';
+        elements.monster.defense.textContent = '0';
+
+    } else if (isFoundryActive) {
+        elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
+        // 제련소 몬스터는 HP가 1이므로 formatFloat 대신 일반 텍스트 사용이 적합할 수 있음
+        elements.monster.hpText.textContent = `HP: ${monster.currentHp} / ${monster.hp}`;
+        elements.monster.totalHp.textContent = monster.hp.toLocaleString();
+        elements.monster.attack.textContent = '0';
+        elements.monster.defense.textContent = '0';
+
+    } else {
+        // 레이드 또는 일반 등반 시 몬스터 스탯 업데이트
+        elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
+        elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
+        elements.monster.totalHp.textContent = formatFloat(monster.hp);
+        elements.monster.attack.textContent = formatFloat(monster.attack);
+        elements.monster.defense.textContent = formatFloat(monster.defense);
+
+        // ** 복구된 보호막(Barrier) 및 어빌리티 로직 **
+        const showAbilities = monster.distortion > 0 || monster.empoweredAttack > 0;
+        const showBarrier = monster.barrier > 0; // 서버에서 값을 주면 표시 (100만층 이상)
+
+        if (showBarrier && barrierContainer) {
+            barrierContainer.style.display = 'block';
+            const maxBarrier = monster.barrier;
+            const currentBarrier = monster.currentBarrier;
+            const barrierPercent = maxBarrier > 0 ? (currentBarrier / maxBarrier) * 100 : 0;
+            elements.monster.barrierBar.style.width = `${barrierPercent}%`;
+            elements.monster.barrierText.textContent = `${formatFloat(currentBarrier)} / ${formatFloat(maxBarrier)}`;
+        }
+
+        if ((showAbilities || showBarrier) && abilityIcons) {
+            abilityIcons.style.display = 'flex';
+            abilityIcons.innerHTML = `
+                ${showBarrier ? `<span title="보호막: 이 몬스터는 추가 체력을 가지고 있습니다. 보호막을 모두 파괴해야 본체에 피해를 줄 수 있습니다.">🛡️</span>` : ''}
+                ${monster.distortion > 0 ? `<span title="왜곡: 이 몬스터는 ${monster.distortion}% 확률로 모든 공격을 회피합니다.">💨</span>` : ''}
+                ${monster.empoweredAttack > 0 ? `<span title="권능 공격: 이 몬스터의 모든 공격은 당신의 최대 체력 ${monster.empoweredAttack}%에 해당하는 추가 피해를 입힙니다.">💀</span>` : ''}
+            `;
+        }
+    }
+
+    // 버프 표시
     const buffsContainer = document.getElementById('player-buffs-container');
-    buffsContainer.innerHTML = ''; 
+    buffsContainer.innerHTML = '';
     if (player.buffs && player.buffs.length > 0) {
         player.buffs.forEach(buff => {
             const remainingTime = Math.max(0, Math.floor((new Date(buff.endTime) - new Date()) / 1000));
@@ -2097,6 +2151,7 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
         });
     }
 
+    // 장비 및 유물 렌더링
     renderItemInSlot(elements.equipment.weapon, player.equipment.weapon, '⚔️<br>무기', 'weapon');
     renderItemInSlot(elements.equipment.armor, player.equipment.armor, '🛡️<br>방어구', 'armor');
     renderItemInSlot(elements.equipment.pet, player.equippedPet, '🐾<br>펫', 'pet');
@@ -2108,6 +2163,7 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
         artifactSocketsHeader.innerHTML = player.unlockedArtifacts.map(artifact => artifact ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`).join('');
     }
 
+    // 기타 UI 업데이트
     renderAllInventories(player);
     renderFusionPanel(player);
     elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
@@ -2116,17 +2172,18 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
 
     const activeTab = document.querySelector('.tab-button.active');
     if (activeTab && activeTab.dataset.tab === 'research-tab') {
-        renderResearchTab(player); 
+        renderResearchTab(player);
     }
-	
-	 const setEffectDisplay = document.getElementById('set-effect-display');
+
+    // 세트 효과 표시
+    const setEffectDisplay = document.getElementById('set-effect-display');
     const weapon = player.equipment.weapon;
     const armor = player.equipment.armor;
 
     if (weapon && armor && weapon.prefix && weapon.prefix === armor.prefix) {
         const prefix = weapon.prefix;
         setEffectDisplay.className = `set-effect-container active set-effect-${prefix}`;
-        
+
         let effectTitle = `[${prefix}] 2세트 효과`;
         let effectDescription = '';
 
@@ -2147,7 +2204,7 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
                 effectDescription = "'각성' 상태의 지속시간이 2초 증가합니다 (총 7초).";
                 break;
         }
-        
+
         setEffectDisplay.innerHTML = `<h4>${effectTitle}</h4><p>${effectDescription}</p>`;
 
     } else {
@@ -3731,12 +3788,11 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
         });
     }
 
-    socket.on('forceDisconnect', (data) => { alert(data.message); socket.disconnect(); localStorage.removeItem('jwt_token'); location.reload(); });
-    setInterval(() => {
-        if (socket.connected) {
-            socket.emit('client-heartbeat');
-        }
-    }, 45000);
+socket.on('forceDisconnect', (data) => {
+    console.warn('다른 연결로 인해 접속이 종료되었습니다. 메시지:', data.message);
+    localStorage.removeItem('jwt_token'); 
+    location.reload();
+});
 
 
     let eventTimerUpdater = null;
@@ -4232,37 +4288,43 @@ elements.refinement.infuseBtn.addEventListener('click', () => {
 });
 	
 	elements.refinement.autofillBtn.addEventListener('click', () => {
-        if (!selectedRefinementTarget || refinementMaterialUids.length >= 10) return;
+    if (!selectedRefinementTarget || refinementMaterialUids.length >= 10) return;
 
-        const availableMaterials = [];
+    const availableMaterials = [];
+    const targetPart = selectedRefinementTarget.accessoryType ? 'accessory' : selectedRefinementTarget.type;
 
-        currentPlayerState.inventory.forEach(item => {
-            if (item.category === 'RefinementMaterial' || item.category === 'Essence') {
-
-                const countInSelection = refinementMaterialUids.filter(uid => {
-                     const selectedItem = findItemInState(uid);
-
-                     return selectedItem && selectedItem.id === item.id;
-                }).length;
-
-                const availableQuantity = item.quantity - countInSelection;
-                for (let i = 0; i < availableQuantity; i++) {
-
-                    availableMaterials.push(item);
+    currentPlayerState.inventory.forEach(item => {
+        if (item.category === 'RefinementMaterial' || item.category === 'Essence') {
+     
+            if (item.category === 'Essence' && item.refinementData) {
+                if (item.refinementData.part !== targetPart) {
+                    return; 
                 }
             }
-        });
 
-        const gradeOrder = ['Rare', 'Epic', 'Mystic', 'Primal'];
-        availableMaterials.sort((a, b) => gradeOrder.indexOf(a.grade) - gradeOrder.indexOf(b.grade));
-        
-        const slotsToFill = 10 - refinementMaterialUids.length;
-        const itemsToFill = availableMaterials.slice(0, slotsToFill);
-        
-        itemsToFill.forEach(item => refinementMaterialUids.push(item.uid));
-        
-        updateRefinementPanel(selectedRefinementTarget); 
+
+            const countInSelection = refinementMaterialUids.filter(uid => {
+                 const selectedItem = findItemInState(uid);
+                 return selectedItem && selectedItem.id === item.id;
+            }).length;
+
+            const availableQuantity = item.quantity - countInSelection;
+            for (let i = 0; i < availableQuantity; i++) {
+                availableMaterials.push(item);
+            }
+        }
     });
+
+    const gradeOrder = ['Rare', 'Epic', 'Mystic', 'Primal'];
+    availableMaterials.sort((a, b) => gradeOrder.indexOf(a.grade) - gradeOrder.indexOf(b.grade));
+    
+    const slotsToFill = 10 - refinementMaterialUids.length;
+    const itemsToFill = availableMaterials.slice(0, slotsToFill);
+    
+    itemsToFill.forEach(item => refinementMaterialUids.push(item.uid));
+    
+    updateRefinementPanel(selectedRefinementTarget); 
+});
     
     elements.refinement.extractBtn.addEventListener('click', () => {
         if (selectedRefinementTarget && confirm(`[${selectedRefinementTarget.name}]의 모든 제련 경험치를 추출하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 아이템의 제련 레벨과 경험치는 0으로 초기화됩니다.`)) {
