@@ -3501,9 +3501,9 @@ const isEnchantable = item && (item.id === 'apocalypse' || item.type === 'weapon
                     if (Math.random() < REFINEMENT_CONFIG.RESONANCE_CHANCE) {
                         exp *= REFINEMENT_CONFIG.RESONANCE_MULTIPLIER;
                         pushLog(player, `[영혼의 공명] <span class="Mystic">대성공!</span> ${materialStack.name}의 기운이 증폭됩니다!`);
-                     //   const successMessage = `✨ [영혼 제련] ${player.username}님이 대성공하여 엄청난 힘을 얻었습니다! ✨`;
+                        const successMessage = `✨ [영혼 제련] ${player.username}님이 대성공하여 엄청난 힘을 얻었습니다! ✨`;
                         io.emit('globalAnnouncement', successMessage, { style: 'great-success' });
-                        io.emit('chatMessage', { type: 'great_success', message: successMessage });
+                     //   io.emit('chatMessage', { type: 'great_success', message: successMessage });
                         player.socket.emit('refinement:greatSuccess');
                     }
                     totalExpGained += exp;
@@ -6004,14 +6004,23 @@ async function startPersonalRaid(player) {
 }
 
 
-async function endPersonalRaid(player, died = false) {
+async function endPersonalRaid(player, died = false) { // async 추가
     if (!player || !player.raidState || !player.raidState.isActive) return;
 
     const message = died 
         ? `[개인 레이드] ${player.raidState.floor}층에서 패배하여 일반 등반으로 복귀합니다.`
         : "[개인 레이드] 레이드를 종료하고 일반 등반으로 복귀합니다.";
-
+    
     resetPlayer(player, message, player.level); 
+    try {
+        await GameData.updateOne(
+            { user: player.user }, 
+            { $set: { "raidState.isActive": false } }
+        );
+    } catch (error) {
+        console.error(`[DB 저장 오류] endPersonalRaid에서 ${player.username}의 레이드 상태 저장 실패:`, error);
+    }
+
 }
 
 function onPersonalRaidFloorClear(player) {
