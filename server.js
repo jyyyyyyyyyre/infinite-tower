@@ -6476,7 +6476,7 @@ const REFINEMENT_CONFIG = {
         soulstone_glowing: 1000,
         soulstone_radiant: 10000,
     },
-    RESONANCE_CHANCE: 0.01, // 대성공 확률 1%
+    RESONANCE_CHANCE: 0.05, // 대성공 확률 5%
     RESONANCE_MULTIPLIER: 5,  // 대성공 시 경험치 5배
 };
 
