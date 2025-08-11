@@ -157,14 +157,17 @@
             <div class="main-content-wrapper">
                 <div class="left-sector">
                     <div class="character-panel player-panel">
-                        <div class="character-header">
-                           <h2>
-    플레이어
-    <div id="artifact-sockets-header"></div>
-    <span id="player-max-level-display" style="font-size: 0.8em; color: var(--text-muted); font-weight: normal;"></span>
-</h2>
- <div class="resource-display">💰 <span id="gold">0</span></div>
-                        </div>
+                       <div class="character-header">
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <h2>
+                        플레이어
+                        <div id="artifact-sockets-header"></div>
+                        <span id="player-max-level-display" style="font-size: 0.8em; color: var(--text-muted); font-weight: normal;"></span>
+                    </h2>
+                    <div id="potion-buffs-display"></div>
+                </div>
+                <div class="resource-display">💰 <span id="gold">0</span></div>
+            </div>
                         <div class="hp-bar">
                             <div class="hp-bar-inner" id="player-hp-bar"></div>
                             <div class="hp-bar-text" id="player-hp-text"></div>
@@ -317,6 +320,9 @@
                         <div id="pet-inventory" class="inventory-grid"></div>
                     </div>
 <div class="tab-content" id="incubator-tab">
+<div class="inventory-header" id="auto-hatch-controls" style="padding: 10px; text-align: center;">
+    <button id="auto-hatch-toggle-btn" class="action-btn">자동 부화 ON</button>
+</div>
     <div id="incubator-grid-container">
         </div>
 </div>

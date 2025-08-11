@@ -3223,4 +3223,79 @@ body.auth-view {
     background-color: rgba(230, 126, 34, 0.2);
 }
 
-/* ===== DPS 측정 시스템 스타일 끝 ===== */
+/* 신규: 플레이어 패널 헤더 레이아웃 조정 */
+.character-header h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* 요소들 사이의 간격 */
+    flex-wrap: nowrap; /* 줄바꿈 방지 */
+}
+
+/* 신규: 물약 버프 표시 영역 */
+#potion-buffs-display {
+    display: flex;
+    flex-direction: column; /* 세로로 정렬 */
+    justify-content: center;
+    align-items: flex-start; /* 왼쪽 정렬 */
+    font-size: 0.5em; /* h2 기준 폰트 크기 (작게) */
+    line-height: 1.4; /* 줄 간격 */
+    margin: 0 10px; /* 좌우 여백 */
+    color: var(--text-muted);
+}
+
+.potion-buff-timer {
+    font-weight: normal;
+    white-space: nowrap; /* 줄바꿈 방지 */
+}
+
+.potion-buff-timer .timer {
+    font-weight: bold;
+    color: var(--success-color); /* 남은 시간은 강조색으로 표시 */
+}
+
+/* 플레이어 패널 헤더 레이아웃 */
+.character-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center; /* 세로 중앙 정렬 */
+}
+
+.character-header-left {
+    display: flex;
+    align-items: center; /* h2와 버프창을 세로 중앙 정렬 */
+    gap: 20px;
+}
+
+/* 물약 버프 표시 영역 */
+#potion-buffs-display {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    font-size: 14px; /* 고정 폰트 크기 */
+    line-height: 1.5;
+    color: var(--text-muted);
+    border-left: 2px solid var(--border-color); /* 구분선 */
+    padding-left: 15px;
+}
+
+.potion-buff-timer {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.potion-buff-timer .timer {
+    font-weight: 700;
+    color: var(--success-color);
+    margin-left: 5px;
+}
+
+#spirit-summon-modal .modal-content {
+    gap: 15px; /* 내부 요소들 간격 추가 */
+}
+
+#spirit-summon-buttons button {
+    width: 48%; /* 버튼 너비 조정 */
+    padding: 12px !important;
+    font-size: 1.1em !important;
+}

@@ -67,8 +67,8 @@ const RIFT_ENCHANT_COST = {
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 33150000000000, ATTACK: 0, DEFENSE: 0,
-    REWARDS: { GOLD: 2960000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 133150000000000, ATTACK: 0, DEFENSE: 0,
+    REWARDS: { GOLD: 12960000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
 const MailSchema = new mongoose.Schema({
@@ -197,9 +197,17 @@ autoSellList: { type: [String], default: [] },
         pioneer: { type: Map, of: Number, default: {} }
     },
 
+autoHatchActive: { type: Boolean, default: false },
+
  spiritInventory: { type: [Object], default: [] },
     logoutTime: { type: Date, default: null },
     lastLevel: { type: Number, default: 1 },
+
+potionBuffs: {
+    gold: { type: Date, default: null },
+    drop: { type: Date, default: null },
+    stat: { type: Date, default: null }
+},
 
 });
 
@@ -435,6 +443,9 @@ const adminItemAlias = {
 };
 
 const itemData = {
+	'gold_potion': { name: '골드 물약', type: 'Special', category: 'Consumable', grade: 'Legendary', description: '1시간 동안 최종 골드 획득량이 2배 증가합니다.', image: 'gold_potion.png', tradable: true },
+'drop_potion': { name: '드롭 물약', type: 'Special', category: 'Consumable', grade: 'Legendary', description: '1시간 동안 최종 아이템 드롭률이 2배 증가합니다.', image: 'drop_potion.png', tradable: true },
+'stat_potion': { name: '버프 물약', type: 'Special', category: 'Consumable', grade: 'Legendary', description: '1시간 동안 최종 공격력, 방어력, 체력이 2배 증가합니다.', image: 'stat_potion.png', tradable: true },
 soulstone_faint: { name: '희미한 영혼석', type: 'Special', category: 'RefinementMaterial', grade: 'Rare', description: '영혼 제련 경험치를 100 부여합니다.', image: 'soulstone_faint.png', tradable: false },
     soulstone_glowing: { name: '빛나는 영혼석', type: 'Special', category: 'RefinementMaterial', grade: 'Epic', description: '영혼 제련 경험치를 1,000 부여합니다.', image: 'soulstone_glowing.png', tradable: false },
     soulstone_radiant: { name: '찬란한 영혼석', type: 'Special', category: 'RefinementMaterial', grade: 'Mystic', description: '영혼 제련 경험치를 10,000 부여합니다.', image: 'soulstone_radiant.png', tradable: false },
@@ -1378,6 +1389,8 @@ function handleItemStacking(player, item) {
     }
     checkStateBasedTitles(player);
 }
+
+
 function calculateTotalStats(player) {
     if (!player || !player.stats) return;
     const base = player.stats.base;
@@ -1606,6 +1619,12 @@ function calculateTotalStats(player) {
     totalHp *= fameBonusMultiplier;
     totalAttack *= fameBonusMultiplier;
     totalDefense *= fameBonusMultiplier;
+	
+if (player.potionBuffs && player.potionBuffs.stat && new Date(player.potionBuffs.stat) > Date.now()) {
+    totalHp *= 2;
+    totalAttack *= 2;
+    totalDefense *= 2;
+}
     
 
     if (player.equipment.armor && player.equipment.armor.refinement) {
@@ -1705,6 +1724,20 @@ io.on('connection', async (socket) => {
 
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
+	
+	if (gameData && gameData.potionBuffs) {
+    const now = new Date();
+    if (gameData.potionBuffs.gold && new Date(gameData.potionBuffs.gold) < now) {
+        gameData.potionBuffs.gold = null;
+    }
+    if (gameData.potionBuffs.drop && new Date(gameData.potionBuffs.drop) < now) {
+        gameData.potionBuffs.drop = null;
+    }
+    if (gameData.potionBuffs.stat && new Date(gameData.potionBuffs.stat) < now) {
+        gameData.potionBuffs.stat = null;
+    }
+}
+	
 
     if (gameData && !gameData.refinementLevelRecalculated) {
         let wasModified = false;
@@ -1868,7 +1901,8 @@ io.on('connection', async (socket) => {
         buffs: [],
         isStorageTransacting: false,
         autoSellList: gameData.autoSellList || [],
-        dpsSession: null 
+        dpsSession: null ,
+autoHatchActive: gameData.autoHatchActive || false
     };
 	
     if (!onlinePlayers[socket.userId].autoSellList) onlinePlayers[socket.userId].autoSellList = [];
@@ -2257,8 +2291,13 @@ io.on('connection', async (socket) => {
         .on('startHatching', ({ slotIndex }) => startHatching(onlinePlayers[socket.userId], { slotIndex }))
         .on('equipPet', (uid) => equipPet(onlinePlayers[socket.userId], uid))
         .on('unequipPet', () => unequipPet(onlinePlayers[socket.userId]))
-        .on('removeEggFromIncubator', ({ slotIndex }) => {
+
+       .on('removeEggFromIncubator', ({ slotIndex }) => {
             const player = onlinePlayers[socket.userId];
+            if (player && player.autoHatchActive) {
+                pushLog(player, '[자동 부화] 자동 부화 중에는 수동으로 알을 제거할 수 없습니다.');
+                return;
+            }
             if (player && player.incubators && player.incubators[slotIndex] && player.incubators[slotIndex].egg && !player.incubators[slotIndex].hatchCompleteTime) {
                 const egg = player.incubators[slotIndex].egg;
                 handleItemStacking(player, egg);
@@ -2267,6 +2306,7 @@ io.on('connection', async (socket) => {
                 sendInventoryUpdate(player);
             }
         })
+
         .on('client-heartbeat', () => {})
         .on('board:getPosts', async ({ category, page }, callback) => {
             try {
@@ -2978,6 +3018,56 @@ io.on('connection', async (socket) => {
                 callback(chatLog);
             } catch (error) { callback([]); }
         })
+		.on('research:upgrade', ({ specializationId, techId }) => {
+            const player = onlinePlayers[socket.userId];
+            if (!player || !researchConfig[specializationId]) return;
+
+            const specialization = researchConfig[specializationId];
+            const tech = specialization.researches.find(t => t.id === techId);
+            if (!tech) return;
+
+            const playerResearchLevels = player.research[specializationId];
+            const currentLevel = playerResearchLevels.get(techId) || 0;
+
+
+            if (currentLevel >= tech.maxLevel) {
+                pushLog(player, `[연구] 이미 최대 레벨에 도달했습니다.`);
+                return;
+            }
+
+
+            let canUpgrade = false;
+            if (!tech.requires) {
+                canUpgrade = true;
+            } else {
+                const requiredLevel = playerResearchLevels.get(tech.requires.techId) || 0;
+                if (requiredLevel >= tech.requires.level) {
+                    canUpgrade = true;
+                }
+            }
+
+            if (!canUpgrade) {
+                const requiredTech = specialization.researches.find(t => t.id === tech.requires.techId);
+                pushLog(player, `[연구] '${requiredTech.name}' 연구 ${tech.requires.level}레벨 달성이 필요합니다.`);
+                return;
+            }
+
+  
+            const cost = tech.cost(currentLevel + 1);
+            if ((player.researchEssence || 0) < cost) {
+                pushLog(player, `[연구] 무한의 정수가 부족합니다. (필요: ${cost.toLocaleString()})`);
+                return;
+            }
+
+            player.researchEssence -= cost;
+            playerResearchLevels.set(techId, currentLevel + 1);
+            
+            pushLog(player, `[연구] <span class="Legendary">${tech.name}</span> 연구를 완료했습니다. (Lv.${currentLevel + 1})`);
+
+            calculateTotalStats(player);
+
+            sendState(socket, player, calcMonsterStats(player));
+        })
         .on('admin:startEvent', (eventData) => {
             if (socket.role !== 'admin') return;
             const { type, multiplier, duration, unit, description } = eventData;
@@ -3008,34 +3098,53 @@ io.on('connection', async (socket) => {
             socket.emit('eventStatusUpdate', activeEvents);
         })
         .on('rerollPrefix', ({ uid }) => rerollItemPrefix(onlinePlayers[socket.userId], uid))
-        .on('spirit:create', async () => {
-            const player = onlinePlayers[socket.userId];
-            if (!player) return;
-            const essenceItemIndex = player.inventory.findIndex(i => i.id === 'spirit_essence');
-            if (essenceItemIndex === -1 || player.inventory[essenceItemIndex].quantity < 100) {
-                return player.socket.emit('serverAlert', '정령의 형상이 부족합니다. (100개 필요)');
-            }
-            player.inventory[essenceItemIndex].quantity -= 100;
-            if (player.inventory[essenceItemIndex].quantity <= 0) {
-                player.inventory.splice(essenceItemIndex, 1);
-            }
-            let spiritId;
-            const rand = Math.random();
-            if (rand < 0.7) { 
-                spiritId = 'spirit_rare';
-            } else if (rand < 0.9) { 
-                spiritId = 'spirit_legendary';
-            } else { 
-                spiritId = 'spirit_mystic';
-            }
-            const newSpirit = createItemInstance(spiritId);
-            if (newSpirit) {
-                handleItemStacking(player, newSpirit);
-                player.socket.emit('spirit:created', { newSpirit });
-                pushLog(player, `형상의 힘이 응축되어 <span class="${newSpirit.grade}">${newSpirit.name}</span>이(가) 당신을 따릅니다!`);
-            }
-            sendInventoryUpdate(player);
-        })
+		
+      .on('spirit:create', async ({ quantity }) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player) return;
+    const exchangeCount = Math.max(1, parseInt(quantity, 10) || 1);
+    const requiredAmount = exchangeCount * 100;
+
+    const essenceItemIndex = player.inventory.findIndex(i => i.id === 'spirit_essence');
+    if (essenceItemIndex === -1 || player.inventory[essenceItemIndex].quantity < requiredAmount) {
+        return player.socket.emit('serverAlert', '정령의 형상이 부족합니다.');
+    }
+
+    player.inventory[essenceItemIndex].quantity -= requiredAmount;
+    if (player.inventory[essenceItemIndex].quantity <= 0) {
+        player.inventory.splice(essenceItemIndex, 1);
+    }
+
+    let totalSummons = { 'spirit_rare': 0, 'spirit_legendary': 0, 'spirit_mystic': 0 };
+
+    for (let i = 0; i < exchangeCount; i++) {
+        let spiritId;
+        const rand = Math.random();
+        if (rand < 0.7) { 
+            spiritId = 'spirit_rare';
+        } else if (rand < 0.9) { 
+            spiritId = 'spirit_legendary';
+        } else { 
+            spiritId = 'spirit_mystic';
+        }
+        totalSummons[spiritId]++;
+    }
+
+    let obtainedSpiritsText = [];
+    for (const spiritId in totalSummons) {
+        if (totalSummons[spiritId] > 0) {
+            const newSpirit = createItemInstance(spiritId, totalSummons[spiritId]);
+            handleItemStacking(player, newSpirit);
+            obtainedSpiritsText.push(`${newSpirit.name} ${totalSummons[spiritId]}개`);
+        }
+    }
+
+    const resultMessage = `정령의 형상 ${requiredAmount}개를 사용하여 ${obtainedSpiritsText.join(', ')}를 소환했습니다.`;
+    pushLog(player, resultMessage.replace(/<[^>]*>/g, ''));
+    player.socket.emit('serverAlert', resultMessage.replace(/<[^>]*>/g, ''));
+
+    sendInventoryUpdate(player);
+})
         .on('autoSell:get', (callback) => {
             const player = onlinePlayers[socket.userId];
             if (player && player.autoSellList) {
@@ -3081,6 +3190,9 @@ io.on('connection', async (socket) => {
                 'soulstone_attack': { price: 50 },
                 'soulstone_hp': { price: 50 },
                 'soulstone_defense': { price: 50 },
+				'gold_potion': { price: 30 },
+'drop_potion': { price: 30 },
+'stat_potion': { price: 30 },
                 'w005': { price: 100 },
                 'a005': { price: 100 },
                 'acc_necklace_01': { price: 100 },
@@ -3299,11 +3411,112 @@ io.on('connection', async (socket) => {
                 if (player) player.isBusy = false;
             }
         })
+.on('spirit:exchangeShards', ({ quantity }) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player) return;
+
+    const exchangeCount = Math.max(1, parseInt(quantity, 10) || 1);
+    const requiredAmount = exchangeCount * 100;
+
+    const essenceStack = player.inventory.find(i => i.id === 'spirit_essence');
+    if (!essenceStack || essenceStack.quantity < requiredAmount) {
+        return player.socket.emit('serverAlert', '정령의 형상이 부족합니다.');
+    }
+
+    essenceStack.quantity -= requiredAmount;
+    if (essenceStack.quantity <= 0) {
+        player.inventory = player.inventory.filter(i => i.uid !== essenceStack.uid);
+    }
+
+    let totalShardAmount = 0;
+    for (let i = 0; i < exchangeCount; i++) {
+        totalShardAmount += Math.floor(Math.random() * 10) + 1; // 1~10 랜덤
+    }
+
+    const newShards = createItemInstance('rift_shard_abyss', totalShardAmount);
+    handleItemStacking(player, newShards);
+
+    const resultMessage = `[변환] 정령의 형상 ${requiredAmount}개를 변환하여 심연의 파편 ${totalShardAmount}개를 획득했습니다.`;
+    pushLog(player, resultMessage.replace(/<[^>]*>/g, ''));
+    player.socket.emit('serverAlert', resultMessage.replace(/<[^>]*>/g, ''));
+
+    sendInventoryUpdate(player);
+    sendPlayerState(player);
+})
 
 
+.on('scroll:exchangeShards', ({ uid, quantity }) => {
+    const player = onlinePlayers[socket.userId];
+    if (!player || !uid) return;
 
+    const quantityToExchange = Math.max(1, parseInt(quantity, 10) || 1);
 
+    const scrollIndex = player.inventory.findIndex(i => i.uid === uid);
+    if (scrollIndex === -1) {
+        return player.socket.emit('serverAlert', '교환할 주문서를 찾을 수 없습니다.');
+    }
 
+    const scroll = player.inventory[scrollIndex];
+    if (scroll.category !== 'Scroll' || scroll.quantity < quantityToExchange) {
+        return player.socket.emit('serverAlert', '주문서 수량이 부족합니다.');
+    }
+
+    let totalShardAmount = 0;
+    const scrollId = scroll.id;
+
+    for (let i = 0; i < quantityToExchange; i++) {
+        if (scrollId.includes('_100')) {
+            totalShardAmount += 1;
+        } else if (scrollId.includes('_70')) {
+            totalShardAmount += Math.floor(Math.random() * 5) + 1;
+        } else if (scrollId.includes('_30')) {
+            totalShardAmount += Math.floor(Math.random() * 30) + 1;
+        } else if (scrollId.includes('_10')) {
+            totalShardAmount += Math.floor(Math.random() * 41) + 10;
+        }
+    }
+
+    if (totalShardAmount === 0) return;
+
+    scroll.quantity -= quantityToExchange;
+    if (scroll.quantity <= 0) {
+        player.inventory.splice(scrollIndex, 1);
+    }
+
+    const newShards = createItemInstance('rift_shard_abyss', totalShardAmount);
+    handleItemStacking(player, newShards);
+
+    const logMessage = `[교환] ${scroll.name} ${quantityToExchange}개를 <span class="Primal">심연의 파편 ${totalShardAmount}개</span>로 교환했습니다.`;
+    pushLog(player, logMessage);
+    player.socket.emit('serverAlert', logMessage.replace(/<[^>]*>/g, '')); 
+
+    sendInventoryUpdate(player);
+    sendPlayerState(player);
+
+    socket.emit('enhancementResult', { result: 'exchange_complete', newItem: null, destroyed: true });
+})
+
+.on('autoHatch:toggle', async () => {
+            const player = onlinePlayers[socket.userId];
+            if (!player) return;
+
+            player.autoHatchActive = !player.autoHatchActive;
+            
+            if (player.autoHatchActive) {
+                pushLog(player, '[자동 부화] 자동 부화 시스템을 활성화합니다.');
+                runAutoHatch(player); // 활성화 즉시 실행
+            } else {
+                pushLog(player, '[자동 부화] 자동 부화 시스템을 비활성화합니다.');
+            }
+
+            sendPlayerState(player);
+
+            try {
+                await GameData.updateOne({ user: socket.userId }, { $set: { autoHatchActive: player.autoHatchActive } });
+            } catch (error) {
+                console.error(`[자동 부화] DB 상태 저장 실패: ${player.username}`, error);
+            }
+        })
 
       .on('disconnect', async () => { 
             console.log(`[연결 해제] 유저: ${socket.username}`);
@@ -3385,9 +3598,79 @@ function hasBuff(player, buffId) {
     return player.buffs.some(b => b.id === buffId && new Date(b.endTime) > Date.now());
 }
 
+function runAutoHatch(player) {
+    if (!player || !player.autoHatchActive || !player.incubators || player.inventory.length === 0) {
+        return;
+    }
+
+    const emptySlotsIndexes = [];
+    player.incubators.forEach((slot, index) => {
+        if (!slot || !slot.egg) {
+            emptySlotsIndexes.push(index);
+        }
+    });
+
+    if (emptySlotsIndexes.length === 0) {
+        return;
+    }
+
+    const eggPriority = ['pet_egg_mythic', 'pet_egg_ancient', 'pet_egg_normal'];
+    const availableEggs = player.inventory.filter(i => i && i.category === 'Egg');
+
+    if (availableEggs.length === 0) {
+        return;
+    }
+
+    availableEggs.sort((a, b) => {
+        return eggPriority.indexOf(a.id) - eggPriority.indexOf(b.id);
+    });
+
+    let eggIndex = 0;
+    for (const slotIndex of emptySlotsIndexes) {
+        if (eggIndex >= availableEggs.length) {
+            break; // 더 이상 사용할 알이 없음
+        }
+
+        const eggToHatch = availableEggs[eggIndex];
+        
+        const inventoryItemIndex = player.inventory.findIndex(i => i.uid === eggToHatch.uid);
+        if (inventoryItemIndex > -1) {
+            const eggStack = player.inventory[inventoryItemIndex];
+            if (eggStack.quantity > 1) {
+                eggStack.quantity--;
+                player.incubators[slotIndex].egg = { ...eggStack, quantity: 1 };
+            } else {
+                player.incubators[slotIndex].egg = player.inventory.splice(inventoryItemIndex, 1)[0];
+            }
+
+            let hatchDuration = itemData[eggToHatch.id]?.hatchDuration;
+            if (hatchDuration) {
+                const titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
+                if (titleEffects && titleEffects.hatchTimeReduction) {
+                    hatchDuration *= (1 - titleEffects.hatchTimeReduction);
+                }
+                player.incubators[slotIndex].hatchDuration = hatchDuration;
+                player.incubators[slotIndex].hatchCompleteTime = new Date(Date.now() + hatchDuration);
+                
+                pushLog(player, `[자동 부화] ${player.incubators[slotIndex].egg.name}을(를) ${slotIndex + 1}번 부화기에 등록하고 부화를 시작합니다.`);
+            }
+        }
+        
+        eggIndex++;
+    }
+
+    if (eggIndex > 0) {
+        sendInventoryUpdate(player);
+    }
+}
+
 function gameTick(player) {
    if (!player || !player.socket) return;
     player.stateSentThisTick = false;
+
+   if (player.autoHatchActive) {
+        runAutoHatch(player);
+    }
 
     if (player.dpsSession && player.dpsSession.isActive) {
         runDpsSimulation(player);
@@ -3461,14 +3744,12 @@ function gameTick(player) {
          }
      }
      if (player.raidState && player.raidState.isActive) {
-        // ========== FIX STARTS HERE ==========
         const raidBoss = player.raidState.monster;
         if (!raidBoss) {
             console.error(`[CRITICAL] Player ${player.username} is in an active raid (floor ${player.raidState.floor}) but has no monster object. Forcing raid end to prevent crash.`);
-            endPersonalRaid(player, true); // End the raid to fix the state
-            return; // Exit the tick for this player
+            endPersonalRaid(player, true); 
+            return; 
         }
-        // ========== FIX ENDS HERE ==========
 
          let pDmg = 0;
          let mDmg = 0;
@@ -3825,6 +4106,16 @@ function onClearFloor(p) {
     let eventDropMultiplier = 1;
     let isPrimalEventActive = false;
 
+
+   let potionGoldMultiplier = 1;
+if (p.potionBuffs && p.potionBuffs.gold && new Date(p.potionBuffs.gold) > Date.now()) {
+    potionGoldMultiplier = 2;
+}
+let potionDropMultiplier = 1;
+if (p.potionBuffs && p.potionBuffs.drop && new Date(p.potionBuffs.drop) > Date.now()) {
+    potionDropMultiplier = 2;
+}
+
     for (const eventType in activeEvents) {
         const event = activeEvents[eventType];
         if (event.type === 'gold') {
@@ -3898,6 +4189,8 @@ if (clearedFloor >= 1000000 && Math.random() < 0.001) {
     goldEarned = Math.floor(goldEarned * titleGoldGainBonus);
     
     goldEarned = Math.floor(goldEarned * eventGoldMultiplier);
+    
+    goldEarned = Math.floor(goldEarned * potionGoldMultiplier);
 
     p.gold += goldEarned;
     
@@ -3912,7 +4205,7 @@ if (clearedFloor >= 1000000 && Math.random() < 0.001) {
         pushLog(p, `[보스] <span class="Mystic">무한의 정수</span> ${essenceGained}개를 획득했습니다!`);
     } 
 else if (clearedFloor >= 1000000) { 
-    if (Math.random() < 0.001) {
+    if (Math.random() < 0.003) {
         const essenceGained = Math.floor(Math.random() * 5) + 1; 
         p.researchEssence = (p.researchEssence || 0) + essenceGained;
         pushLog(p, `[심연] <span class="Mystic">무한의 정수</span> ${essenceGained}개를 획득했습니다!`);
@@ -3930,6 +4223,7 @@ else if (clearedFloor >= 1000000) {
         skippedGold = Math.floor(skippedGold * goldBonusPercent);
         skippedGold = Math.floor(skippedGold * titleGoldGainBonus);
         skippedGold = Math.floor(skippedGold * eventGoldMultiplier);
+        skippedGold = Math.floor(skippedGold * potionGoldMultiplier);
         p.gold += skippedGold;
         
         if (isBossFloor(skippedFloor)) {
@@ -3949,6 +4243,7 @@ else if (clearedFloor >= 1000000) {
         skippedGold = Math.floor(skippedGold * goldBonusPercent);
         skippedGold = Math.floor(skippedGold * titleGoldGainBonus); 
         skippedGold = Math.floor(skippedGold * eventGoldMultiplier);
+        skippedGold = Math.floor(skippedGold * potionGoldMultiplier);
         p.gold += skippedGold;
 
         if (isBossFloor(skippedFloor)) {
@@ -3973,7 +4268,8 @@ else if (clearedFloor >= 1000000) {
             if (itemId === 'rift_shard' && titleRiftShardDropRateBonus > 1) {
                 finalChance *= titleRiftShardDropRateBonus;
             }
-            if (Math.random() < finalChance * eventDropMultiplier) {
+
+            if (Math.random() < finalChance * eventDropMultiplier * potionDropMultiplier) {
                 const droppedItem = createItemInstance(itemId);
                 if (droppedItem) {
                     handleItemStacking(p, droppedItem);
@@ -3985,7 +4281,7 @@ else if (clearedFloor >= 1000000) {
         }
     }
 
-    const dropChance = (isBoss ? 0.10 : 0.02) * titleItemDropRateBonus * (1 + pioneerBonuses.itemDropRatePercent) * eventDropMultiplier;
+    const dropChance = (isBoss ? 0.10 : 0.02) * titleItemDropRateBonus * (1 + pioneerBonuses.itemDropRatePercent) * eventDropMultiplier * potionDropMultiplier;
 
     if (Math.random() < dropChance) {
         let grade, acc = 0, r = Math.random();
@@ -4009,11 +4305,9 @@ else if (clearedFloor >= 1000000) {
 
     let effectiveGlobalLootTable = [...gameSettings.globalLootTable];
     if (isPrimalEventActive) {
-
         const primalWeaponsArmors = ['primal_w01', 'primal_a01'];
         const primalAccessories = ['primal_acc_necklace_01', 'primal_acc_earring_01', 'primal_acc_wristwatch_01'];
         
-
         const primalWeaponArmorChance = gameSettings.dropTable[5].rates.Primal || 0.0000005;
         const primalAccessoryChance = (gameSettings.dropTable[6].rates.Primal - gameSettings.dropTable[5].rates.Primal) / 3 || 0.0000005;
 
@@ -4026,9 +4320,8 @@ else if (clearedFloor >= 1000000) {
         if (titleEffects && titleEffects.itemDropRate) {
             finalChance *= (1 + titleEffects.itemDropRate);
         }
-		
 
-        if (Math.random() < finalChance * eventDropMultiplier) {
+        if (Math.random() < finalChance * eventDropMultiplier * potionDropMultiplier) {
             const droppedItem = createItemInstance(itemInfo.id);
             if (droppedItem) {
                 handleItemStacking(p, droppedItem);
@@ -4057,7 +4350,7 @@ else if (clearedFloor >= 1000000) {
     ];
 
     for (const drop of scrollDropTable) {
-        if (Math.random() < drop.chance) {
+        if (Math.random() < drop.chance * potionDropMultiplier * eventDropMultiplier) {
             const droppedItem = createItemInstance(drop.id);
             if (droppedItem) {
                 handleItemStacking(p, droppedItem);
@@ -4071,6 +4364,7 @@ else if (clearedFloor >= 1000000) {
 
 
 }
+
 
 async function attemptEnhancement(p, { uid, useTicket, useHammer }, socket) {
     if (!p) return;
@@ -4978,7 +5272,9 @@ incubators: player.incubators,
  kakaoId: player.kakaoId,
         research: serializableResearch, 
         researchEssence: player.researchEssence || 0 ,
+		potionBuffs: player.potionBuffs || { gold: null, drop: null, stat: null },
 		shield: player.shield ,
+autoHatchActive: player.autoHatchActive,
 		dpsSession: player.dpsSession
     };
 
@@ -5056,7 +5352,24 @@ function useItem(player, uid, useAll = false, targetUid = null) {
     const titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
     
     switch (item.id) {
+		case 'gold_potion':
+        if (!player.potionBuffs) player.potionBuffs = { gold: null, drop: null, stat: null };
+        player.potionBuffs.gold = new Date(Date.now() + 3600000);
+        messages.push(`[골드 물약] 1시간 동안 골드 획득량이 2배 증가합니다.`);
+        break;
 
+    case 'drop_potion':
+        if (!player.potionBuffs) player.potionBuffs = { gold: null, drop: null, stat: null };
+        player.potionBuffs.drop = new Date(Date.now() + 3600000);
+        messages.push(`[드롭 물약] 1시간 동안 아이템 드롭률이 2배 증가합니다.`);
+        break;
+
+    case 'stat_potion':
+        if (!player.potionBuffs) player.potionBuffs = { gold: null, drop: null, stat: null };
+        player.potionBuffs.stat = new Date(Date.now() + 3600000);
+        messages.push(`[버프 물약] 1시간 동안 모든 기본 능력치(공/방/체)가 2배 증가합니다.`);
+        calculateTotalStats(player);
+        break;
 case 'abyssal_box':
         const lootTable = [
             { id: 'bahamut_essence', chance: 0.02 }, // 2%
@@ -5291,8 +5604,11 @@ messages.push(`[심연의 상자] 상자에서 [${fallbackItem.grade}] ${fallbac
     sendState(player.socket, player, calcMonsterStats(player));
     sendInventoryUpdate(player);
 }
-    
-function placeEggInIncubator(player, { uid, slotIndex }) {
+    function placeEggInIncubator(player, { uid, slotIndex }) {
+    if (player.autoHatchActive) {
+        pushLog(player, '[자동 부화] 자동 부화 중에는 수동으로 알을 등록할 수 없습니다.');
+        return;
+    }
     if (!player || slotIndex < 0 || slotIndex >= 6) return;
 
     const incubatorSlot = player.incubators[slotIndex];
@@ -5309,9 +5625,9 @@ function placeEggInIncubator(player, { uid, slotIndex }) {
 
     const newEgg = player.inventory[itemIndex];
 	
-if (!player.incubators[slotIndex]) {
-    player.incubators[slotIndex] = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
-}
+    if (!player.incubators[slotIndex]) {
+        player.incubators[slotIndex] = { egg: null, hatchCompleteTime: null, hatchDuration: 0 };
+    }
 	
     if (newEgg.quantity > 1) {
         newEgg.quantity--; 
@@ -5360,6 +5676,11 @@ function onHatchComplete(player, slotIndex) {
     }
     checkStateBasedTitles(player);
     sendInventoryUpdate(player);
+
+if (player.autoHatchActive) {
+        runAutoHatch(player);
+    }
+
 }
 
 function equipPet(player, uid) {
@@ -5817,6 +6138,8 @@ if (grade && grade !== 'Primal') {
     }
 
 }
+
+
 
 
 function startEventCheckInterval() {

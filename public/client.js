@@ -647,6 +647,7 @@ function initializeGame(socket) {
     let currentPostId = null; 
     let selectedItemUidForAction = null;
     let returnCooldownTimer = null;
+	let potionTimerInterval = null;
 	
 	  let dpsTimerInterval = null;
     let currentViewedDpsRecord = null;
@@ -1092,6 +1093,8 @@ spirit: document.getElementById('spirit-inventory'),
         },
 incubator: {
     grid: document.getElementById('incubator-grid-container'),
+    controls: document.getElementById('auto-hatch-controls'),
+    toggleBtn: document.getElementById('auto-hatch-toggle-btn')
 },
         worldBoss: { 
             container: document.getElementById('world-boss-container'), 
@@ -1244,7 +1247,10 @@ scroll: {
    { id: 'soulstone_attack', name: '파괴자의 소울스톤', description: '공격력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'power_stone.png', grade: 'Primal' },
     { id: 'soulstone_hp', name: '선구자의 소울스톤', description: '체력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'hp_stone.png', grade: 'Primal' },
     { id: 'soulstone_defense', name: '통찰자의 소울스톤', description: '방어력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'def_stone.png', grade: 'Primal' },
-    { id: 'w005', name: '태초의 파편', description: '미스틱 무기', price: 100, image: 'sword5.png', grade: 'Mystic' },
+{ id: 'gold_potion', name: '골드 물약', description: '1시간 동안 최종 골드 획득량이 2배 증가합니다.', price: 30, image: 'gold_potion.png', grade: 'Legendary' },
+{ id: 'drop_potion', name: '드롭 물약', description: '1시간 동안 최종 아이템 드롭률이 2배 증가합니다.', price: 30, image: 'drop_potion.png', grade: 'Legendary' },
+{ id: 'stat_potion', name: '버프 물약', description: '1시간 동안 최종 공/방/체가 2배 증가합니다.', price: 30, image: 'stat_potion.png', grade: 'Legendary' },   
+   { id: 'w005', name: '태초의 파편', description: '미스틱 무기', price: 100, image: 'sword5.png', grade: 'Mystic' },
     { id: 'a005', name: '세계수의 심장', description: '미스틱 방어구', price: 100, image: 'armor5.png', grade: 'Mystic' },
     { id: 'acc_necklace_01', name: '윤회의 목걸이', description: '미스틱 목걸이.', price: 100, image: 'necklace_01.png', grade: 'Mystic' },
     { id: 'acc_earring_01', name: '찰나의 각성 이어링', description: '미스틱 귀걸이.', price: 100, image: 'earring_01.png', grade: 'Mystic' },
@@ -1914,12 +1920,12 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
     };
 	
 
-	const updateUI = ({ player, monster, isInRaid = false }) => {
+const updateUI = ({ player, monster, isInRaid = false }) => {
     currentPlayerState = player;
     if (!currentPlayerState.spiritInventory) currentPlayerState.spiritInventory = [];
     updateTopBarInfo(player);
 
-    // 재화 업데이트
+
     const essenceDisplaySpan = document.querySelector('.research-essence-display span');
     if (essenceDisplaySpan) {
         essenceDisplaySpan.textContent = (player.researchEssence || 0).toLocaleString();
@@ -1929,11 +1935,9 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
         elements.gold.textContent = formatInt(player.gold);
     }
 
-    // 플레이어 HP 및 기본 스탯 업데이트
     elements.player.hpBar.style.width = `${(player.currentHp / player.stats.total.hp) * 100}%`;
     elements.player.hpText.textContent = `${formatFloat(player.currentHp)} / ${formatFloat(player.stats.total.hp)}`;
     
-    // 플레이어 보호막 (제련 효과)
     if (player.shield !== undefined && player.stats.shield > 0) {
         if (elements.player.shieldContainer) elements.player.shieldContainer.style.display = 'block';
         const shieldPercent = (player.shield / player.stats.shield) * 100;
@@ -1958,7 +1962,6 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
     const bonusDefense = Math.max(0, totalDefense - baseDefense);
     elements.player.totalDefense.textContent = `${formatInt(baseDefense)} (+${formatInt(bonusDefense)})`;
 
-    // 플레이어 특수 스탯 (Client.js 최신화 반영)
     if (elements.player.specialStatsGrid) {
         elements.player.specialStatsGrid.innerHTML = `
             <div>💥 치명타: <strong>${(player.stats.critChance * 100).toFixed(2)}%</strong></div>
@@ -1974,20 +1977,15 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
         `;
     }
 
-    // --- 게임 상태 관리 및 버튼 로직 정리 ---
 
     const isDpsActive = player.dpsSession && player.dpsSession.isActive;
     const isFoundryActive = player.isInFoundryOfTime;
-    // isInRaid는 매개변수로 제공됨
 
-    // 자주 사용되는 요소 캐싱
     const foundryBtn = elements.foundry.toggleBtn;
-    // floor-action-buttons는 client.js의 HTML 구조상 레이드/DPS/제련소 버튼을 포함하는 컨테이너로 가정합니다.
     const floorActionButtons = document.querySelector('.floor-action-buttons'); 
     const barrierContainer = document.getElementById('monster-barrier-container');
     const abilityIcons = elements.monster.abilityIcons;
 
-    // 버튼 및 UI 요소 기본값 초기화 (일반 등반 기준)
     if (floorActionButtons) floorActionButtons.style.display = 'flex';
     if (foundryBtn) {
         foundryBtn.style.display = 'block';
@@ -2002,58 +2000,43 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
     if (barrierContainer) barrierContainer.style.display = 'none';
     if (abilityIcons) abilityIcons.style.display = 'none';
 
-    // 상태별 분기 처리 (몬스터 이름 및 버튼 제어)
     if (isDpsActive) {
-        // 1. DPS 측정 중
-        // 몬스터 이름은 DPS 타이머가 처리하지만 기본값 설정
-     //   elements.monster.level.innerHTML = `<span style="color:#e67e22; font-weight: bold;">[수련장] 측정 중...</span>`;
-        
+
         if (floorActionButtons) floorActionButtons.style.display = 'none';
         if (foundryBtn) foundryBtn.style.display = 'none';
         elements.monster.abortDpsBtn.style.display = 'block';
-        // 등반 컨트롤(100만층) 숨김
         if (elements.floorControls.container) elements.floorControls.container.style.display = 'none';
 
 
     } else if (isFoundryActive) {
-        // 2. 시간의 제련소
         elements.monster.level.innerHTML = `<span style="color:#8e44ad; font-weight:bold;">${monster.name || '시간의 제련소'}</span>`;
 
-        // 레이드/DPS 버튼 숨김
         if (elements.floorControls.personalRaidBtn) elements.floorControls.personalRaidBtn.style.display = 'none';
         if (elements.floorControls.startDpsBtn) elements.floorControls.startDpsBtn.style.display = 'none';
         
-        // 제련소 버튼 -> 등반 복귀로 변경
         if (foundryBtn) {
             foundryBtn.textContent = '등반 복귀';
             foundryBtn.style.backgroundColor = 'var(--fail-color)';
         }
-        // 등반 컨트롤(100만층) 숨김
         if (elements.floorControls.container) elements.floorControls.container.style.display = 'none';
 
 
     } else if (isInRaid) {
-        // 3. 개인 레이드
         elements.monster.level.innerHTML = `<span style="color:#c0392b; font-weight:bold;">[개인 레이드 ${monster.floor}층] ${monster.name}</span>`;
         
-        // 다른 버튼 숨기고 레이드 나가기 버튼 표시
         if (floorActionButtons) floorActionButtons.style.display = 'none';
         if (foundryBtn) foundryBtn.style.display = 'none';
         elements.monster.leaveRaidBtn.style.display = 'block';
-        // 등반 컨트롤(100만층) 숨김
         if (elements.floorControls.container) elements.floorControls.container.style.display = 'none';
 
 
     } else {
-        // 4. 일반 등반
         elements.monster.level.innerHTML = monster.isBoss
             ? `<span style="color:var(--fail-color); font-weight:bold;">${formatInt(monster.level)}층 보스</span>`
             : `${formatInt(monster.level)}층`;
         
-        // 등반 컨트롤(100만층) 표시
         if (elements.floorControls.container) elements.floorControls.container.style.display = 'flex';
 
-        // 100만층 이상 전용 컨트롤 (최전선 복귀/안전지대 이동)
         const { safeZoneBtn, frontlineBtn } = elements.floorControls;
         const canUseFrontline = player.maxLevel >= 1000000;
         
@@ -2092,7 +2075,6 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
         }
     }
 
-    // --- 몬스터 스탯 및 보호막(Barrier) 업데이트 ---
 
     if (isDpsActive) {
         elements.monster.hpBar.style.width = `100%`;
@@ -2103,23 +2085,20 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
 
     } else if (isFoundryActive) {
         elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
-        // 제련소 몬스터는 HP가 1이므로 formatFloat 대신 일반 텍스트 사용이 적합할 수 있음
         elements.monster.hpText.textContent = `HP: ${monster.currentHp} / ${monster.hp}`;
         elements.monster.totalHp.textContent = monster.hp.toLocaleString();
         elements.monster.attack.textContent = '0';
         elements.monster.defense.textContent = '0';
 
     } else {
-        // 레이드 또는 일반 등반 시 몬스터 스탯 업데이트
         elements.monster.hpBar.style.width = `${(monster.currentHp / monster.hp) * 100}%`;
         elements.monster.hpText.textContent = `${formatFloat(monster.currentHp)} / ${formatFloat(monster.hp)}`;
         elements.monster.totalHp.textContent = formatFloat(monster.hp);
         elements.monster.attack.textContent = formatFloat(monster.attack);
         elements.monster.defense.textContent = formatFloat(monster.defense);
 
-        // ** 복구된 보호막(Barrier) 및 어빌리티 로직 **
         const showAbilities = monster.distortion > 0 || monster.empoweredAttack > 0;
-        const showBarrier = monster.barrier > 0; // 서버에서 값을 주면 표시 (100만층 이상)
+        const showBarrier = monster.barrier > 0;
 
         if (showBarrier && barrierContainer) {
             barrierContainer.style.display = 'block';
@@ -2140,18 +2119,17 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
         }
     }
 
-    // 버프 표시
     const buffsContainer = document.getElementById('player-buffs-container');
     buffsContainer.innerHTML = '';
     if (player.buffs && player.buffs.length > 0) {
         player.buffs.forEach(buff => {
+            if (buff.id.includes('_potion_buff')) return;
             const remainingTime = Math.max(0, Math.floor((new Date(buff.endTime) - new Date()) / 1000));
             const buffIdClass = buff.id.replace(/_/g, '-');
             buffsContainer.innerHTML += `<div class="buff-icon ${buffIdClass}" title="${buff.name}">${buff.name} (${remainingTime}초)</div>`;
         });
     }
 
-    // 장비 및 유물 렌더링
     renderItemInSlot(elements.equipment.weapon, player.equipment.weapon, '⚔️<br>무기', 'weapon');
     renderItemInSlot(elements.equipment.armor, player.equipment.armor, '🛡️<br>방어구', 'armor');
     renderItemInSlot(elements.equipment.pet, player.equippedPet, '🐾<br>펫', 'pet');
@@ -2163,10 +2141,20 @@ itemDiv.className = `inventory-item ${getEnhanceClass(item.enhancement)} ${getRe
         artifactSocketsHeader.innerHTML = player.unlockedArtifacts.map(artifact => artifact ? `<div class="artifact-socket unlocked" title="${artifact.name}: ${artifact.description}"><img src="/image/${artifact.image}" alt="${artifact.name}"></div>` : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`).join('');
     }
 
-    // 기타 UI 업데이트
     renderAllInventories(player);
     renderFusionPanel(player);
     elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
+
+ if (elements.incubator.toggleBtn) {
+        if (player.autoHatchActive) {
+            elements.incubator.toggleBtn.textContent = '자동 부화 OFF';
+            elements.incubator.toggleBtn.classList.add('sell-btn'); // OFF일 때 빨간색 스타일
+        } else {
+            elements.incubator.toggleBtn.textContent = '자동 부화 ON';
+            elements.incubator.toggleBtn.classList.remove('sell-btn');
+        }
+    }
+
     elements.modals.mailbox.button.classList.toggle('new-mail', player.hasUnreadMail);
     updateAffordableButtons();
 
@@ -2219,6 +2207,7 @@ let incubatorTimers = [];
 
 function renderIncubators(incubators) {
     if (!elements.incubator.grid) return;
+const isAutoHatching = currentPlayerState && currentPlayerState.autoHatchActive;
 
     if (window.incubatorTimers) {
         window.incubatorTimers.forEach(timer => clearInterval(timer));
@@ -2259,7 +2248,11 @@ function renderIncubators(incubators) {
 
         } else {
             slotDiv.classList.add('empty');
-            slotDiv.innerHTML = '빈 슬롯<br>(인벤토리에서 알 선택 후 클릭)';
+ if (isAutoHatching) {
+                 slotDiv.innerHTML = '<span style="color: var(--primary-color);">자동 부화<br>작동 중...</span>';
+            } else {
+                 slotDiv.innerHTML = '빈 슬롯<br>(인벤토리에서 알 선택 후 클릭)';
+            }
         }
         elements.incubator.grid.appendChild(slotDiv);
     });
@@ -2267,6 +2260,12 @@ function renderIncubators(incubators) {
 
 if (elements.incubator.grid) {
     elements.incubator.grid.addEventListener('click', (e) => {
+
+ if (currentPlayerState && currentPlayerState.autoHatchActive) {
+        alert('자동 부화가 활성화된 상태에서는 수동으로 조작할 수 없습니다.');
+        return;
+    }
+
     const slotDiv = e.target.closest('.incubator-slot');
     if (!slotDiv) return;
 
@@ -2295,6 +2294,11 @@ if (elements.incubator.grid) {
 });
 }
 
+ if (elements.incubator.toggleBtn) {
+        elements.incubator.toggleBtn.addEventListener('click', () => {
+            socket.emit('autoHatch:toggle');
+        });
+    }
 
     elements.floorControls.personalRaidBtn.addEventListener('click', () => {
         if (!currentPlayerState) return;
@@ -2494,6 +2498,122 @@ if (elements.incubator.grid) {
         selectedInventoryItemUid = null;
         return;
     }
+	
+	if (item && item.id === 'spirit_essence') {
+    const { details, slot, before, after, info, button, checkboxes } = elements.enhancement;
+    selectedInventoryItemUid = item.uid;
+    document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
+    const visibleCard = document.querySelector(`.inventory-item[data-uid="${item.uid}"]`);
+    if (visibleCard) visibleCard.classList.add('selected');
+
+    slot.innerHTML = createEnhancementItemHTML(item);
+    details.style.display = 'none';
+    button.style.display = 'none';
+    checkboxes.style.display = 'none';
+
+    const hasEnough = item.quantity >= 100;
+
+  info.innerHTML = `
+    <div style="text-align: center; font-size: 1.2em; line-height: 1.6;">
+        <p>보유 수량: ${item.quantity.toLocaleString()}개</p>
+        <p style="color: ${hasEnough ? 'var(--text-color)' : 'var(--fail-color)'}; margin-top: 10px;">각 행동에는 100개가 소모됩니다.</p>
+        <div class="interaction-buttons" style="margin-top: 25px; flex-direction: column;">
+            <button id="spirit-summon-btn" class="action-btn equip-btn" style="width: 80%; padding: 15px; font-size: 1.2em;" ${!hasEnough ? 'disabled' : ''}>
+                ✨ 정령 소환
+            </button>
+            <button id="spirit-exchange-shards-btn" class="action-btn list-auction-btn" style="width: 80%; padding: 15px; font-size: 1.2em;" ${!hasEnough ? 'disabled' : ''}>
+                💎 파편 교환 (1~10개)
+            </button>
+        </div>
+    </div>
+`;
+
+    document.getElementById('spirit-summon-btn').addEventListener('click', () => {
+         const quantityInput = prompt(`정령을 몇 번 소환하시겠습니까? (1회당 100개 소모)\n현재 보유량: ${item.quantity}개`, 1);
+        if (quantityInput === null) return;
+        const quantity = parseInt(quantityInput, 10);
+        if (isNaN(quantity) || quantity <= 0 || (quantity * 100) > item.quantity) {
+            return alert('올바른 수량을 입력해주세요.');
+        }
+        if (confirm(`정령의 형상 ${quantity * 100}개를 소모하여 정령을 ${quantity}번 소환하시겠습니까?`)) {
+            socket.emit('spirit:create', { quantity });
+        }
+    });
+
+    document.getElementById('spirit-exchange-shards-btn').addEventListener('click', () => {
+        const quantityInput = prompt(`파편으로 몇 번 교환하시겠습니까? (1회당 100개 소모)\n현재 보유량: ${item.quantity}개`, 1);
+        if (quantityInput === null) return;
+        const quantity = parseInt(quantityInput, 10);
+        if (isNaN(quantity) || quantity <= 0 || (quantity * 100) > item.quantity) {
+            return alert('올바른 수량을 입력해주세요.');
+        }
+        if (confirm(`정령의 형상 ${quantity * 100}개를 소모하여 심연의 파편으로 교환하시겠습니까?`)) {
+            socket.emit('spirit:exchangeShards', { quantity });
+        }
+    });
+
+    return; 
+}
+	
+	if (item && item.category === 'Scroll') {
+    const { details, slot, before, after, info, button, checkboxes } = elements.enhancement;
+    selectedInventoryItemUid = item.uid;
+    document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
+    const visibleCard = document.querySelector(`.inventory-item[data-uid="${item.uid}"]`);
+    if (visibleCard) visibleCard.classList.add('selected');
+
+    slot.innerHTML = createEnhancementItemHTML(item);
+    details.style.display = 'none';
+    button.style.display = 'none';
+    checkboxes.style.display = 'none';
+
+    let exchangeRateText = '';
+    const scrollId = item.id;
+    if (scrollId.includes('_100')) {
+        exchangeRateText = '심연의 파편 1개';
+    } else if (scrollId.includes('_70')) {
+        exchangeRateText = '심연의 파편 1~5개';
+    } else if (scrollId.includes('_30')) {
+        exchangeRateText = '심연의 파편 1~30개';
+    } else if (scrollId.includes('_10')) {
+        exchangeRateText = '심연의 파편 10~50개';
+    }
+
+    info.innerHTML = `
+        <div style="text-align: center; font-size: 1.2em; line-height: 1.6;">
+            <p>이 주문서를 심연의 파편으로 교환합니다.</p>
+            <p>보유 수량: ${item.quantity.toLocaleString()}개</p>
+            <p style="color: var(--primal-color); margin-top: 10px;">개당 예상 보상: ${exchangeRateText}</p>
+            <div class="interaction-buttons" style="margin-top: 25px;">
+                <button id="scroll-exchange-btn" class="action-btn" style="background-color: #8e44ad; padding: 15px 30px; font-size: 1.2em;">
+                    심연의 파편으로 교환
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('scroll-exchange-btn').addEventListener('click', () => {
+        const quantityInput = prompt(`교환할 수량을 입력하세요. (최대: ${item.quantity}개)\n'전체'를 입력하면 모두 교환합니다.`, item.quantity);
+        if (quantityInput === null) return;
+
+        let quantityToExchange;
+        if (quantityInput.toLowerCase() === '전체') {
+            quantityToExchange = item.quantity;
+        } else {
+            quantityToExchange = parseInt(quantityInput, 10);
+        }
+
+        if (isNaN(quantityToExchange) || quantityToExchange <= 0 || quantityToExchange > item.quantity) {
+            return alert('올바른 수량을 입력해주세요.');
+        }
+
+        if (confirm(`[${item.name}] ${quantityToExchange}개를 심연의 파편으로 교환하시겠습니까?`)) {
+            socket.emit('scroll:exchangeShards', { uid: item.uid, quantity: quantityToExchange });
+        }
+    });
+
+    return; // 주문서일 경우, 아래 강화 로직을 실행하지 않고 여기서 함수 종료
+}
 
     selectedInventoryItemUid = item.uid;
     document.querySelectorAll('.inventory-item.selected').forEach(el => el.classList.remove('selected'));
@@ -4047,18 +4167,6 @@ function openResearchDetailModal(playerData, specializationId, techId) {
 }
 
 
-
-  function openSpiritSummonModal(item) {
-    const modal = elements.modals.spiritSummon;
-    if (!modal || !modal.overlay) return;
-
-    currentEssenceItem = item; 
-    
-    modal.countSpan.textContent = (item.quantity || 0).toLocaleString();
-    modal.summonBtn.disabled = (item.quantity || 0) < 100;
-    modal.overlay.style.display = 'flex';
-}
-
   elements.foundry.toggleBtn.addEventListener('click', () => {
         const player = currentPlayerState;
         if (player.raidState && player.raidState.isActive) {
@@ -4451,6 +4559,48 @@ socket.on('refinement:itemUpdated', ({ updatedItem }) => {
         updateRefinementPanel(updatedItem);
     }
 });
+ function updatePotionTimersUI() {
+        if (!currentPlayerState || !currentPlayerState.potionBuffs) return;
+
+        const potionBuffsDisplay = document.getElementById('potion-buffs-display');
+        if (!potionBuffsDisplay) return;
+
+        const now = new Date();
+        const buffsToDisplay = [];
+        
+        if (currentPlayerState.potionBuffs.gold && new Date(currentPlayerState.potionBuffs.gold) > now) {
+            buffsToDisplay.push({ name: '골드 물약(2x)', endTime: new Date(currentPlayerState.potionBuffs.gold) });
+        }
+        if (currentPlayerState.potionBuffs.drop && new Date(currentPlayerState.potionBuffs.drop) > now) {
+            buffsToDisplay.push({ name: '드롭 물약(2x)', endTime: new Date(currentPlayerState.potionBuffs.drop) });
+        }
+        if (currentPlayerState.potionBuffs.stat && new Date(currentPlayerState.potionBuffs.stat) > now) {
+            buffsToDisplay.push({ name: '버프 물약(2x)', endTime: new Date(currentPlayerState.potionBuffs.stat) });
+        }
+
+        if (buffsToDisplay.length === 0) {
+            potionBuffsDisplay.style.display = 'none';
+            return;
+        }
+
+        potionBuffsDisplay.style.display = 'flex';
+        potionBuffsDisplay.innerHTML = ''; // 매번 새로 그림
+        
+        buffsToDisplay.forEach(buff => {
+            const remainingTime = Math.max(0, buff.endTime - now);
+            const minutes = String(Math.floor((remainingTime % 3600000) / 60000)).padStart(2, '0');
+            const seconds = String(Math.floor((remainingTime % 60000) / 1000)).padStart(2, '0');
+            
+            const buffDiv = document.createElement('div');
+            buffDiv.className = 'potion-buff-timer';
+            buffDiv.innerHTML = `${buff.name}: <span class="timer">${minutes}:${seconds}</span>`;
+            potionBuffsDisplay.appendChild(buffDiv);
+        });
+    }
+
+if (potionTimerInterval) clearInterval(potionTimerInterval);
+potionTimerInterval = setInterval(updatePotionTimersUI, 1000);
+
 
 }
 function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, completionPercentage }) {
