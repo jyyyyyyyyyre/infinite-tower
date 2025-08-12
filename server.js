@@ -1669,8 +1669,39 @@ function computeEnhanceBonus(item) {
 async function loadGlobalRecords() { try { const records = await GlobalRecord.find({}); records.forEach(record => { globalRecordsCache[record.recordType] = record; }); console.log('전역 최고 기록을 DB에서 로드했습니다.'); } catch (error) { console.error('전역 기록 로드 중 오류 발생:', error); } }
 async function updateGlobalRecord(recordType, data) { try { const updatedRecord = await GlobalRecord.findOneAndUpdate({ recordType }, { $set: { ...data, updatedAt: new Date() } }, { new: true, upsert: true }); globalRecordsCache[recordType] = updatedRecord; io.emit('globalRecordsUpdate', globalRecordsCache); console.log(`[기록 갱신] ${recordType}:`, data.username, data.itemName || `+${data.enhancementLevel}강`); } catch (error) { console.error(`${recordType} 기록 업데이트 중 오류 발생:`, error); } }
 
-io.use(async (socket, next) => { const token = socket.handshake.auth.token; if (!token) { return next(new Error('인증 오류: 토큰이 제공되지 않았습니다.')); } try { const decoded = jwt.verify(token, JWT_SECRET); socket.userId = decoded.userId; socket.username = decoded.username; socket.role = decoded.role || 'user'; next(); } catch (error) { return next(new Error('인증 오류: 유효하지 않은 토큰입니다.')); } });
+io.use(async (socket, next) => {
+    const token = socket.handshake.auth.token;
+    if (!token) {
+        return next(new Error('인증 오류: 토큰이 제공되지 않았습니다.'));
+    }
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        socket.userId = decoded.userId;
+        socket.username = decoded.username;
+        socket.role = decoded.role || 'user';
+        next();
+    } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            console.log(`[토큰 갱신] 만료된 토큰으로 재접속 시도: ${socket.username || 'unknown'}`);
+            const oldDecoded = jwt.decode(token);
+            if (!oldDecoded || !oldDecoded.userId) {
+                return next(new Error('인증 오류: 손상된 토큰입니다.'));
+            }
 
+            const payload = { userId: oldDecoded.userId, username: oldDecoded.username, role: oldDecoded.role };
+            const newToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '3h' });
+
+            socket.handshake.auth.refreshedToken = newToken;
+            
+            socket.userId = oldDecoded.userId;
+            socket.username = oldDecoded.username;
+            socket.role = oldDecoded.role || 'user';
+            
+            return next();
+        }
+        return next(new Error('인증 오류: 유효하지 않은 토큰입니다.'));
+    }
+});
 async function updateFameScore(socket, gameData) {
     if (!gameData || !gameData.equipment) return;
     const FAME_BY_GRADE = { Common: 10, Rare: 50, Legendary: 150, Epic: 400, Mystic: 1000, Primal: 3000 };
@@ -1700,6 +1731,9 @@ async function updateFameScore(socket, gameData) {
 }
 
 io.on('connection', async (socket) => {
+if (socket.handshake.auth.refreshedToken) {
+        socket.emit('tokenRefreshed', socket.handshake.auth.refreshedToken);
+    }
     const user = await User.findById(socket.userId).select('kakaoId isKakaoVerified isHelper').lean();
     if (!user || !user.isKakaoVerified || !user.kakaoId) {
         socket.emit('forceDisconnect', { message: '카카오 계정과 연동된 계정만 접속할 수 있습니다.' });
@@ -5352,24 +5386,45 @@ function useItem(player, uid, useAll = false, targetUid = null) {
     const titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
     
     switch (item.id) {
-		case 'gold_potion':
-        if (!player.potionBuffs) player.potionBuffs = { gold: null, drop: null, stat: null };
-        player.potionBuffs.gold = new Date(Date.now() + 3600000);
-        messages.push(`[골드 물약] 1시간 동안 골드 획득량이 2배 증가합니다.`);
-        break;
+		 case 'gold_potion': {
+            if (!player.potionBuffs) player.potionBuffs = { gold: null, drop: null, stat: null };
+            const now = Date.now();
+            const currentEndTime = player.potionBuffs.gold ? new Date(player.potionBuffs.gold).getTime() : 0;
+            const startTime = Math.max(now, currentEndTime);
+            const newEndTime = new Date(startTime + 3600000);
+            player.potionBuffs.gold = newEndTime;
+            
+            const totalDurationMinutes = Math.floor((newEndTime.getTime() - now) / 60000);
+            messages.push(`[골드 물약] 효과가 1시간 연장되었습니다. (총 지속시간: ${totalDurationMinutes}분)`);
+            break;
+        }
 
-    case 'drop_potion':
+    case 'drop_potion': {
         if (!player.potionBuffs) player.potionBuffs = { gold: null, drop: null, stat: null };
-        player.potionBuffs.drop = new Date(Date.now() + 3600000);
-        messages.push(`[드롭 물약] 1시간 동안 아이템 드롭률이 2배 증가합니다.`);
+        const now = Date.now();
+        const currentEndTime = player.potionBuffs.drop ? new Date(player.potionBuffs.drop).getTime() : 0;
+        const startTime = Math.max(now, currentEndTime);
+        const newEndTime = new Date(startTime + 3600000);
+        player.potionBuffs.drop = newEndTime;
+        
+        const totalDurationMinutes = Math.floor((newEndTime.getTime() - now) / 60000);
+        messages.push(`[드롭 물약] 효과가 1시간 연장되었습니다. (총 지속시간: ${totalDurationMinutes}분)`);
         break;
+    }
 
-    case 'stat_potion':
+    case 'stat_potion': {
         if (!player.potionBuffs) player.potionBuffs = { gold: null, drop: null, stat: null };
-        player.potionBuffs.stat = new Date(Date.now() + 3600000);
-        messages.push(`[버프 물약] 1시간 동안 모든 기본 능력치(공/방/체)가 2배 증가합니다.`);
+        const now = Date.now();
+        const currentEndTime = player.potionBuffs.stat ? new Date(player.potionBuffs.stat).getTime() : 0;
+        const startTime = Math.max(now, currentEndTime);
+        const newEndTime = new Date(startTime + 3600000);
+        player.potionBuffs.stat = newEndTime;
+
+        const totalDurationMinutes = Math.floor((newEndTime.getTime() - now) / 60000);
+        messages.push(`[버프 물약] 효과가 1시간 연장되었습니다. (총 지속시간: ${totalDurationMinutes}분)`);
         calculateTotalStats(player);
         break;
+    }
 case 'abyssal_box':
         const lootTable = [
             { id: 'bahamut_essence', chance: 0.02 }, // 2%
@@ -5415,25 +5470,35 @@ messages.push(`[심연의 상자] 상자에서 [${fallbackItem.grade}] ${fallbac
         }
         break;
 
-    case 'pure_blood_crystal':
-        if (player.bloodthirst >= 10) {
-            messages.push("[피의 갈망] 이미 최대치(10%)에 도달했습니다.");
-            break;
-        }
-        let successCount = 0;
+  case 'pure_blood_crystal':
+    if (player.bloodthirst >= 10) {
+        let totalShardsGained = 0;
         for (let i = 0; i < quantityToUse; i++) {
-            if (Math.random() < 0.20) { 
-                player.bloodthirst = parseFloat((player.bloodthirst + 0.1).toFixed(1));
-                successCount++;
-            }
+            totalShardsGained += Math.floor(Math.random() * 10) + 1;
         }
-        if (successCount > 0) {
-            messages.push(`[피의 갈망] 순수한 피의 결정 ${quantityToUse}개 중 ${successCount}개 흡수에 성공했습니다! (현재: ${player.bloodthirst}%)`);
-            calculateTotalStats(player);
-        } else {
-            messages.push(`[피의 갈망] 결정 ${quantityToUse}개가 사용자의 피에 스며들지 못했습니다...`);
+
+        if (totalShardsGained > 0) {
+            const shardItem = createItemInstance('rift_shard_abyss', totalShardsGained);
+            handleItemStacking(player, shardItem);
+            messages.push(`[피의 갈망] 최대치(10%)에 도달하여 [심연의 파편] ${totalShardsGained}개로 변환되었습니다.`);
         }
         break;
+    }
+
+    let successCount = 0;
+    for (let i = 0; i < quantityToUse; i++) {
+        if (Math.random() < 0.20) {
+            player.bloodthirst = parseFloat((player.bloodthirst + 0.1).toFixed(1));
+            successCount++;
+        }
+    }
+    if (successCount > 0) {
+        messages.push(`[피의 갈망] 순수한 피의 결정 ${quantityToUse}개 중 ${successCount}개 흡수에 성공했습니다! (현재: ${player.bloodthirst}%)`);
+        calculateTotalStats(player);
+    } else {
+        messages.push(`[피의 갈망] 결정 ${quantityToUse}개가 사용자의 피에 스며들지 못했습니다...`);
+    }
+    break;
 
     case 'box_power':
         for (let i = 0; i < quantityToUse; i++) {
@@ -5601,10 +5666,28 @@ messages.push(`[심연의 상자] 상자에서 [${fallbackItem.grade}] ${fallbac
     if (player.socket) {
         player.socket.emit('useItemResult', { messages: messages.slice(0, 5) }); 
     }
-    sendState(player.socket, player, calcMonsterStats(player));
+
+
+  if (player.isInFoundryOfTime) {
+
+        player.socket.emit('playerStatsOnlyUpdate', {
+            stats: player.stats,
+            currentHp: player.currentHp,
+            shield: player.shield
+        });
+    } else {
+
+        sendState(player.socket, player, calcMonsterStats(player));
+    }
+    sendInventoryUpdate(player);
     sendInventoryUpdate(player);
 }
     function placeEggInIncubator(player, { uid, slotIndex }) {
+ if (!player) {
+        console.error('[오류] placeEggInIncubator 함수에 유효하지 않은 player 객체가 전달되었습니다.');
+        return;
+    }
+
     if (player.autoHatchActive) {
         pushLog(player, '[자동 부화] 자동 부화 중에는 수동으로 알을 등록할 수 없습니다.');
         return;
@@ -5998,7 +6081,7 @@ async function startPersonalRaid(player) {
 }
 
 
-async function endPersonalRaid(player, died = false) { // async 추가
+async function endPersonalRaid(player, died = false) { 
     if (!player || !player.raidState || !player.raidState.isActive) return;
 
     const message = died 

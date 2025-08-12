@@ -247,6 +247,11 @@ function startApp(token) {
         console.log('Socket.IO: 서버에 성공적으로 연결되었습니다.');
         reconnectionOverlay.style.display = 'none';
 
+ const duplicateOverlay = document.getElementById('duplicate-connection-overlay');
+    if (duplicateOverlay) {
+        duplicateOverlay.style.display = 'none';
+    }
+
         if (isFirstConnect) {
 
             isFirstConnect = false;
@@ -288,6 +293,14 @@ function startApp(token) {
         if (err.message.includes('유효하지 않은 토큰')) {
             socket.disconnect();
             forceLogout("세션이 만료되었거나 유효하지 않습니다. 다시 로그인해주세요.");
+        }
+    });
+
+ socket.on('tokenRefreshed', (newToken) => {
+        console.log('서버로부터 갱신된 토큰을 수신했습니다. localStorage를 업데이트합니다.');
+        localStorage.setItem('jwt_token', newToken);
+        if (socket.auth) {
+            socket.auth.token = newToken;
         }
     });
 
@@ -371,7 +384,6 @@ function computeClientEnhanceBonus(item) {
 
 
 function getExpForNextLevelClient(level, currentExp) {
-    // 수정된 최신 경험치 테이블을 하드코딩합니다.
     const EXP_TABLE = [
         0, 15000, 32625, 53231, 77207, 104978, 137000, 173775, 215877, 263945, 318685,
         380885, 451405, 531181, 621218, 722616, 836574, 964375, 1107440, 1267264,
@@ -1501,7 +1513,7 @@ function renderAbyssalShop() {
         }
     });
     elements.modals.ranking.button.addEventListener('click', () => { socket.emit('requestRanking'); elements.modals.ranking.overlay.style.display = 'flex'; });
-    elements.modals.loot.button.addEventListener('click', () => { elements.modals.loot.overlay.style.display = 'flex'; });
+  //  elements.modals.loot.button.addEventListener('click', () => { elements.modals.loot.overlay.style.display = 'flex'; });
     elements.modals.enhancement.button.addEventListener('click', () => { elements.modals.enhancement.overlay.style.display = 'flex'; });
     elements.modals.online.button.addEventListener('click', () => { socket.emit('requestOnlineUsers'); elements.modals.online.overlay.style.display = 'flex'; });
 
@@ -2049,7 +2061,6 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
             } else {
                 if (frontlineBtn) {
                     frontlineBtn.style.display = 'block';
-                    // 쿨타임 처리
                     const cooldown = player.safeZoneCooldownUntil ? new Date(player.safeZoneCooldownUntil) : null;
                     if (cooldown && cooldown > new Date()) {
                         frontlineBtn.disabled = true;
@@ -2148,7 +2159,7 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
  if (elements.incubator.toggleBtn) {
         if (player.autoHatchActive) {
             elements.incubator.toggleBtn.textContent = '자동 부화 OFF';
-            elements.incubator.toggleBtn.classList.add('sell-btn'); // OFF일 때 빨간색 스타일
+            elements.incubator.toggleBtn.classList.add('sell-btn'); 
         } else {
             elements.incubator.toggleBtn.textContent = '자동 부화 ON';
             elements.incubator.toggleBtn.classList.remove('sell-btn');
@@ -2163,7 +2174,6 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
         renderResearchTab(player);
     }
 
-    // 세트 효과 표시
     const setEffectDisplay = document.getElementById('set-effect-display');
     const weapon = player.equipment.weapon;
     const armor = player.equipment.armor;
@@ -2612,7 +2622,7 @@ if (elements.incubator.grid) {
         }
     });
 
-    return; // 주문서일 경우, 아래 강화 로직을 실행하지 않고 여기서 함수 종료
+    return;
 }
 
     selectedInventoryItemUid = item.uid;
@@ -3909,11 +3919,31 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
     }
 
 socket.on('forceDisconnect', (data) => {
-    console.warn('다른 연결로 인해 접속이 종료되었습니다. 메시지:', data.message);
-    localStorage.removeItem('jwt_token'); 
-    location.reload();
-});
+    
+    let overlay = document.getElementById('duplicate-connection-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'duplicate-connection-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+        overlay.style.color = 'white';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.zIndex = '10000';
+        overlay.style.textAlign = 'center';
+        overlay.style.fontSize = '1.5em';
+        overlay.innerHTML = `<p>다른 기기에서 접속하여<br>현재 기기의 연결이 비활성화되었습니다.<br><br><small>(이 창을 새로고침하면 다시 접속할 수 있습니다.)</small></p>`;
+        document.body.appendChild(overlay);
+    }
+    overlay.style.display = 'flex';
 
+    socket.disconnect();
+});
 
     let eventTimerUpdater = null;
  socket.on('eventStarted', (eventData) => {
@@ -4569,13 +4599,13 @@ socket.on('refinement:itemUpdated', ({ updatedItem }) => {
         const buffsToDisplay = [];
         
         if (currentPlayerState.potionBuffs.gold && new Date(currentPlayerState.potionBuffs.gold) > now) {
-            buffsToDisplay.push({ name: '골드 물약(2x)', endTime: new Date(currentPlayerState.potionBuffs.gold) });
+            buffsToDisplay.push({ name: '골드(2x)', endTime: new Date(currentPlayerState.potionBuffs.gold) });
         }
         if (currentPlayerState.potionBuffs.drop && new Date(currentPlayerState.potionBuffs.drop) > now) {
-            buffsToDisplay.push({ name: '드롭 물약(2x)', endTime: new Date(currentPlayerState.potionBuffs.drop) });
+            buffsToDisplay.push({ name: '드롭(2x)', endTime: new Date(currentPlayerState.potionBuffs.drop) });
         }
         if (currentPlayerState.potionBuffs.stat && new Date(currentPlayerState.potionBuffs.stat) > now) {
-            buffsToDisplay.push({ name: '버프 물약(2x)', endTime: new Date(currentPlayerState.potionBuffs.stat) });
+            buffsToDisplay.push({ name: '버프(2x)', endTime: new Date(currentPlayerState.potionBuffs.stat) });
         }
 
         if (buffsToDisplay.length === 0) {
@@ -4584,18 +4614,26 @@ socket.on('refinement:itemUpdated', ({ updatedItem }) => {
         }
 
         potionBuffsDisplay.style.display = 'flex';
-        potionBuffsDisplay.innerHTML = ''; // 매번 새로 그림
+        potionBuffsDisplay.innerHTML = '';
         
-        buffsToDisplay.forEach(buff => {
-            const remainingTime = Math.max(0, buff.endTime - now);
-            const minutes = String(Math.floor((remainingTime % 3600000) / 60000)).padStart(2, '0');
-            const seconds = String(Math.floor((remainingTime % 60000) / 1000)).padStart(2, '0');
-            
-            const buffDiv = document.createElement('div');
-            buffDiv.className = 'potion-buff-timer';
-            buffDiv.innerHTML = `${buff.name}: <span class="timer">${minutes}:${seconds}</span>`;
-            potionBuffsDisplay.appendChild(buffDiv);
-        });
+       buffsToDisplay.forEach(buff => {
+    const remainingTime = Math.max(0, buff.endTime - now);
+
+    const hours = String(Math.floor(remainingTime / 3600000)).padStart(2, '0');
+    const minutes = String(Math.floor((remainingTime % 3600000) / 60000)).padStart(2, '0');
+    const seconds = String(Math.floor((remainingTime % 60000) / 1000)).padStart(2, '0');
+
+    const buffDiv = document.createElement('div');
+    buffDiv.className = 'potion-buff-timer';
+
+    if (remainingTime >= 3600000) {
+        buffDiv.innerHTML = `${buff.name}: <span class="timer">${hours}:${minutes}:${seconds}</span>`;
+    } else {
+        buffDiv.innerHTML = `${buff.name}: <span class="timer">${minutes}:${seconds}</span>`;
+    }
+    
+    potionBuffsDisplay.appendChild(buffDiv);
+});
     }
 
 if (potionTimerInterval) clearInterval(potionTimerInterval);
