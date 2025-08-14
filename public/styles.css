@@ -1578,8 +1578,39 @@ body.auth-view {
 .post-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 10px; }
 #player-buffs-container { display: flex; justify-content: center; gap: 10px; margin-top: 10px; min-height: 28px; }
 .buff-icon { padding: 5px 10px; background-color: var(--gold-color); color: #000; font-weight: bold; border-radius: 6px; box-shadow: 0 0 8px var(--gold-color); animation: pulse-orange 1.5s infinite; font-size: 1.1em; }
-.explore { background-color: var(--success-color); color: #fff; }
-.climb { background-color: var(--secondary-color); color: #fff; }
+.explore, .climb {
+    padding: 8px 15px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .2s;
+    font-size: 1.1em; /* 폰트 크기 살짝 키움 */
+}
+
+/* 일반 몬스터 공격 버튼 (climb) */
+.climb {
+    background-color: var(--secondary-color);
+    color: #fff;
+}
+
+/* 월드 보스 공격 버튼 (explore) */
+#attack-target-toggle-btn.explore {
+    background: linear-gradient(-45deg, #e74c3c, #c0392b, #ff6b6b, #e74c3c);
+    background-size: 400% 400%;
+    color: #ffffff;
+    border: 2px solid #ffdddd;
+    box-shadow: 0 0 10px 2px rgba(255, 59, 48, 0.6), 
+                inset 0 0 8px 1px rgba(255, 255, 255, 0.5);
+    animation: world-boss-button-flow 3s ease infinite;
+    text-shadow: 0 0 5px rgba(0,0,0,0.7);
+}
+
+@keyframes world-boss-button-flow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
 .auction-modal-content { max-width: 1600px; width: 95%; height: 95vh; }
 #auction-container { display: flex; flex-direction: row; gap: 20px; flex-grow: 1; min-height: 0; overflow-y: hidden; }
 .auction-list-panel, .auction-detail-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; background: rgba(0, 0, 0, .2); padding: 10px; border-radius: 8px; }

@@ -1481,9 +1481,11 @@ function calculateTotalStats(player) {
              buffDefenseMultiplier *= 10;
              buffHpMultiplier *= 10;
         } else if (buff.id === 'return_scroll_awakening') {
-             buffAttackMultiplier *= (buff.effects.attackMultiplier || 1);
-             buffDefenseMultiplier *= (buff.effects.defenseMultiplier || 1);
-             buffHpMultiplier *= (buff.effects.hpMultiplier || 1);
+            if (!player.isInFoundryOfTime && !(player.raidState && player.raidState.isActive) && player.attackTarget !== 'worldBoss') {
+                 buffAttackMultiplier *= (buff.effects.attackMultiplier || 1);
+                 buffDefenseMultiplier *= (buff.effects.defenseMultiplier || 1);
+                 buffHpMultiplier *= (buff.effects.hpMultiplier || 1);
+            }
         }
     });
 
@@ -2006,15 +2008,25 @@ autoHatchActive: gameData.autoHatchActive || false
         .on('unequipItem', slot => unequipItem(onlinePlayers[socket.userId], slot))
         .on('attemptEnhancement', ({ uid, useTicket, useHammer }) => attemptEnhancement(onlinePlayers[socket.userId], { uid, useTicket, useHammer }, socket))
         .on('sellItem', ({ uid, sellAll }) => sellItem(onlinePlayers[socket.userId], uid, sellAll))
-        .on('setAttackTarget', (target) => {
+       
+.on('setAttackTarget', (target) => {
             const player = onlinePlayers[socket.userId];
             if (!player) return;
+
             if (target === 'worldBoss') {
                 if (player.attackTarget !== 'worldBoss') {
                     player.stateBeforeBossAttack = player.isExploring ? 'exploring' : 'climbing';
                     player.isExploring = false;
                 }
                 player.attackTarget = 'worldBoss';
+
+                const initialBuffCount = player.buffs.length;
+                player.buffs = player.buffs.filter(buff => !buff.id.includes('awakening'));
+
+                if (player.buffs.length < initialBuffCount) {
+                    calculateTotalStats(player);
+                }
+
             } else { 
                 if (player.stateBeforeBossAttack === 'exploring') {
                     player.isExploring = true;
@@ -2025,6 +2037,7 @@ autoHatchActive: gameData.autoHatchActive || false
             }
             socket.emit('attackTargetChanged', target);
         })
+
         .on('requestRanking', async () => { try { const topLevel = await GameData.find({ maxLevel: { $gt: 1 } }).sort({ maxLevel: -1 }).limit(10).lean(); const topGold = await GameData.find({ gold: { $gt: 0 } }).sort({ gold: -1 }).limit(10).lean(); const topWeapon = await GameData.find({ maxWeaponEnhancement: { $gt: 0 } }).sort({ maxWeaponEnhancement: -1 }).limit(10).lean(); const topArmor = await GameData.find({ maxArmorEnhancement: { $gt: 0 } }).sort({ maxArmorEnhancement: -1 }).limit(10).lean(); socket.emit('rankingData', { topLevel, topGold, topWeapon, topArmor }); } catch (error) { console.error("랭킹 데이터 조회 오류:", error); } })
         .on('requestOnlineUsers', () => {
             const totalUsers = Object.keys(onlinePlayers).length;
@@ -3700,6 +3713,8 @@ function runAutoHatch(player) {
 
 function gameTick(player) {
    if (!player || !player.socket) return;
+     const weapon = player.equipment.weapon;
+     const armor = player.equipment.armor;
     player.stateSentThisTick = false;
 
    if (player.autoHatchActive) {
@@ -3712,7 +3727,55 @@ function gameTick(player) {
         return;
     }
 
-    if (player.isInFoundryOfTime) {
+     let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
+     let titleBossDamageBonus = (titleEffects && titleEffects.bossDamage) ? (1 + titleEffects.bossDamage) : 1;
+     let titleWBBonus = (titleEffects && titleEffects.worldBossDamage) ? (1 + titleEffects.worldBossDamage) : 1;
+     let titleWBContributionBonus = (titleEffects && titleEffects.worldBossContribution) ? (1 + titleEffects.worldBossContribution) : 1;
+
+     if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
+         let pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
+         
+         if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
+             const bloodthirstDamage = worldBossState.maxHp * 0.003;
+             pDmg += bloodthirstDamage;
+             player.currentHp = player.stats.total.hp;
+             pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
+          
+             if (weapon?.prefix === '포식자') {
+                 const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
+                 addBuff(player, 'predator_state', '포식', duration, {});
+             }
+             if (armor?.prefix === '포식자') {
+                 addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+             }
+         }
+         
+         pDmg *= titleWBBonus;
+         worldBossState.currentHp = Math.max(0, (worldBossState.currentHp || 0) - pDmg);
+
+         if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 10000);
+         if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 15000);
+         
+         const userId = player.user.toString();
+         const participant = worldBossState.participants.get(userId) || { username: player.username, damageDealt: 0 };
+         const contributionDamage = pDmg * titleWBContributionBonus;
+         participant.damageDealt = (participant.damageDealt || 0) + contributionDamage;
+         worldBossState.participants.set(userId, participant);
+         const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + (p.damageDealt || 0), 0);
+         const myShare = totalDamage > 0 ? (participant.damageDealt / totalDamage) * 100 : 0;
+         player.socket.emit('myBossContributionUpdate', { myContribution: participant.damageDealt, myShare: myShare });
+         if (!player.worldBossContribution) player.worldBossContribution = { damageDealt: 0, bossId: null };
+         player.worldBossContribution.damageDealt = participant.damageDealt;
+         player.worldBossContribution.bossId = worldBossState.bossId;
+         if (worldBossState.currentHp <= 0) { 
+             worldBossState.lastHitter = player.user.toString();
+             onWorldBossDefeated(); 
+         }
+         sendState(player.socket, player, calcMonsterStats(player));
+         return;
+     }
+
+    if (player.isInFoundryOfTime) {
          if (!player.foundryMonster || player.foundryMonster.hp <= 0) {
              if (Math.random() < 0.01) { 
                  player.foundryMonster = { name: '시간의 균열 감시자', hp: 50, maxHp: 50, isBoss: true };
@@ -3751,8 +3814,6 @@ function gameTick(player) {
          return; 
      }
      
-     const weapon = player.equipment.weapon;
-     const armor = player.equipment.armor;
 
     if (player.buffs && player.buffs.length > 0) {
          const now = Date.now();
@@ -3894,54 +3955,6 @@ function gameTick(player) {
 
          const { socket: _, ...playerStateForClient } = player;
          player.socket.emit('stateUpdate', { player: playerStateForClient, monster: player.raidState.monster, isInRaid: true });
-         return;
-     }
-     
-     let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
-     let titleBossDamageBonus = (titleEffects && titleEffects.bossDamage) ? (1 + titleEffects.bossDamage) : 1;
-     let titleWBBonus = (titleEffects && titleEffects.worldBossDamage) ? (1 + titleEffects.worldBossDamage) : 1;
-     let titleWBContributionBonus = (titleEffects && titleEffects.worldBossContribution) ? (1 + titleEffects.worldBossContribution) : 1;
-
-     if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
-         let pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
-         
-         if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
-             const bloodthirstDamage = worldBossState.maxHp * 0.003;
-             pDmg += bloodthirstDamage;
-             player.currentHp = player.stats.total.hp;
-             pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
-          
-             if (weapon?.prefix === '포식자') {
-                 const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
-                 addBuff(player, 'predator_state', '포식', duration, {});
-             }
-             if (armor?.prefix === '포식자') {
-                 addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
-             }
-         }
-         
-         pDmg *= titleWBBonus;
-         worldBossState.currentHp = Math.max(0, (worldBossState.currentHp || 0) - pDmg);
-
-         if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 10000);
-         if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 15000);
-         
-         const userId = player.user.toString();
-         const participant = worldBossState.participants.get(userId) || { username: player.username, damageDealt: 0 };
-         const contributionDamage = pDmg * titleWBContributionBonus;
-         participant.damageDealt = (participant.damageDealt || 0) + contributionDamage;
-         worldBossState.participants.set(userId, participant);
-         const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + (p.damageDealt || 0), 0);
-         const myShare = totalDamage > 0 ? (participant.damageDealt / totalDamage) * 100 : 0;
-         player.socket.emit('myBossContributionUpdate', { myContribution: participant.damageDealt, myShare: myShare });
-         if (!player.worldBossContribution) player.worldBossContribution = { damageDealt: 0, bossId: null };
-         player.worldBossContribution.damageDealt = participant.damageDealt;
-         player.worldBossContribution.bossId = worldBossState.bossId;
-         if (worldBossState.currentHp <= 0) { 
-             worldBossState.lastHitter = player.user.toString();
-             onWorldBossDefeated(); 
-         }
-         sendState(player.socket, player, calcMonsterStats(player));
          return;
      }
      
@@ -5567,8 +5580,8 @@ messages.push(`[심연의 상자] 상자에서 [${fallbackItem.grade}] ${fallbac
         break;
 
     case 'return_scroll':
-        if (player.isExploring) {
-            messages.push('[복귀 스크롤] 탐험 중에는 사용할 수 없습니다.');
+     if (player.isExploring || (player.raidState && player.raidState.isActive) || player.isInFoundryOfTime || player.attackTarget === 'worldBoss') {
+            messages.push('[복귀 스크롤] 현재 상태에서는 사용할 수 없습니다.');
             if (player.socket) player.socket.emit('useItemResult', { messages });
             return;
         }
