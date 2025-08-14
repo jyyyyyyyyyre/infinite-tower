@@ -4932,6 +4932,10 @@ async function sellItem(player, uid, sellAll) {
             pushLog(player, '[판매] 아이템을 찾을 수 없습니다.');
             return;
         }
+if (item.grade === 'Primal') {
+            pushLog(player, '[판매] 프라이멀 등급은 현재 버그로 판매할 수 없습니다.');
+            return; 
+        }
 
         let goldReward = 0;
         let shardReward = 0;
