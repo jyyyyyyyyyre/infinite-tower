@@ -4656,7 +4656,7 @@ async function announceMysticDrop(player, item) {
             message: bannerMessage 
         };
 
-        io.emit('chatMessage', mysticAnnounce);
+     //   io.emit('chatMessage', mysticAnnounce);
     }
 }
 
