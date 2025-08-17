@@ -1843,6 +1843,53 @@ if (socket.handshake.auth.refreshedToken) {
 
     console.log(`[연결] 유저: ${socket.username} (Role: ${socket.role})`);
     let gameData = await GameData.findOne({ user: socket.userId }).lean();
+
+ if (gameData) {
+        let wasModified = false;
+        const updates = {};
+
+        if (typeof gameData.pvpRp !== 'number' || isNaN(gameData.pvpRp)) {
+            gameData.pvpRp = -1; // 아직 랭킹이 없다는 의미로 -1을 기본값으로 사용
+            updates.pvpRp = -1;
+            wasModified = true;
+        }
+
+        if (typeof gameData.pvpWins !== 'number') {
+            gameData.pvpWins = 0;
+            updates.pvpWins = 0;
+            wasModified = true;
+        }
+
+        if (typeof gameData.pvpLosses !== 'number') {
+            gameData.pvpLosses = 0;
+            updates.pvpLosses = 0;
+            wasModified = true;
+        }
+      
+        if (typeof gameData.pvpEntries !== 'number' || isNaN(gameData.pvpEntries)) {
+            gameData.pvpEntries = 5;
+            updates.pvpEntries = 5;
+            wasModified = true;
+        }
+
+        if (!gameData.pvpLastReset) {
+            const defaultResetDate = new Date(0);
+            gameData.pvpLastReset = defaultResetDate;
+            updates.pvpLastReset = defaultResetDate;
+            wasModified = true;
+        }
+
+        if (gameData.pvpSnapshot === undefined) {
+            gameData.pvpSnapshot = null;
+            updates.pvpSnapshot = null;
+            wasModified = true;
+        }
+    
+        if (wasModified) {
+            console.log(`[데이터 마이그레이션] 유저: ${gameData.username}의 PvP 필드를 초기화합니다.`);
+            await GameData.updateOne({ user: gameData.user }, { $set: updates });
+        }
+    }
 	
 	if (gameData && gameData.potionBuffs) {
     const now = new Date();
@@ -1940,6 +1987,7 @@ if (socket.handshake.auth.refreshedToken) {
 
 if (gameData && (typeof gameData.pvpEntries !== 'number' || isNaN(gameData.pvpEntries))) {
     gameData.pvpEntries = 5;
+    await GameData.updateOne({ user: gameData.user }, { $set: { pvpEntries: 5 } });
 }
 
 if (!gameData) { 
