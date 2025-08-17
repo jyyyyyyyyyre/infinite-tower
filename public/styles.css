@@ -3330,3 +3330,314 @@ body.auth-view {
     padding: 12px !important;
     font-size: 1.1em !important;
 }
+
+/* ======================================================================= */
+/* PVP 시스템 스타일                                                     */
+/* ======================================================================= */
+
+/* PVP 랭킹 모달 */
+.pvp-ranking-container {
+    display: flex;
+    gap: 20px;
+}
+.pvp-ranking-section {
+    flex: 1;
+}
+.pvp-ranking-section h3 {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+#pvp-my-rank-info p {
+    font-size: 1.2em;
+    line-height: 1.8;
+}
+#pvp-my-rank-info .rp-value {
+    font-weight: bold;
+    color: var(--primary-color);
+    font-size: 1.5em;
+}
+#pvp-my-rank-info .win-loss {
+    color: var(--text-muted);
+}
+
+/* PVP 대전 모달 */
+.pvp-match-content {
+    width: 90%;
+    max-width: 1000px;
+    text-align: center;
+}
+.pvp-match-title {
+    font-size: 1.8em;
+    color: var(--secondary-color);
+}
+.pvp-match-timer {
+    font-size: 2.5em;
+    font-weight: bold;
+    margin: 10px 0 20px 0;
+}
+.pvp-arena {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+.pvp-player-panel {
+    flex: 1;
+    background: rgba(0,0,0,0.2);
+    padding: 20px;
+    border-radius: 8px;
+}
+.pvp-player-name {
+    font-size: 1.4em;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+.pvp-player-rp {
+    font-size: 1.1em;
+    color: var(--text-muted);
+    margin-bottom: 15px;
+}
+.pvp-damage-bar {
+    width: 100%;
+    height: 35px;
+    background-color: rgba(0, 0, 0, .3);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+}
+.pvp-damage-bar-inner {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(to right, #28b485, #7ed56f);
+    transition: width 0.5s linear;
+}
+#pvp-opponent-panel .pvp-damage-bar-inner {
+    background: linear-gradient(to right, #c0392b, #e74c3c);
+}
+.pvp-damage-bar-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 1px 1px 2px #000;
+}
+.pvp-vs-text {
+    font-size: 3em;
+    font-weight: bold;
+    color: var(--fail-color);
+}
+
+/* PVP 결과 모달 */
+.pvp-result-content {
+    text-align: center;
+    max-width: 500px;
+}
+#pvp-result-body {
+    font-size: 1.2em;
+    line-height: 1.8;
+    margin: 20px 0;
+}
+.rp-change {
+    font-size: 1.5em;
+    font-weight: bold;
+}
+.rp-gain {
+    color: var(--success-color);
+}
+.rp-loss {
+    color: var(--fail-color);
+}
+
+/* PVP 관리 탭 */
+.pvp-management-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 20px;
+    height: 100%;
+}
+#pvp-snapshot-info {
+    background-color: rgba(0,0,0,0.2);
+    padding: 20px;
+    border-radius: 8px;
+    width: 80%;
+    min-height: 100px;
+}
+#pvp-register-snapshot-btn {
+    width: 60%;
+}
+
+/* ======================================================================= */
+/* PVP 스냅샷 UI 개선 스타일 (최종)                                        */
+/* ======================================================================= */
+
+.pvp-snapshot-panel {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--border-color);
+    padding: 20px;
+    border-radius: 8px;
+    width: 100%;
+    max-width: 650px; /* 너비를 살짝 늘려 장비 슬롯 공간 확보 */
+    margin: 0 auto;
+}
+
+.pvp-snapshot-panel .player-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 15px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.pvp-snapshot-panel .player-name {
+    font-size: 1.5em;
+    font-weight: bold;
+}
+
+.pvp-snapshot-panel .player-level {
+    font-size: 1em;
+    color: var(--text-muted);
+}
+
+.pvp-snapshot-panel .pvp-rp-display {
+    font-size: 1.2em;
+}
+
+.pvp-snapshot-panel .rp-value {
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.pvp-snapshot-panel .equipment-section {
+    margin-bottom: 20px;
+}
+
+/* 스냅샷 UI 내 장비 슬롯 크기 조정 */
+.pvp-snapshot-panel .equipment-slots {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+.pvp-snapshot-panel .slot {
+    height: 120px;
+    border-style: solid;
+    border-width: 2px;
+    background-color: rgba(0,0,0,0.3);
+}
+
+.player-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.stat-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.stat-line {
+    font-size: 1.1em;
+    display: flex;
+    justify-content: space-between;
+}
+
+.stat-line .stat-value {
+    font-weight: bold;
+    color: var(--text-color);
+}
+
+.pvp-artifact-info {
+    text-align: center;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.pvp-artifact-info h4 {
+    color: var(--text-muted);
+    font-size: 1em;
+    margin-bottom: 15px;
+}
+
+.pvp-artifact-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+}
+
+.pvp-artifact-slot {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: var(--bg-color-dark);
+    border: 2px solid var(--border-color);
+    transition: all 0.3s ease;
+}
+
+.pvp-artifact-slot.active {
+    background-color: var(--legendary-color);
+    border-color: var(--gold-color);
+    box-shadow: 0 0 15px var(--legendary-color);
+}
+/* ======================================================================= */
+/* PVP 대전 UI 개편 스타일 (최종)                                        */
+/* ======================================================================= */
+.pvp-match-content {
+    width: 95%; /* 화면 너비의 95%를 사용 */
+    max-width: 1600px; /* 최대 너비를 1600px로 늘림 */
+    gap: 15px;
+    display: flex;
+    flex-direction: column;
+}
+.pvp-player-panel {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    flex-grow: 1; /* 패널이 가용 공간을 채우도록 함 */
+}
+.pvp-spec-display {
+    overflow: hidden;
+}
+/* 대전 UI 내의 스펙 패널 스타일 */
+.pvp-spec-display .player-panel {
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: rgba(0,0,0,0.2);
+}
+/* 대전 UI 내 스펙 패널의 폰트 및 슬롯 크기 미세 조정 */
+.pvp-spec-display .player-panel .player-name {
+    font-size: 1.3em;
+}
+.pvp-spec-display .player-panel .slot {
+    height: 110px;
+}
+.pvp-spec-display .player-panel .stat-line {
+    font-size: 1em;
+}
+.pvp-buff-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    justify-content: center;
+    min-height: 30px; 
+    padding: 5px;
+    border-radius: 4px;
+    background-color: rgba(0,0,0,0.3);
+}
+.pvp-buff-display .buff-icon {
+    padding: 3px 8px;
+    font-size: 0.9em;
+    animation: none;
+}

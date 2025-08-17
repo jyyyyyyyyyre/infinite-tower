@@ -67,7 +67,7 @@ const RIFT_ENCHANT_COST = {
 };
 
 const WORLD_BOSS_CONFIG = {
-    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 133150000000000, ATTACK: 0, DEFENSE: 0,
+    SPAWN_INTERVAL: 720 * 60 * 1000, HP: 7331500000000000, ATTACK: 0, DEFENSE: 0,
     REWARDS: { GOLD: 12960000000000, PREVENTION_TICKETS: 2, ITEM_DROP_RATES: { Rare: 0.10, Legendary: 0.10, Epic: 0.69, Mystic: 0.101 } }
 };
 
@@ -162,6 +162,14 @@ incubators: { type: [Object], default: () => Array(6).fill(null).map(() => ({ eg
     titleCodexCompleted: { type: Boolean, default: false },
 
 bloodthirst: { type: Number, default: 0 },
+
+pvpRp: { type: Number, default: -1 }, 
+    pvpWins: { type: Number, default: 0 },
+    pvpLosses: { type: Number, default: 0 },
+    pvpSnapshot: { type: Object, default: null },
+    pvpEntries: { type: Number, default: 5 },
+    pvpLastReset: { type: Date, default: () => new Date(0) },
+
 personalRaid: {
     entries: { type: Number, default: 2 },
     lastReset: { type: Date, default: () => new Date(0) }
@@ -443,6 +451,7 @@ const adminItemAlias = {
 };
 
 const itemData = {
+	'primal_random_box': { name: '프라이멀 랜덤 상자', type: 'Special', category: 'Consumable', grade: 'Primal', description: '사용 시 프라이멀 등급 장비(무기, 방어구, 액세서리 3종) 중 하나를 동일한 확률로 획득합니다.', image: 'primalbox.png', tradable: true },
 	'gold_potion': { name: '골드 물약', type: 'Special', category: 'Consumable', grade: 'Legendary', description: '1시간 동안 최종 골드 획득량이 2배 증가합니다.', image: 'gold_potion.png', tradable: true },
 'drop_potion': { name: '드롭 물약', type: 'Special', category: 'Consumable', grade: 'Legendary', description: '1시간 동안 최종 아이템 드롭률이 2배 증가합니다.', image: 'drop_potion.png', tradable: true },
 'stat_potion': { name: '버프 물약', type: 'Special', category: 'Consumable', grade: 'Legendary', description: '1시간 동안 최종 공격력, 방어력, 체력이 2배 증가합니다.', image: 'stat_potion.png', tradable: true },
@@ -586,7 +595,7 @@ function grantTitle(player, titleName) {
 }
 
 
-const DPS_DURATION_MS = 180 * 1000; // 3분 (요구사항 1)
+const DPS_DURATION_MS = 180 * 1000; 
 
 
 function addBuff(player, buff) {
@@ -841,6 +850,80 @@ function runDpsSimulation(player) {
             player.shield = (player.stats.shield || 0) * healthPercent;
         }
     }
+}
+
+function runPvpCombatTick(player) {
+    if (!player || !player.pvpCombatSession || !player.pvpCombatSession.isActive) return;
+
+    const session = player.pvpCombatSession;
+    const now = Date.now();
+
+    calculateTotalStats(player); 
+    const stats = player.stats.total;
+    const weapon = player.equipment.weapon;
+    const armor = player.equipment.armor;
+    const m = { defense: 0, isBoss: true }; 
+    let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
+    let titleBossDamageBonus = (titleEffects && titleEffects.bossDamage) ? (1 + titleEffects.bossDamage) : 1;
+
+    let pDmg = 0;
+    let finalAttack = stats.attack;
+    let trackPredator = 0, trackBaseAndCrit = 0, trackRefinement = 0, trackDoom = 0, isCrit = false;
+
+    if (hasBuff(player, 'awakening') || hasBuff(player, 'awakening_earring')) session.details.skillMetrics.awakeningDuration++;
+    if (hasBuff(player, 'predator_state')) session.details.skillMetrics.predatorBuffDuration++;
+    if (hasBuff(player, 'fury_attack')) {
+        session.details.skillMetrics.rageDuration++;
+        finalAttack *= 1.5; 
+    }
+    if (hasBuff(player, 'predator_state')) {
+        trackPredator = finalAttack * 2.0;
+        pDmg += trackPredator;
+    }
+
+    session.details.combatStats.totalHits++;
+    if (Math.random() < player.stats.critChance) {
+        isCrit = true;
+        session.details.combatStats.critHits++;
+        const critMultiplier = 1.5 + (stats.critDamage || 0);
+        trackBaseAndCrit = finalAttack * critMultiplier;
+    } else {
+        const effectiveDefense = m.defense * (1 - (stats.defPenetration || 0));
+        trackBaseAndCrit = Math.max(0, finalAttack - effectiveDefense);
+    }
+    pDmg += trackBaseAndCrit;
+    if (player.stats.additiveDamage > 0) {
+        trackRefinement = pDmg * (player.stats.additiveDamage / 100);
+        pDmg += trackRefinement;
+    }
+    if (m.isBoss) pDmg *= titleBossDamageBonus; 
+    if (stats.lowHpAttackPercent > 0 && player.currentHp < stats.hp) {
+        const missingHpPercent = (stats.hp - player.currentHp) / stats.hp;
+        const damageMultiplier = 1 + (missingHpPercent * 100 * stats.lowHpAttackPercent);
+        pDmg *= damageMultiplier;
+    }
+
+    if (stats.bloodthirst > 0 && Math.random() < stats.bloodthirst / 100) {
+        session.details.skillMetrics.bloodthirstCount++;
+        player.currentHp = stats.hp;
+        if (weapon?.prefix === '포식자') addBuff(player, 'predator_state', '포식', (armor?.prefix === '포식자' ? 5000 : 3000), {});
+        if (armor?.prefix === '포식자') addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+    }
+    if (weapon) {
+        if (weapon.prefix === '격노' && Math.random() < 0.05) addBuff(player, 'fury_attack', '격노(공)', (armor?.prefix === '격노' ? 7000 : 5000), {});
+        if (weapon.prefix === '파멸' && Math.random() < 0.02) {
+            trackDoom = stats.attack * ((armor?.prefix === '파멸') ? 3.0 : 2.0);
+            pDmg += trackDoom;
+        }
+        if (weapon.prefix === '계시' && Math.random() < 0.002) applyAwakeningBuff(player, (armor?.prefix === '계시' ? 7000 : 5000));
+    }
+    if (pDmg > 0) {
+        if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyEarringAwakeningBuff(player, 10000);
+        if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyEarringAwakeningBuff(player, 15000);
+    }
+
+    session.totalDamage += pDmg;
+    updateBuffs(player);
 }
 
 async function endDpsSession(player, aborted = false) {
@@ -3232,8 +3315,16 @@ autoHatchActive: gameData.autoHatchActive || false
             const player = onlinePlayers[socket.userId];
             if (!player) return;
             const shopItems = {
+				
+				
                 'bahamut_essence': { price: 2000 },
                 'pet_egg_mythic': { price: 2000 },
+				 'primal_w01': { price: 100000 },
+                'primal_a01': { price: 100000 },
+                'primal_acc_necklace_01': { price: 100000 },
+                'primal_acc_earring_01': { price: 100000 },
+                'primal_acc_wristwatch_01': { price: 100000 },
+                'primal_random_box': { price: 70000 },
                 'soulstone_attack': { price: 50 },
                 'soulstone_hp': { price: 50 },
                 'soulstone_defense': { price: 50 },
@@ -3477,7 +3568,7 @@ autoHatchActive: gameData.autoHatchActive || false
 
     let totalShardAmount = 0;
     for (let i = 0; i < exchangeCount; i++) {
-        totalShardAmount += Math.floor(Math.random() * 10) + 1; // 1~10 랜덤
+        totalShardAmount += Math.floor(Math.random() * 10) + 1; 
     }
 
     const newShards = createItemInstance('rift_shard_abyss', totalShardAmount);
@@ -3551,7 +3642,7 @@ autoHatchActive: gameData.autoHatchActive || false
             
             if (player.autoHatchActive) {
                 pushLog(player, '[자동 부화] 자동 부화 시스템을 활성화합니다.');
-                runAutoHatch(player); // 활성화 즉시 실행
+                runAutoHatch(player); 
             } else {
                 pushLog(player, '[자동 부화] 자동 부화 시스템을 비활성화합니다.');
             }
@@ -3562,6 +3653,235 @@ autoHatchActive: gameData.autoHatchActive || false
                 await GameData.updateOne({ user: socket.userId }, { $set: { autoHatchActive: player.autoHatchActive } });
             } catch (error) {
                 console.error(`[자동 부화] DB 상태 저장 실패: ${player.username}`, error);
+            }
+        })
+		
+		 .on('pvp:registerSnapshot', async (callback) => {
+            const player = onlinePlayers[socket.userId];
+            if (!player) return callback({ success: false });
+
+            if (typeof player.pvpRp !== 'number' || player.pvpRp < 0 || isNaN(player.pvpRp)) {
+                player.pvpRp = Math.floor(player.fameScore / 100);
+                if (isNaN(player.pvpRp) || player.pvpRp <= 0) {
+                    player.pvpRp = 10;
+                }
+            }
+            
+            const tempPlayerForSnapshot = {
+                ...player,
+                buffs: [] 
+            };
+            calculateTotalStats(tempPlayerForSnapshot); 
+
+            const snapshot = {
+                username: player.username,
+                userId: player.user,
+                rp: player.pvpRp,
+                equipment: JSON.parse(JSON.stringify(player.equipment)),
+                equippedPet: JSON.parse(JSON.stringify(player.equippedPet)),
+                stats: JSON.parse(JSON.stringify(tempPlayerForSnapshot.stats)), 
+                title: player.equippedTitle,
+                research: JSON.parse(JSON.stringify(player.research, (key, value) => {
+                    if (value instanceof Map) return Object.fromEntries(value);
+                    return value;
+                })),
+                fameScore: player.fameScore,
+                bloodthirst: player.bloodthirst,
+                unlockedArtifacts: player.unlockedArtifacts,
+                maxLevel: player.maxLevel,
+                createdAt: new Date() 
+            };
+
+            player.pvpSnapshot = snapshot;
+            await GameData.updateOne({ user: socket.userId }, { $set: { pvpSnapshot: snapshot, pvpRp: player.pvpRp } });
+            
+            callback({ success: true, snapshot });
+        })
+		
+    .on('pvp:startMatchmaking', async (callback) => {
+            const attacker = onlinePlayers[socket.userId];
+            if (!attacker) return callback({ success: false, message: '플레이어 정보를 찾을 수 없습니다.' });
+            if (attacker.raidState?.isActive || attacker.isInFoundryOfTime || attacker.dpsSession?.isActive) {
+                return callback({ success: false, message: '다른 콘텐츠 진행 중에는 PVP에 참여할 수 없습니다.' });
+            }
+            if (attacker.pvpEntries <= 0) {
+                return callback({ success: false, message: '오늘의 PVP 참가 횟수를 모두 사용했습니다.' });
+            }
+            if (typeof attacker.pvpRp !== 'number' || attacker.pvpRp < 0 || isNaN(attacker.pvpRp)) {
+                attacker.pvpRp = Math.floor(attacker.fameScore / 100);
+                if (isNaN(attacker.pvpRp) || attacker.pvpRp <= 0) {
+                    attacker.pvpRp = 10;
+                }
+            }
+
+            let opponentData = null;
+            const searchRanges = [50, 150, 300];
+            for (const range of searchRanges) {
+                const opponents = await GameData.find({ 'pvpSnapshot': { $ne: null }, 'user': { $ne: attacker.user }, 'pvpRp': { $gte: attacker.pvpRp - range, $lte: attacker.pvpRp + range } }).limit(20).lean();
+                if (opponents.length > 0) {
+                    opponentData = opponents[Math.floor(Math.random() * opponents.length)];
+                    break;
+                }
+            }
+            if (!opponentData) {
+                const opponents = await GameData.aggregate([{ $match: { 'pvpSnapshot': { $ne: null }, 'user': { $ne: attacker.user } } }, { $addFields: { rpDiff: { $abs: { $subtract: ["$pvpRp", attacker.pvpRp] } } } }, { $sort: { rpDiff: 1 } }, { $limit: 1 }]);
+                if (opponents.length > 0) opponentData = opponents[0];
+            }
+            if (!opponentData) return callback({ success: false, message: '매칭할 상대를 찾을 수 없습니다.' });
+
+attacker.pvpEntries--;
+await GameData.updateOne({ user: attacker.user }, { $set: { pvpEntries: attacker.pvpEntries } });
+
+            const opponentSnapshot = opponentData.pvpSnapshot;
+            const opponentTimeline = [];
+            const tempOpponent = { ...opponentSnapshot, buffs: [] };
+            
+            tempOpponent.pvpCombatSession = {
+                isActive: true, totalDamage: 0,
+                details: { skillMetrics: {}, combatStats: {} }
+            };
+
+            for (let i = 0; i < 180; i++) {
+                runPvpCombatTick(tempOpponent);
+                opponentTimeline.push({
+                    damage: tempOpponent.pvpCombatSession.totalDamage,
+                    buffs: tempOpponent.buffs.map(b => ({ id: b.id, name: b.name }))
+                });
+            }
+            
+            opponentSnapshot.rp = opponentData.pvpRp;
+
+            attacker.pvpCombatSession = {
+                isActive: true, startTime: Date.now(), endTime: Date.now() + 180000,
+                totalDamage: 0, details: { skillMetrics: {}, combatStats: {} }
+            };
+
+            attacker.pvpMatch = {
+                opponent: {
+                    username: opponentSnapshot.username,
+                    rp: opponentData.pvpRp,
+                    userId: opponentSnapshot.userId,
+                    totalDamage: opponentTimeline[179].damage,
+                    snapshot: opponentSnapshot
+                }
+            };
+
+            callback({ 
+                success: true, 
+                opponent: attacker.pvpMatch.opponent,
+                timeline: opponentTimeline
+            });
+        })
+		
+	.on('pvp:matchResult', async (data, callback) => {
+            const attacker = onlinePlayers[socket.userId];
+            if (!attacker || !attacker.pvpMatch || !attacker.pvpCombatSession) return callback({ success: false });
+            const playerDamage = attacker.pvpCombatSession.totalDamage; 
+            attacker.pvpCombatSession = null; 
+
+            const opponent = attacker.pvpMatch.opponent;
+            const isWin = playerDamage > opponent.totalDamage;
+            
+            if (typeof attacker.pvpEntries !== 'number' || isNaN(attacker.pvpEntries)) {
+                attacker.pvpEntries = 5;
+            }
+            if (typeof attacker.pvpWins !== 'number' || isNaN(attacker.pvpWins)) {
+                attacker.pvpWins = 0;
+            }
+            if (typeof attacker.pvpLosses !== 'number' || isNaN(attacker.pvpLosses)) {
+                attacker.pvpLosses = 0;
+            }
+
+            if (isWin) attacker.pvpWins++;
+            else attacker.pvpLosses++;
+
+            const attackerCurrentRp = (typeof attacker.pvpRp === 'number' && !isNaN(attacker.pvpRp)) ? attacker.pvpRp : 10;
+            const opponentCurrentRp = (typeof opponent.rp === 'number' && !isNaN(opponent.rp)) ? opponent.rp : 10;
+            const baseRpChange = 20;
+            const rpDiff = opponentCurrentRp - attackerCurrentRp;
+            let rpChange;
+            if (isWin) {
+                rpChange = Math.round(baseRpChange + (rpDiff / 50));
+            } else {
+                rpChange = -Math.round(baseRpChange - (rpDiff / 50));
+            }
+            rpChange = Math.max(-35, Math.min(35, rpChange));
+            
+            const attackerOldRp = attackerCurrentRp;
+            const attackerNewRp = attackerCurrentRp + rpChange;
+            attacker.pvpRp = attackerNewRp;
+            
+            await GameData.updateOne({ user: attacker.user }, { $set: { pvpRp: attackerNewRp, pvpWins: attacker.pvpWins, pvpLosses: attacker.pvpLosses, pvpEntries: attacker.pvpEntries } });
+
+            const opponentData = await GameData.findOne({ user: opponent.userId });
+            if (opponentData) {
+                const opponentOldRp = (typeof opponentData.pvpRp === 'number' && !isNaN(opponentData.pvpRp)) ? opponentData.pvpRp : 10;
+                const opponentNewRp = opponentOldRp - rpChange;
+                
+                opponentData.pvpRp = opponentNewRp;
+                
+                if (typeof opponentData.pvpWins !== 'number' || isNaN(opponentData.pvpWins)) opponentData.pvpWins = 0;
+                if (typeof opponentData.pvpLosses !== 'number' || isNaN(opponentData.pvpLosses)) opponentData.pvpLosses = 0;
+
+                if (isWin) opponentData.pvpLosses++;
+                else opponentData.pvpWins++;
+                await opponentData.save();
+
+                const onlineOpponent = onlinePlayers[opponent.userId.toString()];
+                if (onlineOpponent) {
+                    onlineOpponent.pvpRp = opponentNewRp;
+                    if(isWin) onlineOpponent.pvpLosses++; else onlineOpponent.pvpWins++;
+                    pushLog(onlineOpponent, `[PVP] 누군가의 도전을 받아 패배했습니다. (RP: ${opponentOldRp} -> ${opponentNewRp})`);
+                }
+            }
+            
+            delete attacker.pvpMatch;
+
+            callback({
+                success: true, result: isWin ? '승리' : '패배', rpChange,
+                oldRp: attackerOldRp, newRp: attackerNewRp,
+                myDamage: playerDamage, opponentDamage: opponent.totalDamage
+            });
+        })
+
+.on('pvp:getRanking', async (callback) => {
+            if (!socket.userId) return callback({ success: false });
+
+            try {
+             
+                await GameData.updateMany(
+                    { pvpRp: -1 },
+                    [ { $set: { pvpRp: { $max: [ { $floor: { $divide: [ "$fameScore", 100 ] } }, 10 ] } } } ] 
+                );
+
+                const leaderboard = await GameData.find({ pvpRp: { $gte: 0 } })
+                    .sort({ pvpRp: -1 })
+                    .limit(50)
+                    .select('username pvpRp pvpWins pvpLosses')
+                    .lean();
+
+                const myData = await GameData.findOne({ user: socket.userId })
+                    .select('pvpRp pvpWins pvpLosses')
+                    .lean();
+
+                let myRank = null;
+                if (myData && myData.pvpRp >= 0) {
+                    const myRankCount = await GameData.countDocuments({ pvpRp: { $gt: myData.pvpRp } });
+                    myRank = { ...myData, rank: myRankCount + 1 };
+                }
+
+                callback({ success: true, leaderboard, myRank });
+            } catch (error) {
+                console.error("PVP 랭킹 데이터 조회 오류:", error);
+                callback({ success: false });
+            }
+        })
+ .on('pvp:abortMatch', () => {
+            const player = onlinePlayers[socket.userId];
+            if (player) {
+                player.pvpCombatSession = null;
+                delete player.pvpMatch;
+                pushLog(player, '[PVP] 대전을 중단하고 등반으로 복귀했습니다.');
             }
         })
 
@@ -3675,7 +3995,7 @@ function runAutoHatch(player) {
     let eggIndex = 0;
     for (const slotIndex of emptySlotsIndexes) {
         if (eggIndex >= availableEggs.length) {
-            break; // 더 이상 사용할 알이 없음
+            break; 
         }
 
         const eggToHatch = availableEggs[eggIndex];
@@ -3717,8 +4037,30 @@ function gameTick(player) {
      const armor = player.equipment.armor;
     player.stateSentThisTick = false;
 
+
+    if (player.buffs && player.buffs.length > 0) {
+         const now = Date.now();
+         const initialBuffCount = player.buffs.length;
+         player.buffs = player.buffs.filter(buff => new Date(buff.endTime) > now);
+         if (player.buffs.length < initialBuffCount) {
+			const hpBefore = player.stats.total.hp || 1;
+             const originalCurrentHp = player.currentHp;
+             calculateTotalStats(player); 
+             const newMaxHp = player.stats.total.hp;
+             player.currentHp = Math.min(originalCurrentHp, newMaxHp);
+			const healthPercent = originalCurrentHp / hpBefore;
+             player.shield = player.stats.shield * healthPercent;
+         }
+     }
+
    if (player.autoHatchActive) {
         runAutoHatch(player);
+    }
+	
+	 if (player.pvpCombatSession && player.pvpCombatSession.isActive) {
+        runPvpCombatTick(player);
+        sendState(player.socket, player, calcMonsterStats(player));
+        return;
     }
 
     if (player.dpsSession && player.dpsSession.isActive) {
@@ -3815,20 +4157,6 @@ function gameTick(player) {
      }
      
 
-    if (player.buffs && player.buffs.length > 0) {
-         const now = Date.now();
-         const initialBuffCount = player.buffs.length;
-         player.buffs = player.buffs.filter(buff => new Date(buff.endTime) > now);
-         if (player.buffs.length < initialBuffCount) {
-			const hpBefore = player.stats.total.hp || 1;
-             const originalCurrentHp = player.currentHp;
-             calculateTotalStats(player); 
-             const newMaxHp = player.stats.total.hp;
-             player.currentHp = Math.min(originalCurrentHp, newMaxHp);
-			const healthPercent = originalCurrentHp / hpBefore;
-             player.shield = player.stats.shield * healthPercent;
-         }
-     }
      if (player.petFusion && player.petFusion.fuseEndTime && new Date() >= new Date(player.petFusion.fuseEndTime)) onPetFusionComplete(player);
      if (player.incubators && player.incubators.length > 0) {
          for (let i = 0; i < player.incubators.length; i++) {
@@ -4202,15 +4530,23 @@ if (p.potionBuffs && p.potionBuffs.drop && new Date(p.potionBuffs.drop) > Date.n
     }
 
     const clearedFloor = p.level - 1;
-if (clearedFloor >= 1000000 && Math.random() < 0.001) {
-    const dropQuantity = Math.floor(Math.random() * 5) + 1; 
-    const shardItem = createItemInstance('rift_shard_abyss', dropQuantity);
-    if (shardItem) {
-        handleItemStacking(p, shardItem);
-        sendInventoryUpdate(p);
-        pushLog(p, `[심연] <span class="${shardItem.grade}">심연의 파편</span> ${dropQuantity}개를 획득했습니다!`);
+
+if (clearedFloor >= 1000000) {
+    const baseChance = 0.001; 
+    const levelBonusTiers = Math.floor((clearedFloor - 1000000) / 100000); 
+    const finalChance = baseChance + (baseChance * levelBonusTiers); 
+
+    if (Math.random() < finalChance) {
+        const dropQuantity = Math.floor(Math.random() * 5) + 1; 
+        const shardItem = createItemInstance('rift_shard_abyss', dropQuantity);
+        if (shardItem) {
+            handleItemStacking(p, shardItem);
+            sendInventoryUpdate(p);
+            pushLog(p, `[심연] <span class="${shardItem.grade}">심연의 파편</span> ${dropQuantity}개를 획득했습니다! (드랍률: ${(finalChance * 100).toFixed(2)}%)`);
+        }
     }
 }
+
     const isBoss = isBossFloor(clearedFloor);
     
     let goldEarned = isBoss ? clearedFloor * 10 : clearedFloor;
@@ -4389,7 +4725,7 @@ else if (clearedFloor >= 1000000) {
         { id: 'star_scroll_70', chance: 0.0002 },
         { id: 'star_scroll_30', chance: 0.0001 },
         { id: 'star_scroll_10', chance: 0.00005 },
-        { id: 'golden_hammer', chance: 0.00003 }, // 고정석 확률정도? 어짜피 잘안붙으니.
+        { id: 'golden_hammer', chance: 0.00003 }, 
         { id: 'moon_scroll_100', chance: 0.0007 }, 
         { id: 'moon_scroll_70', chance: 0.0002 },
         { id: 'moon_scroll_30', chance: 0.0001 },
@@ -4898,7 +5234,6 @@ player.currentHp = Math.min(originalCurrentHp, newMaxHp);
         if (player) player.isBusy = false;
     }
 }
-
 async function sellItem(player, uid, sellAll) {
     if (!player) return;
     if (player.isBusy) {
@@ -4932,18 +5267,17 @@ async function sellItem(player, uid, sellAll) {
             pushLog(player, '[판매] 아이템을 찾을 수 없습니다.');
             return;
         }
-if (item.grade === 'Primal') {
-            pushLog(player, '[판매] 프라이멀 등급은 현재 버그로 판매할 수 없습니다.');
-            return; 
-        }
 
         let goldReward = 0;
         let shardReward = 0;
         let essenceReward = 0;
         let isSellable = false;
 
-
-        if (item.type === 'weapon' || item.type === 'armor') {
+        if (item.grade === 'Primal') {
+            goldReward = (item.enhancement || 0) * 1000000000000; 
+            shardReward = 50000;
+            isSellable = true;
+        } else if (item.type === 'weapon' || item.type === 'armor') {
             const prices = { Common: 3000, Rare: 50000, Legendary: 400000, Epic: 2000000, Mystic: 3000000000, Primal: 120000000000 };
             const shards = { Common: 1, Rare: 2, Legendary: 5, Epic: 50, Mystic: 1000, Primal: 10000 };
             goldReward = prices[item.grade] || 0;
@@ -4966,13 +5300,13 @@ if (item.grade === 'Primal') {
             isSellable = true;
         }
 
-else if (item.category === 'Tome') {
+        else if (item.category === 'Tome') {
             goldReward = 100000000;
             shardReward = 20;
             isSellable = true;
         }
-		
-		else if (item.category === 'Egg') {
+
+        else if (item.category === 'Egg') {
             switch (item.id) {
                 case 'pet_egg_normal':
                     goldReward = 2000000;
@@ -4991,16 +5325,16 @@ else if (item.category === 'Tome') {
             pushLog(player, '[판매] 해당 아이템은 판매할 수 없습니다.');
             return;
         }
-        
+
         const titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
         const sellBonus = (titleEffects && titleEffects.sellPriceBonus) ? (1 + titleEffects.sellPriceBonus) : 1;
         const itemName = item.enhancement > 0 ? `+${item.enhancement} ${item.name}` : item.name;
 
-
         if (item.enhancement > 0 || !sellAll || itemLocation !== 'inventory') {
 
             let finalGold = goldReward;
-            if (item.enhancement > 0) { 
+
+            if (item.grade !== 'Primal' && item.enhancement > 0) { 
                 const enhancementCost = getEnhancementCost(item.enhancement);
                 const priceWithEnhancement = goldReward + enhancementCost;
                 if (item.enhancement <= 8) {
@@ -5014,8 +5348,44 @@ else if (item.category === 'Tome') {
             finalGold = Math.floor(finalGold * sellBonus);
 
             player.gold += finalGold;
-            if (shardReward > 0) handleItemStacking(player, createItemInstance('rift_shard', shardReward));
+
+            if (shardReward > 0) {
+                const shardItemId = (item.grade === 'Primal' && item.type !== 'accessory') ? 'rift_shard_abyss' : 'rift_shard';
+                handleItemStacking(player, createItemInstance(shardItemId, shardReward));
+            }
+
             if (essenceReward > 0) handleItemStacking(player, createItemInstance('spirit_essence', essenceReward));
+
+            const rewardsLog = [];
+            if (finalGold > 0) rewardsLog.push(`${finalGold.toLocaleString()} G`);
+            if (shardReward > 0) {
+                const shardName = (item.grade === 'Primal' && item.type !== 'accessory') ? '심연의 파편' : '균열의 파편';
+                rewardsLog.push(`${shardName} ${shardReward.toLocaleString()}개`);
+            }
+            if (essenceReward > 0) rewardsLog.push(`정령의 형상 ${essenceReward.toLocaleString()}개`);
+            if (player.maxLevel >= 1000000) {
+                let abyssalShardAmount = 0;
+                const mysticGearIds = ['w005', 'a005', 'acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
+
+                if (mysticGearIds.includes(item.id)) {
+                    abyssalShardAmount = Math.floor(Math.random() * 71) + 30; // 30 ~ 100
+                } else if (item.id === 'pet_egg_ancient') {
+                    abyssalShardAmount = Math.floor(Math.random() * 30) + 1; // 1 ~ 30
+                } else if (item.id === 'pet_egg_mythic') {
+                    abyssalShardAmount = Math.floor(Math.random() * 701) + 300; // 300 ~ 1000
+                } else if (item.grade === 'Epic' && item.type === 'pet') {
+                    abyssalShardAmount = Math.floor(Math.random() * 21) + 20; // 20 ~ 40
+                } else if (item.grade === 'Mystic' && item.type === 'pet') {
+                    abyssalShardAmount = Math.floor(Math.random() * 501) + 1000; // 1000 ~ 1500
+                }
+
+                if (abyssalShardAmount > 0) {
+                    handleItemStacking(player, createItemInstance('rift_shard_abyss', abyssalShardAmount));
+                    rewardsLog.push(`심연의 파편 ${abyssalShardAmount}개`);
+                }
+            }
+
+            pushLog(player, `[판매] ${itemName} 1개를 판매하여 ${rewardsLog.join(', ')}를 획득했습니다.`);
 
             if (item.quantity > 1) {
                 item.quantity--;
@@ -5024,12 +5394,7 @@ else if (item.category === 'Tome') {
                 else if (itemLocation === 'petInventory') player.petInventory.splice(itemIndex, 1);
                 else if (itemLocation === 'spiritInventory') player.spiritInventory.splice(itemIndex, 1);
             }
-            
-            const rewardsLog = [];
-            if (finalGold > 0) rewardsLog.push(`${finalGold.toLocaleString()} G`);
-            if (shardReward > 0) rewardsLog.push(`균열 파편 ${shardReward.toLocaleString()}개`);
-            if (essenceReward > 0) rewardsLog.push(`정령의 형상 ${essenceReward.toLocaleString()}개`);
-            pushLog(player, `[판매] ${itemName} 1개를 판매하여 ${rewardsLog.join(', ')}를 획득했습니다.`);
+
         } else {
 
             const quantityToSell = item.quantity;
@@ -5038,12 +5403,39 @@ else if (item.category === 'Tome') {
 
             player.gold += totalGold;
             if (totalShards > 0) handleItemStacking(player, createItemInstance('rift_shard', totalShards));
-            
-            player.inventory.splice(itemIndex, 1);
-            
+
             const rewardsLog = [];
             if (totalGold > 0) rewardsLog.push(`${totalGold.toLocaleString()} G`);
             if (totalShards > 0) rewardsLog.push(`균열 파편 ${totalShards.toLocaleString()}개`);
+
+       
+            if (player.maxLevel >= 1000000) {
+                let totalAbyssalShards = 0;
+                const mysticGearIds = ['w005', 'a005', 'acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
+
+                for(let i = 0; i < quantityToSell; i++) {
+                    if (mysticGearIds.includes(item.id)) {
+                        totalAbyssalShards += Math.floor(Math.random() * 71) + 30;
+                    } else if (item.id === 'pet_egg_ancient') {
+                        totalAbyssalShards += Math.floor(Math.random() * 30) + 1;
+                    } else if (item.id === 'pet_egg_mythic') {
+                        totalAbyssalShards += Math.floor(Math.random() * 701) + 300;
+                    } else if (item.grade === 'Epic' && item.type === 'pet') {
+                         totalAbyssalShards += Math.floor(Math.random() * 21) + 20;
+                    } else if (item.grade === 'Mystic' && item.type === 'pet') {
+                         totalAbyssalShards += Math.floor(Math.random() * 501) + 1000;
+                    }
+                }
+
+                if (totalAbyssalShards > 0) {
+                    handleItemStacking(player, createItemInstance('rift_shard_abyss', totalAbyssalShards));
+                    rewardsLog.push(`심연의 파편 ${totalAbyssalShards.toLocaleString()}개`);
+                }
+            }
+
+
+            player.inventory.splice(itemIndex, 1);
+
             pushLog(player, `[판매] ${itemName} ${quantityToSell}개를 판매하여 ${rewardsLog.join(', ')}를 획득했습니다.`);
         }
 
@@ -5326,7 +5718,11 @@ incubators: player.incubators,
 		potionBuffs: player.potionBuffs || { gold: null, drop: null, stat: null },
 		shield: player.shield ,
 autoHatchActive: player.autoHatchActive,
-		dpsSession: player.dpsSession
+		dpsSession: player.dpsSession,
+		pvpSnapshot: player.pvpSnapshot, 
+        pvpEntries: player.pvpEntries,
+        pvpRp: player.pvpRp,
+        pvpCombatSession: player.pvpCombatSession
     };
 
     const monsterStateForClient = {
@@ -5442,6 +5838,21 @@ function useItem(player, uid, useAll = false, targetUid = null) {
         calculateTotalStats(player);
         break;
     }
+	
+	case 'primal_random_box':
+        const primalPool = ['primal_w01', 'primal_a01', 'primal_acc_necklace_01', 'primal_acc_earring_01', 'primal_acc_wristwatch_01'];
+        
+        for (let i = 0; i < quantityToUse; i++) {
+            const randomPrimalId = primalPool[Math.floor(Math.random() * primalPool.length)];
+            const wonItem = createItemInstance(randomPrimalId);
+            if (wonItem) {
+                handleItemStacking(player, wonItem);
+                messages.push(`[프라이멀 상자] 상자에서 ${wonItem.name} 아이템을 획득했습니다!`);
+                announceMysticDrop(player, wonItem); 
+            }
+        }
+        break;
+		
 case 'abyssal_box':
         const lootTable = [
             { id: 'bahamut_essence', chance: 0.02 }, // 2%
@@ -5637,6 +6048,11 @@ messages.push(`[심연의 상자] 상자에서 [${fallbackItem.grade}] ${fallbac
                 }
             }
         }
+		if (player.maxLevel >= 1000000) {
+    const abyssalShardItem = createItemInstance('rift_shard_abyss', quantityToUse);
+    handleItemStacking(player, abyssalShardItem);
+    messages.push(`[심연의 가호] 심연의 파편 ${quantityToUse}개를 추가로 획득했습니다!`);
+}
         player.gold += totalGoldGained;
         messages.push(`[수수께끼 골드 주머니] ${quantityToUse}개를 사용하여 ${totalGoldGained.toLocaleString()} G를 획득했습니다!`);
 
@@ -5993,11 +6409,13 @@ function scheduleDailyReset(io) {
                         {}, 
                         { $set: { "personalRaid.entries": 2 } } 
                     );
+                    await GameData.updateMany({}, { $set: { "pvpEntries": 5 } });
                     console.log(`[DB] 총 ${updateResult.modifiedCount}명의 유저 데이터가 초기화되었습니다.`);
 
                     for (const player of Object.values(onlinePlayers)) {
                         if (player && player.socket) {
                             player.personalRaid.entries = 2;
+							player.pvpEntries = 5;
                             pushLog(player, '☀️ 아침 6시가 되어 개인 레이드 입장 횟수가 초기화되었습니다.');
                             sendPlayerState(player);
                         }

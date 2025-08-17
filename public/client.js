@@ -531,7 +531,6 @@ const createItemHTML = (item, options = {}) => {
  return `${imageHTML}${refinementText}<div class="item-info">${nameAndDescriptionHTML}${effectHTML}${enchantmentsHTML}${scrollStatsHTML}${soulstoneStatsHTML}</div>${quantityText}${enhanceText}`;
  
 };
-
 function createPlayerPanelHTML(player) {
     if (!player) return '<p>유저 정보를 찾을 수 없습니다.</p>';
     
@@ -548,7 +547,22 @@ function createPlayerPanelHTML(player) {
         : `<div class="artifact-socket" title="비활성화된 유물 소켓"><img src="/image/socket_locked.png" alt="잠김"></div>`
     ).join('');
 
-    const fameBonusHTML = player.stats?.fameBonusPercent > 0 ? `<div class="stat-row-monster"><span>👑 명성 효과</span><span class="stat-value" style="color: var(--gold-color);">+${(player.stats.fameBonusPercent).toFixed(2)}%</span></div>` : '';
+    const stats = player.stats?.total || {};
+    const statsGridHTML = `
+        <div class="player-stats-grid">
+            <div class="stat-col left">
+                <div class="stat-line">❤️ 총 체력: <span class="stat-value">${Math.floor(stats.hp || 0).toLocaleString()}</span></div>
+                <div class="stat-line">⚔️ 총 공격력: <span class="stat-value">${Math.floor(stats.attack || 0).toLocaleString()}</span></div>
+                <div class="stat-line">🛡️ 총 방어력: <span class="stat-value">${Math.floor(stats.defense || 0).toLocaleString()}</span></div>
+            </div>
+            <div class="stat-col right">
+                <div class="stat-line">💥 치명타 확률: <span class="stat-value">${((player.stats?.critChance || 0) * 100).toFixed(1)}%</span></div>
+                <div class="stat-line">🔰 치명타 저항: <span class="stat-value">${((player.stats?.critResistance || 0) * 100).toFixed(1)}%</span></div>
+                <div class="stat-line">👑 명성 점수: <span class="stat-value">${(player.fameScore || 0).toLocaleString()}</span></div>
+            </div>
+        </div>
+    `;
+
     
    return `
         <div class="character-panel player-panel" style="background: none; box-shadow: none;">
@@ -556,14 +570,9 @@ function createPlayerPanelHTML(player) {
                 <h2>${createFameUserHtml(player.username, player.fameScore || 0)} <span style="font-size: 0.8em; color: var(--text-muted);">(최대 ${player.maxLevel}층)</span></h2>
                 <div class="resource-display">💰 <span>${(player.gold || 0).toLocaleString()}</span></div>
             </div>
-            <div class="stat-info-combined">
-                <div class="stat-row-monster"><span>❤️ 총 체력</span><span class="stat-value">${Math.floor(player.stats?.total?.hp || 0).toLocaleString()}</span></div>
-                <div class="stat-row-monster"><span>⚔️ 총 공격력</span><span class="stat-value">${Math.floor(player.stats?.total?.attack || 0).toLocaleString()}</span></div>
-                <div class="stat-row-monster"><span>🛡️ 총 방어력</span><span class="stat-value">${Math.floor(player.stats?.total?.defense || 0).toLocaleString()}</span></div>
-                <div class="stat-row-monster"><span>💥 치명타 확률</span><span class="stat-value">${((player.stats?.critChance || 0) * 100).toFixed(2)}%</span></div>
-                <div class="stat-row-monster"><span>🔰 치명타 저항</span><span class="stat-value">${((player.stats?.critResistance || 0) * 100).toFixed(2)}%</span></div>
-                ${fameBonusHTML}
-            </div>
+            
+            ${statsGridHTML}
+
             <div class="equipment-section">
                 <div class="equipment-slots">
                     <div class="slot" data-item-type="weapon">${weaponHTML}</div>
@@ -573,7 +582,7 @@ function createPlayerPanelHTML(player) {
                     <div class="slot" data-item-type="earring">${earringHTML}</div>
                     <div class="slot" data-item-type="wristwatch">${wristwatchHTML}</div>
                 </div>
-                <div class="artifact-sockets" style="margin-top: 15px;">${artifactSocketsHTML}</div>
+                <div id="artifact-sockets-header" class="artifact-sockets" style="margin-top: 15px; justify-content: center;">${artifactSocketsHTML}</div>
             </div>
         </div>
     `;
@@ -653,6 +662,7 @@ function createScrollTabViewHTML(item) {
 
 
 function initializeGame(socket) {
+	let pvpMatchTimerInterval = null;
     let quillEditor = null;
     let currentBoardCategory = '자유';
     let currentBoardPage = 1;
@@ -1040,6 +1050,7 @@ spirit: document.getElementById('spirit-inventory'),
         tabs: { 
             buttons: document.querySelectorAll('.tab-button'), 
             contents: document.querySelectorAll('.tab-content'),
+			pvp: document.querySelector('.tab-button[data-tab="pvp-tab"]'),
         },
         enhancement: { 
             anvil: document.querySelector('.enhancement-anvil'),
@@ -1170,11 +1181,33 @@ autoSell: {
     overlay: document.getElementById('auto-sell-modal'),
     list: document.getElementById('auto-sell-list'),
 },
+
+
  spiritSummon: {
                 overlay: document.getElementById('spirit-summon-modal'),
                 countSpan: document.getElementById('spirit-essence-count'),
                 summonBtn: document.getElementById('spirit-summon-btn'),
                 closeBtn: document.getElementById('spirit-summon-modal').querySelector('.close-button')
+            },
+			
+			pvpRanking: {
+                button: document.getElementById('pvp-ranking-button'),
+                overlay: document.getElementById('pvp-ranking-modal'),
+                leaderboardList: document.getElementById('pvp-leaderboard-list'),
+                myRankInfo: document.getElementById('pvp-my-rank-info'),
+            },
+            pvpMatch: {
+                overlay: document.getElementById('pvp-match-modal'),
+                title: document.querySelector('.pvp-match-title'),
+                timer: document.querySelector('.pvp-match-timer'),
+                myPanel: document.getElementById('pvp-my-panel'),
+                opponentPanel: document.getElementById('pvp-opponent-panel'),
+            },
+            pvpResult: {
+                overlay: document.getElementById('pvp-result-modal'),
+                title: document.getElementById('pvp-result-title'),
+                body: document.getElementById('pvp-result-body'),
+                closeBtn: document.getElementById('pvp-result-close-btn'),
             }
 
         },
@@ -1213,7 +1246,8 @@ autoSell: {
             safeZoneBtn: document.getElementById('safe-zone-btn'),
             frontlineBtn: document.getElementById('frontline-btn'),
             personalRaidBtn: document.getElementById('personal-raid-btn'),
-			startDpsBtn: document.getElementById('start-dps-btn')
+			startDpsBtn: document.getElementById('start-dps-btn'),
+			pvpStartBtn: document.getElementById('pvp-start-btn'),
         },
 		
 		 foundry: {
@@ -1256,7 +1290,13 @@ scroll: {
 	const abyssalShopItems = [
     { id: 'bahamut_essence', name: '바하무트의 정수', description: '바하무트의 정수. 바하무트에게 전달시 궁극의 존재로 진화한다', price: 2000, image: 'pure_blood_crystal.png', grade: 'Primal' },
 { id: 'pet_egg_mythic', name: '신화종 알', description: '부화시키면 신화 등급의 펫을 얻습니다.', price: 2000, image: 'pet_egg_mythic.png', grade: 'Mystic' },   
-   { id: 'soulstone_attack', name: '파괴자의 소울스톤', description: '공격력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'power_stone.png', grade: 'Primal' },
+{ id: 'primal_random_box', name: '프라이멀 랜덤 상자', description: '프라이멀 장비(무기,방어구,악세3종) 중 1개를 동일 확률로 획득', price: 70000, image: 'primalbox.png', grade: 'Primal' },
+    { id: 'primal_w01', name: '데미우르고스', description: '태초 등급 무기', price: 100000, image: 'primal_sword.png', grade: 'Primal' },
+    { id: 'primal_a01', name: '망각의 지평선', description: '태초 등급 방어구', price: 100000, image: 'primal_armor.png', grade: 'Primal' },
+    { id: 'primal_acc_necklace_01', name: '찬란한 윤회의 성물', description: '태초 등급 목걸이', price: 100000, image: 'primal_necklace.png', grade: 'Primal' },
+    { id: 'primal_acc_earring_01', name: '시공의 각성 이어링', description: '태초 등급 귀걸이', price: 100000, image: 'primal_earring.png', grade: 'Primal' },
+    { id: 'primal_acc_wristwatch_01', name: '계시자의 크로노그래프', description: '태초 등급 손목시계', price: 100000, image: 'primal_wristwatch.png', grade: 'Primal' },  
+  { id: 'soulstone_attack', name: '파괴자의 소울스톤', description: '공격력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'power_stone.png', grade: 'Primal' },
     { id: 'soulstone_hp', name: '선구자의 소울스톤', description: '체력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'hp_stone.png', grade: 'Primal' },
     { id: 'soulstone_defense', name: '통찰자의 소울스톤', description: '방어력 영구 1% 증폭(최종 곱연산) 이 힘은 오직 아포칼립스만이 감당할수있다', price: 50, image: 'def_stone.png', grade: 'Primal' },
 { id: 'gold_potion', name: '골드 물약', description: '1시간 동안 최종 골드 획득량이 2배 증가합니다.', price: 30, image: 'gold_potion.png', grade: 'Legendary' },
@@ -1472,17 +1512,24 @@ function renderAbyssalShop() {
         }
     }
 
-    document.querySelectorAll('.modal-overlay').forEach(modal => { 
-        const closeBtn = modal.querySelector('.close-button');
-        if(closeBtn) {
-            closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+   document.querySelectorAll('.modal-overlay').forEach(modal => { 
+    const closeBtn = modal.querySelector('.close-button');
+    if(closeBtn) {
+        closeBtn.addEventListener('click', () => {
+
+            if (closeBtn.id === 'pvp-abort-button') {
+                return; 
+            }
+            modal.style.display = 'none';
+        });
+    }
+    modal.addEventListener('click', (e) => {
+      
+        if (e.target === modal && modal.dataset.disableOutsideClick !== 'true') {
+            modal.style.display = 'none';
         }
-        modal.addEventListener('click', (e) => { 
-            if (e.target === modal) { 
-                modal.style.display = 'none'; 
-            } 
-        }); 
     });
+});
 
     let selectedPetChoiceUid = null;
 
@@ -2001,7 +2048,7 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
     if (floorActionButtons) floorActionButtons.style.display = 'flex';
     if (foundryBtn) {
         foundryBtn.style.display = 'block';
-        foundryBtn.textContent = '시간의 제련소';
+        foundryBtn.textContent = '제련소';
         foundryBtn.style.backgroundColor = '#8e44ad';
     }
     if (elements.floorControls.personalRaidBtn) elements.floorControls.personalRaidBtn.style.display = 'block';
@@ -2021,7 +2068,7 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
 
 
     } else if (isFoundryActive) {
-        elements.monster.level.innerHTML = `<span style="color:#8e44ad; font-weight:bold;">${monster.name || '시간의 제련소'}</span>`;
+        elements.monster.level.innerHTML = `<span style="color:#8e44ad; font-weight:bold;">${monster.name || '제련소'}</span>`;
 
         if (elements.floorControls.personalRaidBtn) elements.floorControls.personalRaidBtn.style.display = 'none';
         if (elements.floorControls.startDpsBtn) elements.floorControls.startDpsBtn.style.display = 'none';
@@ -2070,16 +2117,16 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
                             if (cooldown <= now) {
                                 clearInterval(returnCooldownTimer);
                                 frontlineBtn.disabled = false;
-                                frontlineBtn.textContent = '최전선 복귀';
+                                frontlineBtn.textContent = '최전선';
                             } else {
                                 const remaining = Math.ceil((cooldown - now) / 1000);
-                                frontlineBtn.textContent = `최전선 복귀 (${remaining}초)`;
+                                frontlineBtn.textContent = `최전선 (${remaining}초)`;
                             }
                         }, 1000);
                     } else {
                         if (returnCooldownTimer) clearInterval(returnCooldownTimer);
                         frontlineBtn.disabled = false;
-                        frontlineBtn.textContent = '최전선 복귀';
+                        frontlineBtn.textContent = '최전선';
                     }
                 }
             }
@@ -2154,6 +2201,7 @@ const updateUI = ({ player, monster, isInRaid = false }) => {
 
     renderAllInventories(player);
     renderFusionPanel(player);
+	renderPvpManagementTab(player);
     elements.log.innerHTML = player.log.map(msg => `<li>${msg}</li>`).join('');
 
  if (elements.incubator.toggleBtn) {
@@ -2495,8 +2543,7 @@ if (elements.incubator.grid) {
         });
     }
 
-
-  function updateEnhancementPanel(item) {
+ function updateEnhancementPanel(item) {
     const { details, slot, before, after, info, button, checkboxes, useTicketCheck, useHammerCheck } = elements.enhancement;
 
     if (!item) {
@@ -2728,8 +2775,11 @@ if (elements.incubator.grid) {
         if (!isEquipped) {
             let rewards = { gold: 0, shards: 0, essence: 0 };
             let isSellable = false;
-
-            if (item.type === 'weapon' || item.type === 'armor') {
+            if (item.grade === 'Primal') {
+                rewards.gold = getSellPrice(item); 
+                rewards.shards = 50000; 
+                isSellable = true;
+            } else if (item.type === 'weapon' || item.type === 'armor') {
                 rewards.gold = getSellPrice(item);
                 const shardMap = { Common: 1, Rare: 2, Legendary: 5, Epic: 50, Mystic: 1000, Primal: 10000 };
                 rewards.shards = shardMap[item.grade] || 0;
@@ -2768,7 +2818,11 @@ if (elements.incubator.grid) {
             if (isSellable) {
                 const rewardsText = [];
                 if (rewards.gold > 0) rewardsText.push(`${rewards.gold.toLocaleString()} G`);
-                if (rewards.shards > 0) rewardsText.push(`파편 ${rewards.shards.toLocaleString()}개`);
+                if (rewards.shards > 0) {
+                    const shardName = (item.grade === 'Primal' && item.type !== 'accessory') ? '심연의 파편' : '파편';
+                    rewardsText.push(`${shardName} ${rewards.shards.toLocaleString()}개`);
+                }
+                
                 if (rewards.essence > 0) rewardsText.push(`형상 ${rewards.essence.toLocaleString()}개`);
 
                 buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="false">판매 (${rewardsText.join(', ')})</button>`;
@@ -2818,6 +2872,7 @@ if (elements.incubator.grid) {
         info.innerHTML = infoContentHTML + buttonsHTML;
     }
 }
+
   function updateRiftEnchantPanel(item, previouslyLockedIndices = []) {
     const { slot, optionsContainer, costDisplay, button } = elements.riftEnchant;
 
@@ -2902,7 +2957,11 @@ const isEnchantable = item && (item.type === 'weapon' || item.type === 'armor' |
         updateCost();
     }
 
-    const getSellPrice = (item) => {
+   const getSellPrice = (item) => {
+        if (item && item.grade === 'Primal') {
+            return (item.enhancement || 0) * 1000000000000;
+        }
+        
         if (!item || (item.type !== 'weapon' && item.type !== 'armor')) return 0;
         const SELL_PRICES = { Common: 3000, Rare: 50000, Legendary: 400000, Epic: 2000000, Mystic: 100000000 };
         const basePrice = SELL_PRICES[item.grade] || 0;
@@ -4205,7 +4264,7 @@ function openResearchDetailModal(playerData, specializationId, techId) {
         if (player.isInFoundryOfTime) {
 
             player.isInFoundryOfTime = false; 
-            elements.foundry.toggleBtn.textContent = '시간의 제련소';
+            elements.foundry.toggleBtn.textContent = '제련소';
             elements.foundry.toggleBtn.style.backgroundColor = '#8e44ad';
             socket.emit('foundry:toggle', player);
         } else {
@@ -4635,6 +4694,325 @@ socket.on('refinement:itemUpdated', ({ updatedItem }) => {
     potionBuffsDisplay.appendChild(buffDiv);
 });
     }
+
+
+    const pvpTabContent = document.getElementById('pvp-tab');
+    const snapshotInfoDiv = document.getElementById('pvp-snapshot-info');
+    const registerSnapshotBtn = document.getElementById('pvp-register-snapshot-btn');
+
+  function renderPvpManagementTab(player) {
+        if (!player) return;
+
+        const snapshotInfoDiv = document.getElementById('pvp-snapshot-info');
+        if (!snapshotInfoDiv) return;
+
+        if (player.pvpSnapshot) {
+            const snapshot = player.pvpSnapshot;
+            const stats = snapshot.stats.total;
+            const artifacts = snapshot.unlockedArtifacts || [];
+
+            const weaponHTML = snapshot.equipment?.weapon ? createItemHTML(snapshot.equipment.weapon) : '⚔️<br>무기';
+            const armorHTML = snapshot.equipment?.armor ? createItemHTML(snapshot.equipment.armor) : '🛡️<br>방어구';
+            const petHTML = snapshot.equippedPet ? createItemHTML(snapshot.equippedPet) : '🐾<br>펫';
+            const necklaceHTML = snapshot.equipment?.necklace ? createItemHTML(snapshot.equipment.necklace) : '💍<br>목걸이';
+            const earringHTML = snapshot.equipment?.earring ? createItemHTML(snapshot.equipment.earring) : '👂<br>귀걸이';
+            const wristwatchHTML = snapshot.equipment?.wristwatch ? createItemHTML(snapshot.equipment.wristwatch) : '⏱️<br>손목시계';
+            
+            const artifactDisplay = `
+                <div class="pvp-artifact-container">
+                    <div class="pvp-artifact-slot ${artifacts[0] ? 'active' : ''}" title="${artifacts[0] ? artifacts[0].name : '비활성'}"></div>
+                    <div class="pvp-artifact-slot ${artifacts[1] ? 'active' : ''}" title="${artifacts[1] ? artifacts[1].name : '비활성'}"></div>
+                    <div class="pvp-artifact-slot ${artifacts[2] ? 'active' : ''}" title="${artifacts[2] ? artifacts[2].name : '비활성'}"></div>
+                </div>
+            `;
+
+            const snapshotHTML = `
+                <div class="player-panel pvp-snapshot-panel">
+                    <div class="player-info">
+                        <span class="player-name">${snapshot.username}</span>
+                        <span class="player-level">(최대 ${snapshot.maxLevel}층)</span>
+                        <div class="pvp-rp-display">RP: <span class="rp-value">${snapshot.rp.toLocaleString()}</span></div>
+                    </div>
+
+                    <div class="equipment-section" style="margin-top: 0;">
+                        <div class="equipment-slots">
+                            <div class="slot">${weaponHTML}</div>
+                            <div class="slot">${armorHTML}</div>
+                            <div class="slot">${petHTML}</div>
+                            <div class="slot">${necklaceHTML}</div>
+                            <div class="slot">${earringHTML}</div>
+                            <div class="slot">${wristwatchHTML}</div>
+                        </div>
+                    </div>
+
+                    <div class="player-stats-grid">
+                        <div class="stat-col left">
+                            <div class="stat-line">❤️ 총 체력: <span class="stat-value">${Math.floor(stats.hp).toLocaleString()}</span></div>
+                            <div class="stat-line">⚔️ 총 공격력: <span class="stat-value">${Math.floor(stats.attack).toLocaleString()}</span></div>
+                            <div class="stat-line">🛡️ 총 방어력: <span class="stat-value">${Math.floor(stats.defense).toLocaleString()}</span></div>
+                        </div>
+                        <div class="stat-col right">
+                            <div class="stat-line">💥 치명타 확률: <span class="stat-value">${(snapshot.stats.critChance * 100).toFixed(1)}%</span></div>
+                            <div class="stat-line">🔰 치명타 저항: <span class="stat-value">${(snapshot.stats.critResistance * 100).toFixed(1)}%</span></div>
+                            <div class="stat-line">👑 명성 점수: <span class="stat-value">${snapshot.fameScore.toLocaleString()}</span></div>
+                        </div>
+                    </div>
+
+                    <div class="pvp-artifact-info">
+                        <h4>유물 현황</h4>
+                        ${artifactDisplay}
+                    </div>
+                </div>
+            `;
+
+            snapshotInfoDiv.innerHTML = snapshotHTML;
+        } else {
+            snapshotInfoDiv.innerHTML = `<p>등록된 방어 데이터가 없습니다. 현재 스펙을 등록하여 다른 유저의 도전을 받으세요.</p>`;
+        }
+    }
+	
+	
+	
+    function createPvpMatchSpecPanelHTML(snapshotData) {
+        if (!snapshotData) return '<p>스펙 정보를 불러올 수 없습니다.</p>';
+
+        const snapshot = snapshotData;
+        const stats = snapshot.stats.total;
+        const artifacts = snapshot.unlockedArtifacts || [];
+
+        const weaponHTML = snapshot.equipment?.weapon ? createItemHTML(snapshot.equipment.weapon) : '⚔️<br>무기';
+        const armorHTML = snapshot.equipment?.armor ? createItemHTML(snapshot.equipment.armor) : '🛡️<br>방어구';
+        const petHTML = snapshot.equippedPet ? createItemHTML(snapshot.equippedPet) : '🐾<br>펫';
+        const necklaceHTML = snapshot.equipment?.necklace ? createItemHTML(snapshot.equipment.necklace) : '💍<br>목걸이';
+        const earringHTML = snapshot.equipment?.earring ? createItemHTML(snapshot.equipment.earring) : '👂<br>귀걸이';
+        const wristwatchHTML = snapshot.equipment?.wristwatch ? createItemHTML(snapshot.equipment.wristwatch) : '⏱️<br>손목시계';
+        
+        const artifactDisplay = `
+            <div class="pvp-artifact-container">
+                <div class="pvp-artifact-slot ${artifacts[0] ? 'active' : ''}" title="${artifacts[0] ? artifacts[0].name : '비활성'}"></div>
+                <div class="pvp-artifact-slot ${artifacts[1] ? 'active' : ''}" title="${artifacts[1] ? artifacts[1].name : '비활성'}"></div>
+                <div class="pvp-artifact-slot ${artifacts[2] ? 'active' : ''}" title="${artifacts[2] ? artifacts[2].name : '비활성'}"></div>
+            </div>
+        `;
+        
+        const snapshotHTML = `
+            <div class="player-panel pvp-snapshot-panel">
+                <div class="player-info">
+                    <span class="player-name">${snapshot.username}</span>
+                    <span class="player-level">(최대 ${snapshot.maxLevel}층)</span>
+                    <div class="pvp-rp-display">RP: <span class="rp-value">${snapshot.rp.toLocaleString()}</span></div>
+                </div>
+
+                <div class="equipment-section" style="margin-top: 0;">
+                    <div class="equipment-slots">
+                        <div class="slot">${weaponHTML}</div>
+                        <div class="slot">${armorHTML}</div>
+                        <div class="slot">${petHTML}</div>
+                        <div class="slot">${necklaceHTML}</div>
+                        <div class="slot">${earringHTML}</div>
+                        <div class="slot">${wristwatchHTML}</div>
+                    </div>
+                </div>
+
+                <div class="player-stats-grid">
+                    <div class="stat-col left">
+                        <div class="stat-line">❤️ 총 체력: <span class="stat-value">${Math.floor(stats.hp).toLocaleString()}</span></div>
+                        <div class="stat-line">⚔️ 총 공격력: <span class="stat-value">${Math.floor(stats.attack).toLocaleString()}</span></div>
+                        <div class="stat-line">🛡️ 총 방어력: <span class="stat-value">${Math.floor(stats.defense).toLocaleString()}</span></div>
+                    </div>
+                    <div class="stat-col right">
+                        <div class="stat-line">💥 치명타 확률: <span class="stat-value">${(snapshot.stats.critChance * 100).toFixed(1)}%</span></div>
+                        <div class="stat-line">🔰 치명타 저항: <span class="stat-value">${(snapshot.stats.critResistance * 100).toFixed(1)}%</span></div>
+                        <div class="stat-line">👑 명성 점수: <span class="stat-value">${snapshot.fameScore.toLocaleString()}</span></div>
+                    </div>
+                </div>
+
+                <div class="pvp-artifact-info">
+                    <h4>유물 현황</h4>
+                    ${artifactDisplay}
+                </div>
+            </div>
+        `;
+
+        return snapshotHTML;
+    }
+	
+
+
+    function renderPvpBuffs(buffsArray, displayElement) {
+        if (!buffsArray || !displayElement) return;
+        displayElement.innerHTML = buffsArray.map(buff => {
+            const buffIdClass = buff.id.replace(/_/g, '-');
+            return `<div class="buff-icon ${buffIdClass}" title="${buff.name}">${buff.name}</div>`;
+        }).join('');
+    }
+	
+
+    registerSnapshotBtn.addEventListener('click', () => {
+        if (confirm('현재 당신의 모든 스펙(장비, 스탯, 펫 등)을 PVP 방어 데이터로 등록하시겠습니까?')) {
+            socket.emit('pvp:registerSnapshot', (response) => {
+                if (response.success) {
+                    alert('성공적으로 등록되었습니다.');
+                    currentPlayerState.pvpSnapshot = response.snapshot;
+                    renderPvpManagementTab(currentPlayerState);
+                } else {
+                    alert('등록에 실패했습니다.');
+                }
+            });
+        }
+    });
+
+    elements.tabs.pvp.addEventListener('click', () => {
+        renderPvpManagementTab(currentPlayerState);
+    });
+
+  function fetchAndRenderPvpRanking() {
+        socket.emit('pvp:getRanking', (data) => {
+            if (!data.success) {
+                elements.modals.pvpRanking.leaderboardList.innerHTML = '<li>랭킹을 불러오지 못했습니다.</li>';
+                return;
+            }
+            
+            if (data.leaderboard && data.leaderboard.length > 0) {
+                elements.modals.pvpRanking.leaderboardList.innerHTML = data.leaderboard.map((p, i) => {
+                    const rank = i + 1;
+                    return `<li class="pvp-ranking-entry" style="display: grid; grid-template-columns: 50px 1fr auto auto; gap: 15px; align-items: center;">
+                                <span class="rank-badge rank-${rank}">${rank}</span>
+                                <span style="text-align: left;">${p.username}</span>
+                                <span style="margin-left: auto;">RP: <strong style="color: var(--primary-color);">${p.pvpRp.toLocaleString()}</strong></span>
+                                <span style="color: var(--text-muted); width: 100px; text-align: right;">(${p.pvpWins}승 ${p.pvpLosses}패)</span>
+                            </li>`;
+                }).join('');
+            } else {
+                elements.modals.pvpRanking.leaderboardList.innerHTML = '<li>아직 랭킹 데이터가 없습니다.</li>';
+            }
+            
+            const myData = data.myRank;
+            if (myData) {
+                elements.modals.pvpRanking.myRankInfo.innerHTML = `
+                    <p>현재 랭킹: <strong>${myData.rank.toLocaleString()}위</strong></p>
+                    <p>내 RP: <span class="rp-value">${myData.pvpRp.toLocaleString()}</span></p>
+                    <p class="win-loss">${myData.pvpWins}승 ${myData.pvpLosses}패</p>
+                `;
+            } else {
+                 elements.modals.pvpRanking.myRankInfo.innerHTML = `<p>아직 랭킹에 등록되지 않았습니다. PVP에 참여하여 랭킹에 이름을 올려보세요!</p>`;
+            }
+        });
+    }
+
+    elements.modals.pvpRanking.button.addEventListener('click', () => {
+        fetchAndRenderPvpRanking();
+        elements.modals.pvpRanking.overlay.style.display = 'flex';
+    });
+	
+	
+	elements.floorControls.pvpStartBtn.addEventListener('click', () => {
+        if (currentPlayerState?.pvpEntries <= 0) {
+            return alert('오늘의 PVP 참가 횟수를 모두 사용했습니다.');
+        }
+        if (confirm(`PVP 대전을 시작하시겠습니까? (남은 횟수: ${currentPlayerState?.pvpEntries || 0}회)`)) {
+            const { pvpMatch } = elements.modals;
+            const abortButton = document.getElementById('pvp-abort-button');
+
+            pvpMatch.title.textContent = '⚔️ 상대를 찾는 중...';
+            pvpMatch.overlay.style.display = 'flex';
+            pvpMatch.overlay.dataset.disableOutsideClick = 'true'; 
+            abortButton.style.display = 'none';
+
+            socket.emit('pvp:startMatchmaking', (response) => {
+                if (!response.success) {
+                    alert(response.message || '매칭에 실패했습니다.');
+                    pvpMatch.overlay.style.display = 'none';
+                    delete pvpMatch.overlay.dataset.disableOutsideClick; 
+                    return;
+                }
+
+                abortButton.style.display = 'block';
+
+                const { opponent, timeline } = response;
+                pvpMatch.title.textContent = "대전 시작!";
+                
+                const mySnapshotForPvp = { ...currentPlayerState, rp: currentPlayerState.pvpRp };
+                document.getElementById('pvp-my-spec-display').innerHTML = createPvpMatchSpecPanelHTML(mySnapshotForPvp);
+                document.getElementById('pvp-opponent-spec-display').innerHTML = createPvpMatchSpecPanelHTML(opponent.snapshot);
+
+            
+                [document.getElementById('pvp-my-spec-display'), document.getElementById('pvp-opponent-spec-display')].forEach(specDisplay => {
+                    const panel = specDisplay.querySelector('.player-panel');
+                    if (panel) {
+                        const resourceDisplay = panel.querySelector('.resource-display');
+                        if (resourceDisplay) resourceDisplay.style.display = 'none';
+                        const upgradeButtons = panel.querySelectorAll('.button-group');
+                        upgradeButtons.forEach(btnGroup => btnGroup.remove());
+                    }
+                });
+
+                let timer = 180;
+                if (pvpMatchTimerInterval) clearInterval(pvpMatchTimerInterval);
+
+                pvpMatchTimerInterval = setInterval(() => {
+                    timer--;
+                    const minutes = String(Math.floor(timer / 60)).padStart(2, '0');
+                    const seconds = String(timer % 60).padStart(2, '0');
+                    pvpMatch.timer.textContent = `${minutes}:${seconds}`;
+
+                    const playerTotalDamage = currentPlayerState.pvpCombatSession?.totalDamage || 0;
+                    const opponentFrame = timeline[179 - timer] || { damage: 0, buffs: [] };
+                    const opponentTotalDamage = opponentFrame.damage;
+
+                    renderPvpBuffs(currentPlayerState.buffs, document.getElementById('pvp-my-buff-display'));
+                    renderPvpBuffs(opponentFrame.buffs, document.getElementById('pvp-opponent-buff-display'));
+                    
+                    const maxDamage = Math.max(playerTotalDamage, opponentTotalDamage, 1);
+
+                    document.getElementById('pvp-my-damage-bar').style.width = `${(playerTotalDamage / maxDamage) * 100}%`;
+                    document.getElementById('pvp-my-damage-text').textContent = Math.floor(playerTotalDamage).toLocaleString();
+                    document.getElementById('pvp-opponent-damage-bar').style.width = `${(opponentTotalDamage / maxDamage) * 100}%`;
+                    document.getElementById('pvp-opponent-damage-text').textContent = Math.floor(opponentTotalDamage).toLocaleString();
+
+                    if (timer <= 0) {
+                        clearInterval(pvpMatchTimerInterval);
+                        pvpMatch.overlay.style.display = 'none';
+                        abortButton.style.display = 'none';
+                        delete pvpMatch.overlay.dataset.disableOutsideClick; 
+                        
+                        socket.emit('pvp:matchResult', {}, (result) => {
+                             if(result.success) {
+                                const { pvpResult } = elements.modals;
+                                pvpResult.title.textContent = `대전 결과: ${result.result}`;
+                                const rpChangeClass = result.rpChange >= 0 ? 'rp-gain' : 'rp-loss';
+                                const rpSign = result.rpChange >= 0 ? '+' : '';
+                                
+                                pvpResult.body.innerHTML = `
+                                    <p>내 총 피해량: ${Math.floor(result.myDamage).toLocaleString()}</p>
+                                    <p>상대 총 피해량: ${Math.floor(result.opponentDamage).toLocaleString()}</p>
+                                    <p>RP 변동: ${result.oldRp.toLocaleString()} → ${result.newRp.toLocaleString()} <span class="rp-change ${rpChangeClass}">(${rpSign}${result.rpChange})</span></p>
+                                `;
+                                pvpResult.overlay.style.display = 'flex';
+                            }
+                        });
+                    }
+                }, 1000);
+            });
+        }
+    });
+
+document.getElementById('pvp-abort-button').addEventListener('click', () => {
+    if (confirm('PVP를 즉시 종료하시겠습니까?\n(참가 횟수는 반환되지 않습니다.)')) {
+        clearInterval(pvpMatchTimerInterval);
+        socket.emit('pvp:abortMatch'); 
+        elements.modals.pvpMatch.overlay.style.display = 'none';
+        delete elements.modals.pvpMatch.overlay.dataset.disableOutsideClick; 
+    }
+});
+
+
+
+    elements.modals.pvpResult.closeBtn.addEventListener('click', () => {
+        elements.modals.pvpResult.overlay.style.display = 'none';
+    });
+    
+    
 
 if (potionTimerInterval) clearInterval(potionTimerInterval);
 potionTimerInterval = setInterval(updatePotionTimersUI, 1000);
