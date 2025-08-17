@@ -1938,6 +1938,16 @@ if (socket.handshake.auth.refreshedToken) {
         return socket.disconnect(); 
     }
 
+if (gameData && (typeof gameData.pvpEntries !== 'number' || isNaN(gameData.pvpEntries))) {
+    gameData.pvpEntries = 5;
+}
+
+if (!gameData) { 
+    console.error(`[오류] ${socket.username}의 게임 데이터를 찾을 수 없습니다.`);
+    return socket.disconnect(); 
+}
+
+
     await calculateAndSendOfflineRewards(gameData);
     gameData = await GameData.findOne({ user: socket.userId }).lean();
 
