@@ -2815,7 +2815,7 @@ if (elements.incubator.grid) {
             }
 
 
-            if (isSellable) {
+if (isSellable && item.grade !== 'Primal') {
                 const rewardsText = [];
                 if (rewards.gold > 0) rewardsText.push(`${rewards.gold.toLocaleString()} G`);
                 if (rewards.shards > 0) {
@@ -2825,8 +2825,9 @@ if (elements.incubator.grid) {
                 
                 if (rewards.essence > 0) rewardsText.push(`형상 ${rewards.essence.toLocaleString()}개`);
 
-                buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="false">판매 (${rewardsText.join(', ')})</button>`;
-
+if (item.id !== 'rift_shard_abyss') {
+    buttonsHTML += `<button class="action-btn sell-btn" data-action="sell" data-sell-all="false">판매 (${rewardsText.join(', ')})</button>`;
+}
 
                 if (item.enhancement === 0 && item.quantity > 1 && ((item.type === 'weapon' || item.type === 'armor') || item.category === 'Egg')) {
                     const allRewardsText = [];

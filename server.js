@@ -5273,19 +5273,22 @@ async function sellItem(player, uid, sellAll) {
         let essenceReward = 0;
         let isSellable = false;
 
-        if (item.grade === 'Primal') {
-            goldReward = (item.enhancement || 0) * 1000000000000; 
+        // [수정] 'Primal' 등급이면서 '장비'인 경우에만 이 로직을 타도록 조건을 강화
+        if (item.grade === 'Primal' && (item.type === 'weapon' || item.type === 'armor' || item.type === 'accessory')) {
+            const baseGold = 120000000000;
+            const enhancementGold = (item.enhancement || 0) * 1000000000000;
+            goldReward = baseGold + enhancementGold;
             shardReward = 50000;
             isSellable = true;
         } else if (item.type === 'weapon' || item.type === 'armor') {
-            const prices = { Common: 3000, Rare: 50000, Legendary: 400000, Epic: 2000000, Mystic: 3000000000, Primal: 120000000000 };
-            const shards = { Common: 1, Rare: 2, Legendary: 5, Epic: 50, Mystic: 1000, Primal: 10000 };
+            const prices = { Common: 3000, Rare: 50000, Legendary: 400000, Epic: 2000000, Mystic: 3000000000 };
+            const shards = { Common: 1, Rare: 2, Legendary: 5, Epic: 50, Mystic: 1000 };
             goldReward = prices[item.grade] || 0;
             shardReward = shards[item.grade] || 0;
             isSellable = true;
         } else if (item.type === 'accessory') {
-            const prices = { Primal: 120000000000 };
-            const shards = { Mystic: 500, Primal: 10000 };
+            const prices = {};
+            const shards = { Mystic: 500 };
             goldReward = prices[item.grade] || 0;
             shardReward = shards[item.grade] || 0;
             if (goldReward > 0 || shardReward > 0) isSellable = true;
@@ -5298,25 +5301,15 @@ async function sellItem(player, uid, sellAll) {
         } else if (item.type === 'Spirit') {
             essenceReward = 20;
             isSellable = true;
-        }
-
-        else if (item.category === 'Tome') {
+        } else if (item.category === 'Tome') {
             goldReward = 100000000;
             shardReward = 20;
             isSellable = true;
-        }
-
-        else if (item.category === 'Egg') {
+        } else if (item.category === 'Egg') {
             switch (item.id) {
-                case 'pet_egg_normal':
-                    goldReward = 2000000;
-                    break;
-                case 'pet_egg_ancient':
-                    goldReward = 35000000;
-                    break;
-                case 'pet_egg_mythic':
-                    goldReward = 40000000000;
-                    break;
+                case 'pet_egg_normal': goldReward = 2000000; break;
+                case 'pet_egg_ancient': goldReward = 35000000; break;
+                case 'pet_egg_mythic': goldReward = 40000000000; break;
             }
             if (goldReward > 0) isSellable = true;
         }
@@ -5331,54 +5324,39 @@ async function sellItem(player, uid, sellAll) {
         const itemName = item.enhancement > 0 ? `+${item.enhancement} ${item.name}` : item.name;
 
         if (item.enhancement > 0 || !sellAll || itemLocation !== 'inventory') {
-
             let finalGold = goldReward;
-
             if (item.grade !== 'Primal' && item.enhancement > 0) { 
                 const enhancementCost = getEnhancementCost(item.enhancement);
                 const priceWithEnhancement = goldReward + enhancementCost;
-                if (item.enhancement <= 8) {
-                    finalGold = priceWithEnhancement;
-                } else if (item.enhancement <= 10) {
-                    finalGold = priceWithEnhancement + 10000;
-                } else {
-                    finalGold = Math.floor(priceWithEnhancement * 1.5);
-                }
+                if (item.enhancement <= 8) { finalGold = priceWithEnhancement; }
+                else if (item.enhancement <= 10) { finalGold = priceWithEnhancement + 10000; }
+                else { finalGold = Math.floor(priceWithEnhancement * 1.5); }
             }
             finalGold = Math.floor(finalGold * sellBonus);
-
             player.gold += finalGold;
 
             if (shardReward > 0) {
-                const shardItemId = (item.grade === 'Primal' && item.type !== 'accessory') ? 'rift_shard_abyss' : 'rift_shard';
+                const shardItemId = (item.grade === 'Primal') ? 'rift_shard_abyss' : 'rift_shard';
                 handleItemStacking(player, createItemInstance(shardItemId, shardReward));
             }
-
             if (essenceReward > 0) handleItemStacking(player, createItemInstance('spirit_essence', essenceReward));
 
             const rewardsLog = [];
             if (finalGold > 0) rewardsLog.push(`${finalGold.toLocaleString()} G`);
             if (shardReward > 0) {
-                const shardName = (item.grade === 'Primal' && item.type !== 'accessory') ? '심연의 파편' : '균열의 파편';
+                const shardName = (item.grade === 'Primal') ? '심연의 파편' : '균열의 파편';
                 rewardsLog.push(`${shardName} ${shardReward.toLocaleString()}개`);
             }
             if (essenceReward > 0) rewardsLog.push(`정령의 형상 ${essenceReward.toLocaleString()}개`);
+
             if (player.maxLevel >= 1000000) {
                 let abyssalShardAmount = 0;
                 const mysticGearIds = ['w005', 'a005', 'acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
-
-                if (mysticGearIds.includes(item.id)) {
-                    abyssalShardAmount = Math.floor(Math.random() * 71) + 30; // 30 ~ 100
-                } else if (item.id === 'pet_egg_ancient') {
-                    abyssalShardAmount = Math.floor(Math.random() * 30) + 1; // 1 ~ 30
-                } else if (item.id === 'pet_egg_mythic') {
-                    abyssalShardAmount = Math.floor(Math.random() * 701) + 300; // 300 ~ 1000
-                } else if (item.grade === 'Epic' && item.type === 'pet') {
-                    abyssalShardAmount = Math.floor(Math.random() * 21) + 20; // 20 ~ 40
-                } else if (item.grade === 'Mystic' && item.type === 'pet') {
-                    abyssalShardAmount = Math.floor(Math.random() * 501) + 1000; // 1000 ~ 1500
-                }
-
+                if (mysticGearIds.includes(item.id)) { abyssalShardAmount = Math.floor(Math.random() * 71) + 30; }
+                else if (item.id === 'pet_egg_ancient') { abyssalShardAmount = Math.floor(Math.random() * 30) + 1; }
+                else if (item.id === 'pet_egg_mythic') { abyssalShardAmount = Math.floor(Math.random() * 701) + 300; }
+                else if (item.grade === 'Epic' && item.type === 'pet') { abyssalShardAmount = Math.floor(Math.random() * 21) + 20; }
+                else if (item.grade === 'Mystic' && item.type === 'pet') { abyssalShardAmount = Math.floor(Math.random() * 501) + 1000; }
                 if (abyssalShardAmount > 0) {
                     handleItemStacking(player, createItemInstance('rift_shard_abyss', abyssalShardAmount));
                     rewardsLog.push(`심연의 파편 ${abyssalShardAmount}개`);
@@ -5387,62 +5365,54 @@ async function sellItem(player, uid, sellAll) {
 
             pushLog(player, `[판매] ${itemName} 1개를 판매하여 ${rewardsLog.join(', ')}를 획득했습니다.`);
 
-            if (item.quantity > 1) {
-                item.quantity--;
-            } else {
+            if (item.quantity > 1) { item.quantity--; }
+            else {
                 if (itemLocation === 'inventory') player.inventory.splice(itemIndex, 1);
                 else if (itemLocation === 'petInventory') player.petInventory.splice(itemIndex, 1);
                 else if (itemLocation === 'spiritInventory') player.spiritInventory.splice(itemIndex, 1);
             }
 
         } else {
-
             const quantityToSell = item.quantity;
             const totalGold = Math.floor((goldReward * quantityToSell) * sellBonus);
             const totalShards = shardReward * quantityToSell;
-
             player.gold += totalGold;
-            if (totalShards > 0) handleItemStacking(player, createItemInstance('rift_shard', totalShards));
+
+            if (totalShards > 0) {
+                const shardItemId = (item.grade === 'Primal') ? 'rift_shard_abyss' : 'rift_shard';
+                handleItemStacking(player, createItemInstance(shardItemId, totalShards));
+            }
 
             const rewardsLog = [];
             if (totalGold > 0) rewardsLog.push(`${totalGold.toLocaleString()} G`);
-            if (totalShards > 0) rewardsLog.push(`균열 파편 ${totalShards.toLocaleString()}개`);
+            if (totalShards > 0) {
+                const shardName = (item.grade === 'Primal') ? '심연의 파편' : '균열의 파편';
+                rewardsLog.push(`${shardName} ${totalShards.toLocaleString()}개`);
+            }
 
-       
             if (player.maxLevel >= 1000000) {
                 let totalAbyssalShards = 0;
                 const mysticGearIds = ['w005', 'a005', 'acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
-
                 for(let i = 0; i < quantityToSell; i++) {
-                    if (mysticGearIds.includes(item.id)) {
-                        totalAbyssalShards += Math.floor(Math.random() * 71) + 30;
-                    } else if (item.id === 'pet_egg_ancient') {
-                        totalAbyssalShards += Math.floor(Math.random() * 30) + 1;
-                    } else if (item.id === 'pet_egg_mythic') {
-                        totalAbyssalShards += Math.floor(Math.random() * 701) + 300;
-                    } else if (item.grade === 'Epic' && item.type === 'pet') {
-                         totalAbyssalShards += Math.floor(Math.random() * 21) + 20;
-                    } else if (item.grade === 'Mystic' && item.type === 'pet') {
-                         totalAbyssalShards += Math.floor(Math.random() * 501) + 1000;
-                    }
+                    if (mysticGearIds.includes(item.id)) { totalAbyssalShards += Math.floor(Math.random() * 71) + 30; }
+                    else if (item.id === 'pet_egg_ancient') { totalAbyssalShards += Math.floor(Math.random() * 30) + 1; }
+                    else if (item.id === 'pet_egg_mythic') { totalAbyssalShards += Math.floor(Math.random() * 701) + 300; }
+                    else if (item.grade === 'Epic' && item.type === 'pet') { totalAbyssalShards += Math.floor(Math.random() * 21) + 20; }
+                    else if (item.grade === 'Mystic' && item.type === 'pet') { totalAbyssalShards += Math.floor(Math.random() * 501) + 1000; }
                 }
-
                 if (totalAbyssalShards > 0) {
                     handleItemStacking(player, createItemInstance('rift_shard_abyss', totalAbyssalShards));
                     rewardsLog.push(`심연의 파편 ${totalAbyssalShards.toLocaleString()}개`);
                 }
             }
 
-
             player.inventory.splice(itemIndex, 1);
-
             pushLog(player, `[판매] ${itemName} ${quantityToSell}개를 판매하여 ${rewardsLog.join(', ')}를 획득했습니다.`);
         }
 
         if (player.titleCounters) player.titleCounters.sellCount = (player.titleCounters.sellCount || 0) + 1;
         sendState(player.socket, player, calcMonsterStats(player));
         sendInventoryUpdate(player);
-
     } catch (e) {
         console.error(`[sellItem] 심각한 오류 발생:`, e);
         pushLog(player, '[판매] 아이템 판매 중 오류가 발생했습니다.');
@@ -5485,7 +5455,6 @@ function onPetFusionComplete(player) {
 }
 
 
-
 function autoSellItemById(player, itemToSell) {
     if (!player || !itemToSell) return;
 
@@ -5494,60 +5463,44 @@ function autoSellItemById(player, itemToSell) {
     let essenceReward = 0;
     let isSellable = false;
 
-    const itemDataDefinition = itemData[itemToSell.id];
-
-    if (itemDataDefinition) {
-        if (itemToSell.type === 'weapon' || itemToSell.type === 'armor') {
-            const prices = { Common: 3000, Rare: 50000, Legendary: 400000, Epic: 2000000, Mystic: 3000000000, Primal: 120000000000 };
-            const shards = { Common: 1, Rare: 2, Legendary: 5, Epic: 50, Mystic: 1000, Primal: 10000 };
-            goldReward = prices[itemToSell.grade] || 0;
-            shardReward = shards[itemToSell.grade] || 0;
-            isSellable = true;
-        } else if (itemToSell.type === 'accessory') {
-            const prices = { Primal: 120000000000 };
-            const shards = { Mystic: 500, Primal: 10000 };
-            goldReward = prices[itemToSell.grade] || 0;
-            shardReward = shards[itemToSell.grade] || 0;
-            if (goldReward > 0 || shardReward > 0) isSellable = true;
-        } else if (itemToSell.category === 'Tome') {
-             goldReward = 100000000;
-             shardReward = 20;
-             isSellable = true;
+    if (itemToSell.grade === 'Primal') {
+        const baseGold = 120000000000;
+        const enhancementGold = (itemToSell.enhancement || 0) * 1000000000000;
+        goldReward = baseGold + enhancementGold;
+        shardReward = 50000;
+        isSellable = true;
+    } else if (itemToSell.type === 'weapon' || itemToSell.type === 'armor') {
+        const prices = { Common: 3000, Rare: 50000, Legendary: 400000, Epic: 2000000, Mystic: 3000000000 };
+        const shards = { Common: 1, Rare: 2, Legendary: 5, Epic: 50, Mystic: 1000 };
+        goldReward = prices[itemToSell.grade] || 0;
+        shardReward = shards[itemToSell.grade] || 0;
+        isSellable = true;
+    } else if (itemToSell.type === 'accessory') {
+        const prices = {};
+        const shards = { Mystic: 500 };
+        goldReward = prices[itemToSell.grade] || 0;
+        shardReward = shards[itemToSell.grade] || 0;
+        if (goldReward > 0 || shardReward > 0) isSellable = true;
+    } else if (itemToSell.type === 'pet') {
+        if (itemToSell.id === 'bahamut') { goldReward = 50000000000; essenceReward = 100; } 
+        else if (itemToSell.fused) { goldReward = 100000000; essenceReward = 20; } 
+        else if (itemToSell.grade === 'Epic') { goldReward = 50000000; essenceReward = 10; } 
+        else if (itemToSell.grade === 'Rare') { goldReward = 3000000; essenceReward = 3; }
+        if (goldReward > 0 || essenceReward > 0) isSellable = true;
+    } else if (itemToSell.type === 'Spirit') {
+        essenceReward = 20;
+        isSellable = true;
+    } else if (itemToSell.category === 'Tome') {
+        goldReward = 100000000;
+        shardReward = 20;
+        isSellable = true;
+    } else if (itemToSell.category === 'Egg') {
+        switch (itemToSell.id) {
+            case 'pet_egg_normal': goldReward = 2000000; break;
+            case 'pet_egg_ancient': goldReward = 35000000; break;
+            case 'pet_egg_mythic': goldReward = 40000000000; break;
         }
-		
-		 else if (itemToSell.category === 'Egg') {
-                switch (itemToSell.id) {
-                    case 'pet_egg_normal':
-                        goldReward = 2000000;
-                        break;
-                    case 'pet_egg_ancient':
-                        goldReward = 35000000;
-                        break;
-                    case 'pet_egg_mythic':
-                        goldReward = 40000000000;
-                        break;
-                }
-                if (goldReward > 0) isSellable = true;
-            }
-		
-		
-		
-		
-    } else {
-         const petDataDefinition = petData[itemToSell.id];
-         if (petDataDefinition) {
-             if (itemToSell.id === 'bahamut') { goldReward = 50000000000; essenceReward = 100; }
-             else if (itemToSell.fused) { goldReward = 100000000; essenceReward = 20; }
-             else if (itemToSell.grade === 'Epic') { goldReward = 50000000; essenceReward = 10; }
-             else if (itemToSell.grade === 'Rare') { goldReward = 3000000; essenceReward = 3; }
-             if (goldReward > 0 || essenceReward > 0) isSellable = true;
-         } else {
-            const spiritDataDefinition = spiritData[itemToSell.id];
-            if(spiritDataDefinition) {
-                essenceReward = 20;
-                isSellable = true;
-            }
-         }
+        if (goldReward > 0) isSellable = true;
     }
 
     if (!isSellable) return;
@@ -5561,18 +5514,42 @@ function autoSellItemById(player, itemToSell) {
     const totalEssence = essenceReward * quantity;
 
     if (totalGold > 0) player.gold += totalGold;
-    if (totalShards > 0) handleItemStacking(player, createItemInstance('rift_shard', totalShards));
+    if (totalShards > 0) {
+        const shardItemId = (itemToSell.grade === 'Primal') ? 'rift_shard_abyss' : 'rift_shard';
+        handleItemStacking(player, createItemInstance(shardItemId, totalShards));
+    }
     if (totalEssence > 0) handleItemStacking(player, createItemInstance('spirit_essence', totalEssence));
 
     const rewardsLog = [];
     if (totalGold > 0) rewardsLog.push(`${totalGold.toLocaleString()} G`);
-    if (totalShards > 0) rewardsLog.push(`균열 파편 ${totalShards.toLocaleString()}개`);
+    if (totalShards > 0) {
+        const shardName = (itemToSell.grade === 'Primal') ? '심연의 파편' : '균열의 파편';
+        rewardsLog.push(`${shardName} ${totalShards.toLocaleString()}개`);
+    }
     if (totalEssence > 0) rewardsLog.push(`정령의 형상 ${totalEssence.toLocaleString()}개`);
+
+    if (player.maxLevel >= 1000000) {
+        let totalAbyssalShards = 0;
+        const mysticGearIds = ['w005', 'a005', 'acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
+        for(let i = 0; i < quantity; i++) {
+            if (mysticGearIds.includes(itemToSell.id)) { totalAbyssalShards += Math.floor(Math.random() * 71) + 30; }
+            else if (itemToSell.id === 'pet_egg_ancient') { totalAbyssalShards += Math.floor(Math.random() * 30) + 1; }
+            else if (itemToSell.id === 'pet_egg_mythic') { totalAbyssalShards += Math.floor(Math.random() * 701) + 300; }
+            else if (itemToSell.grade === 'Epic' && itemToSell.type === 'pet') { totalAbyssalShards += Math.floor(Math.random() * 21) + 20; }
+            else if (itemToSell.grade === 'Mystic' && itemToSell.type === 'pet') { totalAbyssalShards += Math.floor(Math.random() * 501) + 1000; }
+        }
+        if (totalAbyssalShards > 0) {
+            handleItemStacking(player, createItemInstance('rift_shard_abyss', totalAbyssalShards));
+            rewardsLog.push(`심연의 파편 ${totalAbyssalShards.toLocaleString()}개`);
+        }
+    }
 
     if (rewardsLog.length > 0) {
         pushLog(player, `[자동판매] ${itemToSell.name} ${quantity}개를 판매하여 ${rewardsLog.join(', ')}를 획득했습니다.`);
     }
 }
+
+
 async function sellExistingItemsFromAutoSellList(player, itemId) {
     if (!player || !itemId) return;
 
