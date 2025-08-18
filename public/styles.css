@@ -3641,3 +3641,9 @@ body.auth-view {
     font-size: 0.9em;
     animation: none;
 }
+
+#dps-leaderboard-list, #dps-personal-list {
+    max-height: 350px; /* 모달 크기에 맞춰 목록의 최대 높이를 지정합니다. */
+    overflow-y: auto;  /* 내용이 최대 높이를 넘어가면 세로 스크롤바를 자동으로 생성합니다. */
+    padding-right: 15px; /* 스크롤바가 텍스트를 가리지 않도록 오른쪽에 여백을 줍니다. */
+}

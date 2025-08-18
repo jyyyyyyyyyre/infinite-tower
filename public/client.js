@@ -270,6 +270,47 @@ function startApp(token) {
         }
     });
 
+socket.on('forceRollback', (data) => {
+
+    const overlay = document.createElement('div');
+    overlay.id = 'rollback-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+    overlay.style.color = 'white';
+    overlay.style.display = 'flex';
+    overlay.style.justifyContent = 'center';
+    overlay.style.alignItems = 'center';
+    overlay.style.zIndex = '10001';
+    overlay.style.textAlign = 'center';
+    overlay.style.fontSize = '1.8em';
+
+    let countdown = data.delay || 10;
+    overlay.innerHTML = `
+        <div>
+            <p>⚠️ ${data.message}</p>
+            <p><span id="rollback-countdown">${countdown}</span>초 후 페이지를 새로고침합니다.</p>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const countdownInterval = setInterval(() => {
+        countdown--;
+        const countdownEl = document.getElementById('rollback-countdown');
+        if (countdownEl) {
+            countdownEl.textContent = countdown;
+        }
+        if (countdown <= 0) {
+            clearInterval(countdownInterval);
+            location.reload();
+        }
+    }, 1000);
+
+    socket.disconnect();
+});
+
     socket.on('reconnect_attempt', (attempt) => {
         console.log(`Socket.IO: 재연결 시도 중... (${attempt}회)`);
         const counter = document.getElementById('reconnect-attempt-counter');
@@ -2815,13 +2856,13 @@ if (elements.incubator.grid) {
             }
 
 
-if (isSellable && item.grade !== 'Primal') {
-                const rewardsText = [];
-                if (rewards.gold > 0) rewardsText.push(`${rewards.gold.toLocaleString()} G`);
-                if (rewards.shards > 0) {
-                    const shardName = (item.grade === 'Primal' && item.type !== 'accessory') ? '심연의 파편' : '파편';
-                    rewardsText.push(`${shardName} ${rewards.shards.toLocaleString()}개`);
-                }
+if (isSellable && !(item.grade === 'Primal' && item.type !== 'weapon' && item.type !== 'armor' && item.type !== 'accessory')) {
+    const rewardsText = [];
+    if (rewards.gold > 0) rewardsText.push(`${rewards.gold.toLocaleString()} G`);
+    if (rewards.shards > 0) {
+        const shardName = (item.grade === 'Primal' && item.type !== 'accessory') ? '심연의 파편' : '파편';
+        rewardsText.push(`${shardName} ${rewards.shards.toLocaleString()}개`);
+    }
                 
                 if (rewards.essence > 0) rewardsText.push(`형상 ${rewards.essence.toLocaleString()}개`);
 
@@ -4701,83 +4742,14 @@ socket.on('refinement:itemUpdated', ({ updatedItem }) => {
     const snapshotInfoDiv = document.getElementById('pvp-snapshot-info');
     const registerSnapshotBtn = document.getElementById('pvp-register-snapshot-btn');
 
-  function renderPvpManagementTab(player) {
-        if (!player) return;
+function renderPvpManagementTab(player) {
+    if (!player) return;
 
-        const snapshotInfoDiv = document.getElementById('pvp-snapshot-info');
-        if (!snapshotInfoDiv) return;
+    const snapshotInfoDiv = document.getElementById('pvp-snapshot-info');
+    if (!snapshotInfoDiv) return;
 
-        if (player.pvpSnapshot) {
-            const snapshot = player.pvpSnapshot;
-            const stats = snapshot.stats.total;
-            const artifacts = snapshot.unlockedArtifacts || [];
-
-            const weaponHTML = snapshot.equipment?.weapon ? createItemHTML(snapshot.equipment.weapon) : '⚔️<br>무기';
-            const armorHTML = snapshot.equipment?.armor ? createItemHTML(snapshot.equipment.armor) : '🛡️<br>방어구';
-            const petHTML = snapshot.equippedPet ? createItemHTML(snapshot.equippedPet) : '🐾<br>펫';
-            const necklaceHTML = snapshot.equipment?.necklace ? createItemHTML(snapshot.equipment.necklace) : '💍<br>목걸이';
-            const earringHTML = snapshot.equipment?.earring ? createItemHTML(snapshot.equipment.earring) : '👂<br>귀걸이';
-            const wristwatchHTML = snapshot.equipment?.wristwatch ? createItemHTML(snapshot.equipment.wristwatch) : '⏱️<br>손목시계';
-            
-            const artifactDisplay = `
-                <div class="pvp-artifact-container">
-                    <div class="pvp-artifact-slot ${artifacts[0] ? 'active' : ''}" title="${artifacts[0] ? artifacts[0].name : '비활성'}"></div>
-                    <div class="pvp-artifact-slot ${artifacts[1] ? 'active' : ''}" title="${artifacts[1] ? artifacts[1].name : '비활성'}"></div>
-                    <div class="pvp-artifact-slot ${artifacts[2] ? 'active' : ''}" title="${artifacts[2] ? artifacts[2].name : '비활성'}"></div>
-                </div>
-            `;
-
-            const snapshotHTML = `
-                <div class="player-panel pvp-snapshot-panel">
-                    <div class="player-info">
-                        <span class="player-name">${snapshot.username}</span>
-                        <span class="player-level">(최대 ${snapshot.maxLevel}층)</span>
-                        <div class="pvp-rp-display">RP: <span class="rp-value">${snapshot.rp.toLocaleString()}</span></div>
-                    </div>
-
-                    <div class="equipment-section" style="margin-top: 0;">
-                        <div class="equipment-slots">
-                            <div class="slot">${weaponHTML}</div>
-                            <div class="slot">${armorHTML}</div>
-                            <div class="slot">${petHTML}</div>
-                            <div class="slot">${necklaceHTML}</div>
-                            <div class="slot">${earringHTML}</div>
-                            <div class="slot">${wristwatchHTML}</div>
-                        </div>
-                    </div>
-
-                    <div class="player-stats-grid">
-                        <div class="stat-col left">
-                            <div class="stat-line">❤️ 총 체력: <span class="stat-value">${Math.floor(stats.hp).toLocaleString()}</span></div>
-                            <div class="stat-line">⚔️ 총 공격력: <span class="stat-value">${Math.floor(stats.attack).toLocaleString()}</span></div>
-                            <div class="stat-line">🛡️ 총 방어력: <span class="stat-value">${Math.floor(stats.defense).toLocaleString()}</span></div>
-                        </div>
-                        <div class="stat-col right">
-                            <div class="stat-line">💥 치명타 확률: <span class="stat-value">${(snapshot.stats.critChance * 100).toFixed(1)}%</span></div>
-                            <div class="stat-line">🔰 치명타 저항: <span class="stat-value">${(snapshot.stats.critResistance * 100).toFixed(1)}%</span></div>
-                            <div class="stat-line">👑 명성 점수: <span class="stat-value">${snapshot.fameScore.toLocaleString()}</span></div>
-                        </div>
-                    </div>
-
-                    <div class="pvp-artifact-info">
-                        <h4>유물 현황</h4>
-                        ${artifactDisplay}
-                    </div>
-                </div>
-            `;
-
-            snapshotInfoDiv.innerHTML = snapshotHTML;
-        } else {
-            snapshotInfoDiv.innerHTML = `<p>등록된 방어 데이터가 없습니다. 현재 스펙을 등록하여 다른 유저의 도전을 받으세요.</p>`;
-        }
-    }
-	
-	
-	
-    function createPvpMatchSpecPanelHTML(snapshotData) {
-        if (!snapshotData) return '<p>스펙 정보를 불러올 수 없습니다.</p>';
-
-        const snapshot = snapshotData;
+    if (player.pvpSnapshot) {
+        const snapshot = player.pvpSnapshot;
         const stats = snapshot.stats.total;
         const artifacts = snapshot.unlockedArtifacts || [];
 
@@ -4795,7 +4767,7 @@ socket.on('refinement:itemUpdated', ({ updatedItem }) => {
                 <div class="pvp-artifact-slot ${artifacts[2] ? 'active' : ''}" title="${artifacts[2] ? artifacts[2].name : '비활성'}"></div>
             </div>
         `;
-        
+
         const snapshotHTML = `
             <div class="player-panel pvp-snapshot-panel">
                 <div class="player-info">
@@ -4820,11 +4792,14 @@ socket.on('refinement:itemUpdated', ({ updatedItem }) => {
                         <div class="stat-line">❤️ 총 체력: <span class="stat-value">${Math.floor(stats.hp).toLocaleString()}</span></div>
                         <div class="stat-line">⚔️ 총 공격력: <span class="stat-value">${Math.floor(stats.attack).toLocaleString()}</span></div>
                         <div class="stat-line">🛡️ 총 방어력: <span class="stat-value">${Math.floor(stats.defense).toLocaleString()}</span></div>
+                        <div class="stat-line">🩸 피의 갈망: <span class="stat-value" style="color: #c0392b;">${(stats.bloodthirst || 0).toFixed(1)}%</span></div>
                     </div>
                     <div class="stat-col right">
                         <div class="stat-line">💥 치명타 확률: <span class="stat-value">${(snapshot.stats.critChance * 100).toFixed(1)}%</span></div>
                         <div class="stat-line">🔰 치명타 저항: <span class="stat-value">${(snapshot.stats.critResistance * 100).toFixed(1)}%</span></div>
-                        <div class="stat-line">👑 명성 점수: <span class="stat-value">${snapshot.fameScore.toLocaleString()}</span></div>
+                        <div class="stat-line">👑 명성 효과: <span class="stat-value" style="color: var(--gold-color);">${(snapshot.stats.fameBonusPercent || 0).toFixed(2)}%</span></div>
+                        <div class="stat-line">⚔️ 추가 데미지: <span class="stat-value" style="color: #3498db;">+${(snapshot.stats.additiveDamage || 0).toFixed(2)}%</span></div>
+                        <div class="stat-line">🌀 회피 확률: <span class="stat-value" style="color: #2ecc71;">${(snapshot.stats.dodgeChance || 0).toFixed(2)}%</span></div>
                     </div>
                 </div>
 
@@ -4835,8 +4810,80 @@ socket.on('refinement:itemUpdated', ({ updatedItem }) => {
             </div>
         `;
 
-        return snapshotHTML;
+        snapshotInfoDiv.innerHTML = snapshotHTML;
+    } else {
+        snapshotInfoDiv.innerHTML = `<p>등록된 방어 데이터가 없습니다. 현재 스펙을 등록하여 다른 유저의 도전을 받으세요.</p>`;
     }
+}
+	
+	
+	
+ function createPvpMatchSpecPanelHTML(snapshotData) {
+    if (!snapshotData) return '<p>스펙 정보를 불러올 수 없습니다.</p>';
+
+    const snapshot = snapshotData;
+    const stats = snapshot.stats.total;
+    const artifacts = snapshot.unlockedArtifacts || [];
+
+    const weaponHTML = snapshot.equipment?.weapon ? createItemHTML(snapshot.equipment.weapon) : '⚔️<br>무기';
+    const armorHTML = snapshot.equipment?.armor ? createItemHTML(snapshot.equipment.armor) : '🛡️<br>방어구';
+    const petHTML = snapshot.equippedPet ? createItemHTML(snapshot.equippedPet) : '🐾<br>펫';
+    const necklaceHTML = snapshot.equipment?.necklace ? createItemHTML(snapshot.equipment.necklace) : '💍<br>목걸이';
+    const earringHTML = snapshot.equipment?.earring ? createItemHTML(snapshot.equipment.earring) : '👂<br>귀걸이';
+    const wristwatchHTML = snapshot.equipment?.wristwatch ? createItemHTML(snapshot.equipment.wristwatch) : '⏱️<br>손목시계';
+    
+    const artifactDisplay = `
+        <div class="pvp-artifact-container">
+            <div class="pvp-artifact-slot ${artifacts[0] ? 'active' : ''}" title="${artifacts[0] ? artifacts[0].name : '비활성'}"></div>
+            <div class="pvp-artifact-slot ${artifacts[1] ? 'active' : ''}" title="${artifacts[1] ? artifacts[1].name : '비활성'}"></div>
+            <div class="pvp-artifact-slot ${artifacts[2] ? 'active' : ''}" title="${artifacts[2] ? artifacts[2].name : '비활성'}"></div>
+        </div>
+    `;
+    
+    const snapshotHTML = `
+        <div class="player-panel pvp-snapshot-panel">
+            <div class="player-info">
+                <span class="player-name">${snapshot.username}</span>
+                <span class="player-level">(최대 ${snapshot.maxLevel}층)</span>
+                <div class="pvp-rp-display">RP: <span class="rp-value">${snapshot.rp.toLocaleString()}</span></div>
+            </div>
+
+            <div class="equipment-section" style="margin-top: 0;">
+                <div class="equipment-slots">
+                    <div class="slot">${weaponHTML}</div>
+                    <div class="slot">${armorHTML}</div>
+                    <div class="slot">${petHTML}</div>
+                    <div class="slot">${necklaceHTML}</div>
+                    <div class="slot">${earringHTML}</div>
+                    <div class="slot">${wristwatchHTML}</div>
+                </div>
+            </div>
+
+            <div class="player-stats-grid">
+                <div class="stat-col left">
+                    <div class="stat-line">❤️ 총 체력: <span class="stat-value">${Math.floor(stats.hp).toLocaleString()}</span></div>
+                    <div class="stat-line">⚔️ 총 공격력: <span class="stat-value">${Math.floor(stats.attack).toLocaleString()}</span></div>
+                    <div class="stat-line">🛡️ 총 방어력: <span class="stat-value">${Math.floor(stats.defense).toLocaleString()}</span></div>
+                    <div class="stat-line">🩸 피의 갈망: <span class="stat-value" style="color: #c0392b;">${(stats.bloodthirst || 0).toFixed(1)}%</span></div>
+                </div>
+                <div class="stat-col right">
+                    <div class="stat-line">💥 치명타 확률: <span class="stat-value">${(snapshot.stats.critChance * 100).toFixed(1)}%</span></div>
+                    <div class="stat-line">🔰 치명타 저항: <span class="stat-value">${(snapshot.stats.critResistance * 100).toFixed(1)}%</span></div>
+                    <div class="stat-line">👑 명성 효과: <span class="stat-value" style="color: var(--gold-color);">${(snapshot.stats.fameBonusPercent || 0).toFixed(2)}%</span></div>
+                    <div class="stat-line">⚔️ 추가 데미지: <span class="stat-value" style="color: #3498db;">+${(snapshot.stats.additiveDamage || 0).toFixed(2)}%</span></div>
+                    <div class="stat-line">🌀 회피 확률: <span class="stat-value" style="color: #2ecc71;">${(snapshot.stats.dodgeChance || 0).toFixed(2)}%</span></div>
+                </div>
+            </div>
+
+            <div class="pvp-artifact-info">
+                <h4>유물 현황</h4>
+                ${artifactDisplay}
+            </div>
+        </div>
+    `;
+
+    return snapshotHTML;
+}
 	
 
 

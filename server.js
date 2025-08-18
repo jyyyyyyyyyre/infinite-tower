@@ -83,6 +83,19 @@ const MailSchema = new mongoose.Schema({
 
 const Mail = mongoose.model('Mail', MailSchema);
 
+
+const PlayerSnapshotSchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    username: { type: String, required: true, index: true },
+    isManualSave: { type: Boolean, default: false, index: true }, // 수동 저장 여부 플래그
+    snapshotData: { type: Object, required: true },
+    createdAt: { type: Date, default: Date.now, index: true }
+});
+
+const PlayerSnapshot = mongoose.model('PlayerSnapshot', PlayerSnapshotSchema);
+
+
+
 const SELL_PRICES = { Common: 3000, Rare: 50000, Legendary: 400000, Epic: 2000000, Mystic: 100000000 };
 
 const UserSchema = new mongoose.Schema({
@@ -635,6 +648,35 @@ function updateBuffs(player) {
     }
 }
 
+
+
+function updateBuffsForSimulation(player, currentTime) {
+    if (!player || !player.buffs) return;
+    const initialBuffCount = player.buffs.length;
+
+    player.buffs = player.buffs.filter(buff => new Date(buff.endTime) > currentTime);
+
+    if (player.buffs.length !== initialBuffCount) {
+        calculateTotalStats(player);
+    }
+}
+
+
+function addBuffForSimulation(player, buffId, name, duration, effects, currentTime) {
+    player.buffs = player.buffs || [];
+    const existingBuff = player.buffs.find(b => b.id === buffId);
+    if (existingBuff) {
+        existingBuff.endTime = new Date(currentTime.getTime() + duration);
+    } else {
+        player.buffs.push({
+            id: buffId,
+            name: name,
+            endTime: new Date(currentTime.getTime() + duration),
+            effects: effects
+        });
+    }
+}
+
 async function startDpsSession(player) {
     if (!player) return;
 
@@ -852,17 +894,28 @@ function runDpsSimulation(player) {
     }
 }
 
-function runPvpCombatTick(player) {
+
+function runPvpCombatTick(player, opponent, currentTime) {
     if (!player || !player.pvpCombatSession || !player.pvpCombatSession.isActive) return;
 
     const session = player.pvpCombatSession;
-    const now = Date.now();
-
+    
     calculateTotalStats(player); 
     const stats = player.stats.total;
     const weapon = player.equipment.weapon;
     const armor = player.equipment.armor;
-    const m = { defense: 0, isBoss: true }; 
+    
+    const m = { 
+        defense: opponent.stats.total.defense, 
+        isBoss: true
+    }; 
+    
+    if (opponent.stats && opponent.stats.dodgeChance > 0 && Math.random() < (opponent.stats.dodgeChance / 100)) {
+        session.totalDamage += 0; 
+        updateBuffsForSimulation(player, currentTime);
+        return;
+    }
+
     let titleEffects = player.equippedTitle ? titleData[player.equippedTitle]?.effect : null;
     let titleBossDamageBonus = (titleEffects && titleEffects.bossDamage) ? (1 + titleEffects.bossDamage) : 1;
 
@@ -904,27 +957,50 @@ function runPvpCombatTick(player) {
     }
 
     if (stats.bloodthirst > 0 && Math.random() < stats.bloodthirst / 100) {
+
+        const bloodthirstDamage = opponent.stats.total.hp * 0.50;
+        pDmg += bloodthirstDamage;
+
         session.details.skillMetrics.bloodthirstCount++;
         player.currentHp = stats.hp;
-        if (weapon?.prefix === '포식자') addBuff(player, 'predator_state', '포식', (armor?.prefix === '포식자' ? 5000 : 3000), {});
-        if (armor?.prefix === '포식자') addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+        if (weapon?.prefix === '포식자') addBuffForSimulation(player, 'predator_state', '포식', (armor?.prefix === '포식자' ? 5000 : 3000), {}, currentTime);
+        if (armor?.prefix === '포식자') addBuffForSimulation(player, 'predator_endurance', '광전사의 인내', 10000, {}, currentTime);
     }
     if (weapon) {
-        if (weapon.prefix === '격노' && Math.random() < 0.05) addBuff(player, 'fury_attack', '격노(공)', (armor?.prefix === '격노' ? 7000 : 5000), {});
+        if (weapon.prefix === '격노' && Math.random() < 0.05) addBuffForSimulation(player, 'fury_attack', '격노(공)', (armor?.prefix === '격노' ? 7000 : 5000), {}, currentTime);
         if (weapon.prefix === '파멸' && Math.random() < 0.02) {
             trackDoom = stats.attack * ((armor?.prefix === '파멸') ? 3.0 : 2.0);
             pDmg += trackDoom;
         }
-        if (weapon.prefix === '계시' && Math.random() < 0.002) applyAwakeningBuff(player, (armor?.prefix === '계시' ? 7000 : 5000));
+        if (weapon.prefix === '계시' && Math.random() < 0.002) {
+            const duration = (armor?.prefix === '계시') ? 7000 : 5000;
+            addBuffForSimulation(player, 'awakening', '각성', duration, {}, currentTime);
+            calculateTotalStats(player);
+            player.currentHp = player.stats.total.hp;
+        }
     }
     if (pDmg > 0) {
-        if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyEarringAwakeningBuff(player, 10000);
-        if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyEarringAwakeningBuff(player, 15000);
+        if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) {
+            addBuffForSimulation(player, 'awakening_earring', '각성(이어링)', 10000, {}, currentTime);
+            calculateTotalStats(player);
+            player.currentHp = player.stats.total.hp;
+        }
+        if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) {
+            addBuffForSimulation(player, 'awakening_earring', '각성(이어링)', 15000, {}, currentTime);
+            calculateTotalStats(player);
+            player.currentHp = player.stats.total.hp;
+        }
     }
 
     session.totalDamage += pDmg;
-    updateBuffs(player);
+    
+    updateBuffsForSimulation(player, currentTime);
 }
+
+
+
+
+
 
 async function endDpsSession(player, aborted = false) {
 
@@ -1849,7 +1925,7 @@ if (socket.handshake.auth.refreshedToken) {
         const updates = {};
 
         if (typeof gameData.pvpRp !== 'number' || isNaN(gameData.pvpRp)) {
-            gameData.pvpRp = -1; // 아직 랭킹이 없다는 의미로 -1을 기본값으로 사용
+            gameData.pvpRp = -1; 
             updates.pvpRp = -1;
             wasModified = true;
         }
@@ -2082,6 +2158,8 @@ if (!gameData) {
 autoHatchActive: gameData.autoHatchActive || false
     };
 	
+	
+	
     if (!onlinePlayers[socket.userId].autoSellList) onlinePlayers[socket.userId].autoSellList = [];
 
     if (gameData.raidState && gameData.raidState.isActive) {
@@ -2102,6 +2180,22 @@ autoHatchActive: gameData.autoHatchActive || false
         player.raidState.monster.currentBarrier = player.raidState.monster.barrier;
         console.log(`[레이드 복원] ${player.username}님이 ${floor}층에서 레이드를 재개합니다.`);
     }
+	
+	let welcomeMessage = null; 
+try {
+    const snapshotCount = await PlayerSnapshot.countDocuments({ userId: socket.userId });
+    if (snapshotCount === 0) {
+        await createAndCleanupSnapshots([socket.userId], true);
+        const messageText = `[${socket.username}] 님이 최초 접속으로 데이터가 백업됩니다. (백업 주기 1시간 시작)`;
+
+    
+        welcomeMessage = { isSystem: true, message: messageText, timestamp: new Date() }; 
+
+        socket.broadcast.emit('chatMessage', welcomeMessage);
+    }
+} catch (error) {
+    console.error(`[최초 스냅샷 생성 오류] User: ${socket.username}`, error);
+}
     
     await updateFameScore(socket, onlinePlayers[socket.userId]);
     calculateTotalStats(onlinePlayers[socket.userId]);
@@ -2113,6 +2207,9 @@ autoHatchActive: gameData.autoHatchActive || false
     const player = onlinePlayers[socket.userId];
     
     const chatHistory = await ChatMessage.find().sort({ timestamp: -1 }).limit(50).lean();
+	if (welcomeMessage) {
+    chatHistory.unshift(welcomeMessage); 
+}
     socket.emit('chatHistory', chatHistory.reverse());
     socket.emit('initialGlobalRecords', globalRecordsCache);
     socket.emit('gameConfig', { refinementExpTable: REFINEMENT_CONFIG.EXP_TABLE });
@@ -2219,158 +2316,309 @@ autoHatchActive: gameData.autoHatchActive || false
                     }
                 }
 
-                if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
-                    const args = trimmedMsg.substring(1).split(' ').filter(arg => arg.length > 0);
-                    const commandOrTarget = args.shift().toLowerCase();
-                    const adminUsername = socket.username;
+               if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
+    const args = trimmedMsg.substring(1).split(' ').filter(arg => arg.length > 0);
+    const commandOrTarget = args.shift().toLowerCase();
+    const adminUsername = socket.username;
 
-                    if (commandOrTarget === 'dps초기화') {
-                        try {
-                            await DpsRecord.deleteMany({});
-                            await DpsLeaderboard.deleteMany({});
-                            pushLog(player, '[관리자] DPS 랭킹 데이터를 모두 삭제했습니다.');
-                            const announcement = '[시스템] 관리자에 의해 DPS 랭킹이 초기화되었습니다.';
-                            io.emit('globalAnnouncement', announcement);
-                            io.emit('chatMessage', { isSystem: true, message: announcement });
-                            console.log(`[관리자] ${adminUsername}님이 DPS 랭킹을 초기화했습니다.`);
-                        } catch (error) {
-                            console.error('[관리자] /dps초기화 명령어 처리 중 DB 오류 발생:', error);
-                            pushLog(player, '[오류] DPS 랭킹 초기화 중 문제가 발생했습니다.');
-                        }
-                        return;
-                    }
-                    if (commandOrTarget === '추방') {
-                        const targetUsername = args.shift();
-                        const reason = args.join(' ') || '특별한 사유 없음';
-                        if (!targetUsername) {
-                            return pushLog(player, '[관리자] 추방할 유저의 닉네임을 입력하세요. (예: /추방 유저명 [사유])');
-                        }
-                        const targetPlayer = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === targetUsername.toLowerCase());
-                        if (targetPlayer) {
-                            targetPlayer.socket.emit('forceDisconnect', { message: `관리자에 의해 서버와의 연결이 종료되었습니다. (사유: ${reason})` });
-                            targetPlayer.socket.disconnect(true);
-                            const announcement = `[관리자] ${adminUsername}님이 ${targetUsername}님을 추방했습니다. (사유: ${reason})`;
-                            io.emit('chatMessage', { isSystem: true, message: announcement });
-                            pushLog(player, announcement);
-                        } else {
-                            pushLog(player, `[관리자] 현재 접속 중인 유저 중에서 '${targetUsername}'을(를) 찾을 수 없습니다.`);
-                        }
-                        return;
-                    }
+    if (commandOrTarget === '전체저장') {
+        const onlineUserIds = Object.keys(onlinePlayers);
+        if (onlineUserIds.length === 0) {
+            return pushLog(player, '[관리자] 저장할 온라인 유저가 없습니다.');
+        }
+        await createAndCleanupSnapshots(onlineUserIds, true);
+        const message = `[관리자] 현재 접속 중인 모든 유저(${onlineUserIds.length}명)의 데이터를 수동 저장했습니다.`;
+        pushLog(player, message);
+        io.emit('chatMessage', { isSystem: true, message });
+        return;
+    }
 
-                    if (commandOrTarget === '레이드리셋') {
-                        try {
-                            await GameData.updateMany({}, { $set: { "personalRaid.entries": 2 } });
-                            Object.values(onlinePlayers).forEach(p => {
-                                if (p && p.personalRaid) {
-                                    p.personalRaid.entries = 2;
-                                    pushLog(p, '[관리자]에 의해 개인 레이드 입장 횟수가 2회로 초기화되었습니다.');
-                                    sendPlayerState(p); 
-                                }
-                            });
-                            const announcement = `[관리자] 서버 '전체 유저'의 개인 레이드 횟수가 초기화되었습니다.`;
-                            io.emit('chatMessage', { isSystem: true, message: announcement });
-                            pushLog(player, '[관리자] 서버 전체 유저의 개인 레이드 입장 횟수를 초기화했습니다.');
-                        } catch (error) {
-                            console.error('[관리자] /레이드리셋 명령어 처리 중 DB 오류 발생:', error);
-                            pushLog(player, '[오류] 전체 유저 레이드 횟수 초기화 중 문제가 발생했습니다.');
-                        }
-                        return;
-                    }
+    if (commandOrTarget === 'dps초기화') {
+        try {
+            await DpsRecord.deleteMany({});
+            await DpsLeaderboard.deleteMany({});
+            pushLog(player, '[관리자] DPS 랭킹 데이터를 모두 삭제했습니다.');
+            const announcement = '[시스템] 관리자에 의해 DPS 랭킹이 초기화되었습니다.';
+            io.emit('globalAnnouncement', announcement);
+            io.emit('chatMessage', { isSystem: true, message: announcement });
+            console.log(`[관리자] ${adminUsername}님이 DPS 랭킹을 초기화했습니다.`);
+        } catch (error) {
+            console.error('[관리자] /dps초기화 명령어 처리 중 DB 오류 발생:', error);
+            pushLog(player, '[오류] DPS 랭킹 초기화 중 문제가 발생했습니다.');
+        }
+        return;
+    }
 
-                    if (commandOrTarget === '공지' || commandOrTarget === '보스소환') {
-                        if (commandOrTarget === '공지') {
-                            const noticeMessage = args.join(' ');
-                            io.emit('globalAnnouncement', noticeMessage);
-                            io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: noticeMessage, title: player.equippedTitle });
-                        }
-                        if (commandOrTarget === '보스소환') spawnWorldBoss();
-                        return;
-                    }
+    if (commandOrTarget === '추방') {
+        const targetUsername = args.shift();
+        const reason = args.join(' ') || '특별한 사유 없음';
+        if (!targetUsername) {
+            return pushLog(player, '[관리자] 추방할 유저의 닉네임을 입력하세요. (예: /추방 유저명 [사유])');
+        }
+        const targetPlayer = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === targetUsername.toLowerCase());
+        if (targetPlayer) {
+            targetPlayer.socket.emit('forceDisconnect', { message: `관리자에 의해 서버와의 연결이 종료되었습니다. (사유: ${reason})` });
+            targetPlayer.socket.disconnect(true);
+            const announcement = `[관리자] ${adminUsername}님이 ${targetUsername}님을 추방했습니다. (사유: ${reason})`;
+            io.emit('chatMessage', { isSystem: true, message: announcement });
+            pushLog(player, announcement);
+        } else {
+            pushLog(player, `[관리자] 현재 접속 중인 유저 중에서 '${targetUsername}'을(를) 찾을 수 없습니다.`);
+        }
+        return;
+    }
 
-                    if (commandOrTarget === '보스제거') {
-                        if (!worldBossState || !worldBossState.isActive) {
-                            return pushLog(player, '[관리자] 제거할 월드보스가 없습니다.');
-                        }
-                        const bossName = worldBossState.name;
-                        await WorldBossState.updateOne({ uniqueId: 'singleton' }, { $set: { isActive: false, currentHp: 0 } });
-                        worldBossState = null;
-                        io.emit('worldBossDefeated');
-                        const announcement = `[관리자] ${adminUsername}님이 월드보스(${bossName})를 제거했습니다.`;
-                        io.emit('chatMessage', { isSystem: true, message: announcement });
-                        pushLog(player, announcement);
-                        return; 
-                    }
-
-                    const target = commandOrTarget;
-                    const subject = args.shift();
-                    const param3 = args.shift();
-                    const description = args.join(' ') || '관리자가 지급한 선물입니다.';
-                    if (!target || !subject) {
-                        return pushLog(player, `[관리자] 명령어 형식이 잘못되었습니다. (예: /유저명 아이템명 [수량/강화] [내용])`);
-                    }
-
-                    let targets = [];
-                    let targetName = '';
-                    if (target === '온라인') {
-                        targetName = '온라인 전체 유저';
-                        targets = Object.values(onlinePlayers);
-                    } else if (target === '오프라인') {
-                        targetName = '오프라인 전체 유저';
-                        targets = await GameData.find({}).lean();
-                    } else {
-                        targetName = target;
-                        const onlineTarget = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === target.toLowerCase());
-                        if (onlineTarget) { 
-                            targets.push(onlineTarget); 
-                        } else { 
-                            const offlineTarget = await GameData.findOne({ username: target }).lean(); 
-                            if (offlineTarget) targets.push(offlineTarget);
-                        }
-                    }
-
-                    if (targets.length === 0) {
-                        return pushLog(player, `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
-                    }
-
-                    for (const t of targets) {
-                        const recipientId = t.user; 
-                        if (!recipientId) continue;
-                        const sender = `관리자(${adminUsername})`;
-
-                        if (subject.toLowerCase() === '골드') {
-                            await sendMail(recipientId, sender, { gold: parseInt(param3 || '0', 10), description });
-                        } else {
-                            const id = adminItemAlias[subject];
-                            if (!id) {
-                                pushLog(player, `[관리자] 아이템 단축어 '${subject}'를 찾을 수 없습니다.`);
-                                continue;
-                            }
-                            
-                            const d = itemData[id] || petData[id] || spiritData[id];
-                            let item;
-
-                            if (d.type === 'weapon' || d.type === 'armor') {
-                                const enhancement = parseInt(param3 || '0', 10);
-                                item = createItemInstance(id, 1, enhancement);
-                            } else {
-                                const quantity = parseInt(param3 || '1', 10);
-                                item = petData[id] ? createPetInstance(id) : createItemInstance(id, quantity, 0);
-                            }
-
-                            if (item) await sendMail(recipientId, sender, { item: item, description });
-                        }
-                    }
-                    
-                    const isGold = subject.toLowerCase() === '골드';
-                    const itemInfo = isGold ? null : (itemData[adminItemAlias[subject]] || petData[adminItemAlias[subject]]);
-                    const givenItemName = isGold ? `${parseInt(param3 || '0', 10).toLocaleString()} 골드` : itemInfo?.name || subject;
-                    const givenItemGrade = isGold ? 'gold-text' : itemInfo?.grade || 'Common';
-                    const reasonText = description ? ` (${description})` : '';
-                    const chatAnnounceMsg = `[관리자] ${targetName}에게 <span class="${givenItemGrade}">${givenItemName}</span> 아이템을 우편으로 발송했습니다.${reasonText}`;
-                    io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: chatAnnounceMsg, title: player.equippedTitle });
-                    return;
+    if (commandOrTarget === '레이드리셋') {
+        try {
+            await GameData.updateMany({}, { $set: { "personalRaid.entries": 2 } });
+            Object.values(onlinePlayers).forEach(p => {
+                if (p && p.personalRaid) {
+                    p.personalRaid.entries = 2;
+                    pushLog(p, '[관리자]에 의해 개인 레이드 입장 횟수가 2회로 초기화되었습니다.');
+                    sendPlayerState(p);
                 }
+            });
+            const announcement = `[관리자] 서버 '전체 유저'의 개인 레이드 횟수가 초기화되었습니다.`;
+            io.emit('chatMessage', { isSystem: true, message: announcement });
+            pushLog(player, '[관리자] 서버 전체 유저의 개인 레이드 입장 횟수를 초기화했습니다.');
+        } catch (error) {
+            console.error('[관리자] /레이드리셋 명령어 처리 중 DB 오류 발생:', error);
+            pushLog(player, '[오류] 전체 유저 레이드 횟수 초기화 중 문제가 발생했습니다.');
+        }
+        return;
+    }
+
+    if (commandOrTarget === '공지' || commandOrTarget === '보스소환') {
+        if (commandOrTarget === '공지') {
+            const noticeMessage = args.join(' ');
+            io.emit('globalAnnouncement', noticeMessage);
+            io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: noticeMessage, title: player.equippedTitle });
+        }
+        if (commandOrTarget === '보스소환') spawnWorldBoss();
+        return;
+    }
+
+    if (commandOrTarget === '보스제거') {
+        if (!worldBossState || !worldBossState.isActive) {
+            return pushLog(player, '[관리자] 제거할 월드보스가 없습니다.');
+        }
+        const bossName = worldBossState.name;
+        await WorldBossState.updateOne({ uniqueId: 'singleton' }, { $set: { isActive: false, currentHp: 0 } });
+        worldBossState = null;
+        io.emit('worldBossDefeated');
+        const announcement = `[관리자] ${adminUsername}님이 월드보스(${bossName})를 제거했습니다.`;
+        io.emit('chatMessage', { isSystem: true, message: announcement });
+        pushLog(player, announcement);
+        return;
+    }
+
+
+    const target = commandOrTarget;
+    const subject = args.shift();
+    const param3 = args.shift();
+    const description = args.join(' ') || '관리자가 지급한 선물입니다.';
+
+    if (!target || !subject) {
+        return pushLog(player, `[관리자] 명령어 형식이 잘못되었습니다.`);
+    }
+
+
+    if (target === '오프라인' && subject === '롤백') {
+        const rollbackChoice = parseInt(param3, 10);
+        if (![1, 2, 3].includes(rollbackChoice)) {
+            return pushLog(player, '[관리자] 롤백 번호를 1, 2, 3 중에서 선택해주세요. (예: /오프라인 롤백 1)');
+        }
+
+
+        const manualSaveTimestamps = await PlayerSnapshot.distinct('createdAt', { isManualSave: true });
+        if (manualSaveTimestamps.length < rollbackChoice) {
+            return pushLog(player, `[관리자] ${rollbackChoice}번째 수동 저장(전체저장) 기록이 없습니다.`);
+        }
+
+        manualSaveTimestamps.sort((a, b) => b.getTime() - a.getTime());
+        const targetTimestamp = manualSaveTimestamps[rollbackChoice - 1];
+
+        const snapshotsToRestore = await PlayerSnapshot.find({ createdAt: targetTimestamp, isManualSave: true });
+
+        if (snapshotsToRestore.length === 0) {
+             return pushLog(player, `[관리자] 해당 시간(${targetTimestamp.toLocaleString()})의 롤백 데이터를 찾을 수 없습니다.`);
+        }
+
+        const bulkOps = snapshotsToRestore.map(snapshot => ({
+            updateOne: {
+                filter: { user: snapshot.userId },
+                update: { $set: snapshot.snapshotData }
+            }
+        }));
+        await GameData.bulkWrite(bulkOps);
+
+for (const snapshot of snapshotsToRestore) {
+    const onlineTarget = onlinePlayers[snapshot.userId.toString()];
+    if (onlineTarget) {
+        Object.assign(onlineTarget, snapshot.snapshotData);
+
+        if (onlineTarget.socket) {
+            onlineTarget.socket.emit('forceRollback', {
+                message: `관리자에 의해 서버 전체 롤백이 진행되었습니다.`,
+                delay: 10
+            });
+        }
+    }
+}
+
+        const successMessage = `[서버 전체 롤백] ${targetTimestamp.toLocaleString()} 시점(${rollbackChoice}번째)으로 서버 전체 롤백을 완료했습니다. (${snapshotsToRestore.length}명 적용)`;
+        pushLog(player, successMessage);
+        io.emit('globalAnnouncement', '⚠️ 관리자에 의해 서버 전체 롤백이 진행되었습니다. 모든 유저는 재접속이 필요합니다. ⚠️');
+        io.emit('chatMessage', { isSystem: true, message: successMessage });
+        return;
+    }
+
+    let targets = [];
+    let targetName = '';
+    if (target === '온라인') {
+        targetName = '온라인 전체 유저';
+        targets = Object.values(onlinePlayers);
+    } else if (target === '오프라인') {
+        targetName = '오프라인 전체 유저';
+        targets = await GameData.find({}).lean();
+    } else {
+        targetName = target;
+        const onlineTarget = Object.values(onlinePlayers).find(p => p.username.toLowerCase() === target.toLowerCase());
+        if (onlineTarget) { 
+            targets.push(onlineTarget); 
+        } else { 
+            const offlineTarget = await GameData.findOne({ username: target }).lean(); 
+            if (offlineTarget) targets.push(offlineTarget);
+        }
+    }
+
+    if (targets.length === 0) {
+        return pushLog(player, `[관리자] 대상 유저 '${target}'을(를) 찾을 수 없습니다.`);
+    }
+
+    if (subject.startsWith('롤백')) {
+        const rollbackChoice = parseInt(subject.replace('롤백', ''), 10);
+        if (![1, 2, 3].includes(rollbackChoice)) {
+            return pushLog(player, '[관리자] 롤백 번호를 1, 2, 3 중에서 선택해주세요. (예: /유저명 롤백1)');
+        }
+        if (targets.length > 1) {
+            return pushLog(player, '[관리자] 개인 롤백은 한 명의 유저만 지정해야 합니다.');
+        }
+
+        const targetUser = targets[0];
+        const snapshots = await PlayerSnapshot.find({ userId: targetUser.user }).sort({ createdAt: -1 });
+
+        if (snapshots.length < rollbackChoice) {
+            return pushLog(player, `[관리자] 해당 유저의 ${rollbackChoice}번째 롤백 데이터가 없습니다.`);
+        }
+
+        const snapshotToRestore = snapshots[rollbackChoice - 1];
+        await GameData.updateOne({ user: targetUser.user }, { $set: snapshotToRestore.snapshotData });
+
+       const onlineTarget = onlinePlayers[targetUser.user.toString()];
+if (onlineTarget) {
+    Object.assign(onlineTarget, snapshotToRestore.snapshotData);
+
+    if (onlineTarget.socket) {
+        onlineTarget.socket.emit('forceRollback', {
+            message: `관리자에 의해 데이터가 롤백되었습니다.`,
+            delay: 10
+        });
+    }
+}
+
+        const successMessage = `[관리자] ${targetUser.username}님을 ${snapshotToRestore.createdAt.toLocaleString()} 시점으로 롤백했습니다.`;
+        pushLog(player, successMessage);
+        io.emit('chatMessage', { isSystem: true, message: successMessage });
+        return;
+    }
+
+    if (subject.toLowerCase() === 'pvp') {
+        const entries = parseInt(param3, 10);
+        if (isNaN(entries) || entries < 0) {
+            return pushLog(player, '[관리자] PVP 입장 횟수를 올바른 숫자로 입력해주세요. (예: /유저명 pvp 5)');
+        }
+        const userIdsToUpdate = targets.map(t => t.user).filter(Boolean);
+        if (userIdsToUpdate.length > 0) {
+            await GameData.updateMany({ user: { $in: userIdsToUpdate } }, { $set: { pvpEntries: entries } });
+        }
+        for (const t of targets) {
+            const onlineTarget = onlinePlayers[t.user];
+            if (onlineTarget) {
+                onlineTarget.pvpEntries = entries;
+                pushLog(onlineTarget, `[관리자] PVP 입장 횟수가 ${entries}회로 설정되었습니다.`);
+                sendPlayerState(onlineTarget);
+            }
+        }
+        const message = `[관리자] ${targetName}의 PVP 입장 횟수를 ${entries}회로 설정했습니다.`;
+        pushLog(player, message);
+        io.emit('chatMessage', { isSystem: true, message });
+        return;
+    }
+
+    if (subject.toLowerCase() === 'pvp초기화') {
+        const updates = [];
+        for (const t of targets) {
+            const newRp = Math.floor((t.fameScore || 0) / 100);
+            updates.push({
+                updateOne: {
+                    filter: { user: t.user },
+                    update: { $set: { pvpWins: 0, pvpLosses: 0, pvpRp: newRp } }
+                }
+            });
+            const onlineTarget = onlinePlayers[t.user];
+            if (onlineTarget) {
+                onlineTarget.pvpWins = 0;
+                onlineTarget.pvpLosses = 0;
+                onlineTarget.pvpRp = newRp;
+                pushLog(onlineTarget, `[관리자] PVP 정보가 초기화되었습니다. (RP: ${newRp})`);
+                sendPlayerState(onlineTarget);
+            }
+        }
+        if (updates.length > 0) {
+            await GameData.bulkWrite(updates);
+        }
+        const message = `[관리자] ${targetName}의 PVP 정보를 초기화했습니다. (승/패: 0, RP: 명성/100)`;
+        pushLog(player, message);
+        io.emit('chatMessage', { isSystem: true, message });
+        return;
+    }
+
+    for (const t of targets) {
+        const recipientId = t.user;
+        if (!recipientId) continue;
+        const sender = `관리자(${adminUsername})`;
+
+        if (subject.toLowerCase() === '골드') {
+            await sendMail(recipientId, sender, { gold: parseInt(param3 || '0', 10), description });
+        } else {
+            const id = adminItemAlias[subject];
+            if (!id) {
+                pushLog(player, `[관리자] 아이템 단축어 '${subject}'를 찾을 수 없습니다.`);
+                continue;
+            }
+            const d = itemData[id] || petData[id] || spiritData[id];
+            let item;
+            if (d.type === 'weapon' || d.type === 'armor') {
+                const enhancement = parseInt(param3 || '0', 10);
+                item = createItemInstance(id, 1, enhancement);
+            } else {
+                const quantity = parseInt(param3 || '1', 10);
+                item = petData[id] ? createPetInstance(id) : createItemInstance(id, quantity, 0);
+            }
+            if (item) await sendMail(recipientId, sender, { item: item, description });
+        }
+    }
+
+    const isGold = subject.toLowerCase() === '골드';
+    const itemInfo = isGold ? null : (itemData[adminItemAlias[subject]] || petData[adminItemAlias[subject]]);
+    const givenItemName = isGold ? `${parseInt(param3 || '0', 10).toLocaleString()} 골드` : itemInfo?.name || subject;
+    const givenItemGrade = isGold ? 'gold-text' : itemInfo?.grade || 'Common';
+    const reasonText = description ? ` (${description})` : '';
+    const chatAnnounceMsg = `[관리자] ${targetName}에게 <span class="${givenItemGrade}">${givenItemName}</span> 아이템을 우편으로 발송했습니다.${reasonText}`;
+    io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: chatAnnounceMsg, title: player.equippedTitle });
+    return;
+}
 
                 const newChatMessage = new ChatMessage({ 
                     username: socket.username, 
@@ -3755,81 +4003,92 @@ autoHatchActive: gameData.autoHatchActive || false
             
             callback({ success: true, snapshot });
         })
-		
-    .on('pvp:startMatchmaking', async (callback) => {
-            const attacker = onlinePlayers[socket.userId];
-            if (!attacker) return callback({ success: false, message: '플레이어 정보를 찾을 수 없습니다.' });
-            if (attacker.raidState?.isActive || attacker.isInFoundryOfTime || attacker.dpsSession?.isActive) {
-                return callback({ success: false, message: '다른 콘텐츠 진행 중에는 PVP에 참여할 수 없습니다.' });
-            }
-            if (attacker.pvpEntries <= 0) {
-                return callback({ success: false, message: '오늘의 PVP 참가 횟수를 모두 사용했습니다.' });
-            }
-            if (typeof attacker.pvpRp !== 'number' || attacker.pvpRp < 0 || isNaN(attacker.pvpRp)) {
-                attacker.pvpRp = Math.floor(attacker.fameScore / 100);
-                if (isNaN(attacker.pvpRp) || attacker.pvpRp <= 0) {
-                    attacker.pvpRp = 10;
-                }
-            }
 
-            let opponentData = null;
-            const searchRanges = [50, 150, 300];
-            for (const range of searchRanges) {
-                const opponents = await GameData.find({ 'pvpSnapshot': { $ne: null }, 'user': { $ne: attacker.user }, 'pvpRp': { $gte: attacker.pvpRp - range, $lte: attacker.pvpRp + range } }).limit(20).lean();
-                if (opponents.length > 0) {
-                    opponentData = opponents[Math.floor(Math.random() * opponents.length)];
-                    break;
-                }
-            }
-            if (!opponentData) {
-                const opponents = await GameData.aggregate([{ $match: { 'pvpSnapshot': { $ne: null }, 'user': { $ne: attacker.user } } }, { $addFields: { rpDiff: { $abs: { $subtract: ["$pvpRp", attacker.pvpRp] } } } }, { $sort: { rpDiff: 1 } }, { $limit: 1 }]);
-                if (opponents.length > 0) opponentData = opponents[0];
-            }
-            if (!opponentData) return callback({ success: false, message: '매칭할 상대를 찾을 수 없습니다.' });
+.on('pvp:startMatchmaking', async (callback) => {
+    const attacker = onlinePlayers[socket.userId];
+    if (!attacker) return callback({ success: false, message: '플레이어 정보를 찾을 수 없습니다.' });
+    if (attacker.raidState?.isActive || attacker.isInFoundryOfTime || attacker.dpsSession?.isActive) {
+        return callback({ success: false, message: '다른 콘텐츠 진행 중에는 PVP에 참여할 수 없습니다.' });
+    }
+    if (attacker.pvpEntries <= 0) {
+        return callback({ success: false, message: '오늘의 PVP 참가 횟수를 모두 사용했습니다.' });
+    }
+    if (typeof attacker.pvpRp !== 'number' || attacker.pvpRp < 0 || isNaN(attacker.pvpRp)) {
+        attacker.pvpRp = Math.floor(attacker.fameScore / 100);
+        if (isNaN(attacker.pvpRp) || attacker.pvpRp <= 0) {
+            attacker.pvpRp = 10;
+        }
+    }
 
-attacker.pvpEntries--;
-await GameData.updateOne({ user: attacker.user }, { $set: { pvpEntries: attacker.pvpEntries } });
+    let opponentData = null;
+    const searchRanges = [50, 150, 300];
+    for (const range of searchRanges) {
+        const opponents = await GameData.find({ 'pvpSnapshot': { $ne: null }, 'user': { $ne: attacker.user }, 'pvpRp': { $gte: attacker.pvpRp - range, $lte: attacker.pvpRp + range } }).limit(20).lean();
+        if (opponents.length > 0) {
+            opponentData = opponents[Math.floor(Math.random() * opponents.length)];
+            break;
+        }
+    }
+    if (!opponentData) {
+        const opponents = await GameData.aggregate([{ $match: { 'pvpSnapshot': { $ne: null }, 'user': { $ne: attacker.user } } }, { $addFields: { rpDiff: { $abs: { $subtract: ["$pvpRp", attacker.pvpRp] } } } }, { $sort: { rpDiff: 1 } }, { $limit: 1 }]);
+        if (opponents.length > 0) opponentData = opponents[0];
+    }
+    if (!opponentData) return callback({ success: false, message: '매칭할 상대를 찾을 수 없습니다.' });
 
-            const opponentSnapshot = opponentData.pvpSnapshot;
-            const opponentTimeline = [];
-            const tempOpponent = { ...opponentSnapshot, buffs: [] };
-            
-            tempOpponent.pvpCombatSession = {
-                isActive: true, totalDamage: 0,
-                details: { skillMetrics: {}, combatStats: {} }
-            };
+    attacker.pvpEntries--;
+    await GameData.updateOne({ user: attacker.user }, { $set: { pvpEntries: attacker.pvpEntries } });
 
-            for (let i = 0; i < 180; i++) {
-                runPvpCombatTick(tempOpponent);
-                opponentTimeline.push({
-                    damage: tempOpponent.pvpCombatSession.totalDamage,
-                    buffs: tempOpponent.buffs.map(b => ({ id: b.id, name: b.name }))
-                });
-            }
-            
-            opponentSnapshot.rp = opponentData.pvpRp;
+    const opponentSnapshot = opponentData.pvpSnapshot;
+    const opponentTimeline = [];
 
-            attacker.pvpCombatSession = {
-                isActive: true, startTime: Date.now(), endTime: Date.now() + 180000,
-                totalDamage: 0, details: { skillMetrics: {}, combatStats: {} }
-            };
+    const tempOpponent = { ...opponentSnapshot, buffs: [] };
+const attackerForSim = {
+    stats: {
+        total: {
+            defense: attacker.stats.total.defense,
+            hp: attacker.stats.total.hp
+        },
+        dodgeChance: attacker.stats.dodgeChance || 0
+    }
+};
+    tempOpponent.pvpCombatSession = {
+        isActive: true, totalDamage: 0,
+        details: { skillMetrics: {}, combatStats: {} }
+    };
 
-            attacker.pvpMatch = {
-                opponent: {
-                    username: opponentSnapshot.username,
-                    rp: opponentData.pvpRp,
-                    userId: opponentSnapshot.userId,
-                    totalDamage: opponentTimeline[179].damage,
-                    snapshot: opponentSnapshot
-                }
-            };
+    const simulationStartTime = new Date(); 
+    for (let i = 0; i < 180; i++) {
+        const currentTime = new Date(simulationStartTime.getTime() + (i * 1000));
+        runPvpCombatTick(tempOpponent, attackerForSim, currentTime);
+        opponentTimeline.push({
+            damage: tempOpponent.pvpCombatSession.totalDamage,
+            buffs: tempOpponent.buffs.map(b => ({ id: b.id, name: b.name }))
+        });
+    }
 
-            callback({ 
-                success: true, 
-                opponent: attacker.pvpMatch.opponent,
-                timeline: opponentTimeline
-            });
-        })
+    opponentSnapshot.rp = opponentData.pvpRp;
+
+    attacker.pvpCombatSession = {
+        isActive: true, startTime: Date.now(), endTime: Date.now() + 180000,
+        totalDamage: 0, details: { skillMetrics: {}, combatStats: {} }
+    };
+
+    attacker.pvpMatch = {
+        opponent: {
+            username: opponentSnapshot.username,
+            rp: opponentData.rp,
+            userId: opponentSnapshot.userId,
+            totalDamage: opponentTimeline[179].damage,
+            snapshot: opponentSnapshot
+        }
+    };
+
+    callback({ 
+        success: true, 
+        opponent: attacker.pvpMatch.opponent,
+        timeline: opponentTimeline
+    });
+})
 		
 	.on('pvp:matchResult', async (data, callback) => {
             const attacker = onlinePlayers[socket.userId];
@@ -3934,14 +4193,66 @@ await GameData.updateOne({ user: attacker.user }, { $set: { pvpEntries: attacker
                 callback({ success: false });
             }
         })
- .on('pvp:abortMatch', () => {
-            const player = onlinePlayers[socket.userId];
-            if (player) {
-                player.pvpCombatSession = null;
-                delete player.pvpMatch;
-                pushLog(player, '[PVP] 대전을 중단하고 등반으로 복귀했습니다.');
-            }
-        })
+
+.on('pvp:abortMatch', async () => {
+    const attacker = onlinePlayers[socket.userId];
+
+    if (!attacker || !attacker.pvpMatch || !attacker.pvpCombatSession) return;
+
+    console.log(`[PVP 포기] ${attacker.username}님이 대전을 포기했습니다.`);
+
+
+    attacker.pvpCombatSession = null; 
+    const opponent = attacker.pvpMatch.opponent;
+    const isWin = false; 
+    
+    if (typeof attacker.pvpEntries !== 'number' || isNaN(attacker.pvpEntries)) {
+        attacker.pvpEntries = 5;
+    }
+    if (typeof attacker.pvpWins !== 'number' || isNaN(attacker.pvpWins)) {
+        attacker.pvpWins = 0;
+    }
+    if (typeof attacker.pvpLosses !== 'number' || isNaN(attacker.pvpLosses)) {
+        attacker.pvpLosses = 0;
+    }
+
+    attacker.pvpLosses++;
+
+    const attackerCurrentRp = (typeof attacker.pvpRp === 'number' && !isNaN(attacker.pvpRp)) ? attacker.pvpRp : 10;
+    const opponentCurrentRp = (typeof opponent.rp === 'number' && !isNaN(opponent.rp)) ? opponent.rp : 10;
+    const baseRpChange = 20;
+    const rpDiff = opponentCurrentRp - attackerCurrentRp;
+    let rpChange = -Math.round(baseRpChange - (rpDiff / 50));
+    rpChange = Math.max(-35, Math.min(35, rpChange));
+    
+    const attackerNewRp = attackerCurrentRp + rpChange;
+    attacker.pvpRp = attackerNewRp;
+    
+    await GameData.updateOne({ user: attacker.user }, { $set: { pvpRp: attackerNewRp, pvpLosses: attacker.pvpLosses } });
+
+    const opponentData = await GameData.findOne({ user: opponent.userId });
+    if (opponentData) {
+        const opponentOldRp = (typeof opponentData.pvpRp === 'number' && !isNaN(opponentData.pvpRp)) ? opponentData.pvpRp : 10;
+        const opponentNewRp = opponentOldRp - rpChange;
+        
+        opponentData.pvpRp = opponentNewRp;
+        
+        if (typeof opponentData.pvpWins !== 'number' || isNaN(opponentData.pvpWins)) opponentData.pvpWins = 0;
+        opponentData.pvpWins++; 
+        await opponentData.save();
+
+        const onlineOpponent = onlinePlayers[opponent.userId.toString()];
+        if (onlineOpponent) {
+            onlineOpponent.pvpRp = opponentNewRp;
+            onlineOpponent.pvpWins++;
+            pushLog(onlineOpponent, `[PVP] 상대(${attacker.username})가 대전을 포기하여 승리했습니다. (RP: ${opponentOldRp} -> ${opponentNewRp})`);
+        }
+    }
+    
+    delete attacker.pvpMatch;
+    pushLog(attacker, `[PVP] 대전을 포기하여 패배했습니다. (RP: ${attackerCurrentRp} -> ${attackerNewRp})`);
+
+})
 
       .on('disconnect', async () => { 
             console.log(`[연결 해제] 유저: ${socket.username}`);
@@ -4115,11 +4426,12 @@ function gameTick(player) {
         runAutoHatch(player);
     }
 	
-	 if (player.pvpCombatSession && player.pvpCombatSession.isActive) {
-        runPvpCombatTick(player);
+ if (player.pvpCombatSession && player.pvpCombatSession.isActive) {
+        runPvpCombatTick(player, player.pvpMatch.opponent.snapshot, new Date());
         sendState(player.socket, player, calcMonsterStats(player));
         return;
     }
+
 
     if (player.dpsSession && player.dpsSession.isActive) {
         runDpsSimulation(player);
@@ -5050,7 +5362,7 @@ async function announceMysticDrop(player, item) {
             message: bannerMessage 
         };
 
-     //   io.emit('chatMessage', mysticAnnounce);
+
     }
 }
 
@@ -5331,7 +5643,7 @@ async function sellItem(player, uid, sellAll) {
         let essenceReward = 0;
         let isSellable = false;
 
-        // [수정] 'Primal' 등급이면서 '장비'인 경우에만 이 로직을 타도록 조건을 강화
+
         if (item.grade === 'Primal' && (item.type === 'weapon' || item.type === 'armor' || item.type === 'accessory')) {
             const baseGold = 120000000000;
             const enhancementGold = (item.enhancement || 0) * 1000000000000;
@@ -7102,5 +7414,59 @@ function createCondensedSoulEssence(item) {
     essence.description = `${item.refinement.exp.toLocaleString()} EXP가 저장된 플레이어의 정수입니다.`;
     return essence;
 }
+
+async function createAndCleanupSnapshots(userIds, isManual = false) {
+    if (!userIds || userIds.length === 0) return;
+
+    const saveTimestamp = new Date();
+    const snapshotsToSave = [];
+
+    for (const userId of userIds) {
+        const player = onlinePlayers[userId];
+        if (player) {
+            const { 
+                socket, 
+                monster, 
+                attackTarget, 
+                stateBeforeBossAttack, 
+                isBusy, 
+                stateSentThisTick,
+                ...snapshotData 
+            } = player;
+
+            snapshotsToSave.push({
+                userId: player.user,
+                username: player.username,
+                isManualSave: isManual,
+                snapshotData: snapshotData, 
+                createdAt: saveTimestamp
+            });
+        }
+    }
+
+    if (snapshotsToSave.length > 0) {
+        await PlayerSnapshot.insertMany(snapshotsToSave);
+        console.log(`[스냅샷] ${isManual ? '수동으로' : '자동으로'} ${snapshotsToSave.length}명의 스냅샷 저장 완료.`);
+    }
+
+
+    for (const userId of userIds) {
+        const player = onlinePlayers[userId];
+        if(player) {
+            const snapshots = await PlayerSnapshot.find({ userId: player.user }).sort({ createdAt: 'asc' }).select('_id').lean();
+            if (snapshots.length > 3) {
+                const snapshotsToDelete = snapshots.slice(0, snapshots.length - 3);
+                const idsToDelete = snapshotsToDelete.map(s => s._id);
+                await PlayerSnapshot.deleteMany({ _id: { $in: idsToDelete } });
+
+            }
+        }
+    }
+}
+
+setInterval(() => {
+    const onlineUserIds = Object.keys(onlinePlayers);
+    createAndCleanupSnapshots(onlineUserIds, false); 
+}, 3600000); 
 
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));
