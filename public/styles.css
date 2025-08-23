@@ -2788,7 +2788,6 @@ body.auth-view {
     gap: 2px 2px; /* 세로 간격, 가로 간격 */
 }
 
-/* --- 주문서 탭 UI 개선 스타일 --- */
 #scroll-enhancement-container {
     display: flex;
     flex-direction: column;
@@ -2798,7 +2797,7 @@ body.auth-view {
 }
 
 #scroll-target-sector {
-    flex: 1.5; /* 상단 영역이 하단보다 더 많은 공간을 차지 (1.5 : 1 비율) */
+    flex: 1.5; 
     background: rgba(0,0,0,0.2);
     border-radius: 8px;
     padding: 15px;
@@ -2806,18 +2805,18 @@ body.auth-view {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    min-height: 0; /* flex 자식 요소의 넘침 방지 */
-    overflow-y: auto; /* 내용이 많으면 자체 스크롤 */
+    min-height: 0; 
+    overflow-y: auto;
 }
 
 #scroll-material-sector {
-    flex: 1; /* 하단 영역 */
+    flex: 1; 
     background: rgba(0,0,0,0.2);
     border-radius: 8px;
     padding: 10px;
     display: flex;
     flex-direction: column;
-    min-height: 0; /* flex 자식 요소의 넘침 방지 */
+    min-height: 0; 
 }
 
 #scroll-material-grid {
@@ -2838,7 +2837,7 @@ body.auth-view {
 }
 
 #scroll-target-item-image {
-    width: 130px; /* 기본 크기 150px -> 130px로 축소 */
+    width: 130px; 
     height: 130px;
     cursor: default;
     flex-shrink: 0;
@@ -2858,22 +2857,22 @@ body.auth-view {
 }
 
 #item-info-modal .modal-content {
-    width: 90%;          /* 모달 너비 */
-    max-width: 550px;    /* 최대 너비를 넉넉하게 설정 */
-    padding: 30px;       /* 내부 여백 증가 */
+    width: 90%;          
+    max-width: 550px;   
+    padding: 30px;       
 }
 
 #item-info-modal .item-image-wrapper {
-    width: 200px;        /* 이미지 너비 150px로 확대 */
-    height: 200px;       /* 이미지 높이 150px로 확대 */
+    width: 200px;       
+    height: 200px;      
 }
 
 #item-info-modal h3 {
-    font-size: 1.6em;    /* 아이템 이름 폰트 크기 증가 */
+    font-size: 1.6em;    
 }
 
 #item-info-modal #scroll-item-stats-list {
-    font-size: 1.15em;   /* 스탯 정보 폰트 크기 증가 */
+    font-size: 1.15em;   
 }
 #item-info-modal .modal-stats-list > div {
     display: flex;
@@ -2882,9 +2881,7 @@ body.auth-view {
 }
 
 
-/* ======================================================================= */
-/* 영혼 제련 (Soul Refinement) 시스템 스타일                               */
-/* ======================================================================= */
+
 
 #refinement-container {
     display: flex;
@@ -2903,8 +2900,8 @@ body.auth-view {
     flex-direction: column;
     align-items: center;
     gap: 15px;
-    min-height: 0; /* flex 자식 요소의 넘침 방지를 위해 추가 */
-    overflow-y: auto; /* 내용이 길어지면 자동으로 스크롤바 생성 */
+    min-height: 0; 
+    overflow-y: auto; 
 }
 
 #refinement-target-display {
@@ -2973,7 +2970,7 @@ body.auth-view {
     gap: 8px;
     width: 100%;
     max-width: 400px;
-    min-height: 120px; /* 최소 높이 확보 */
+    min-height: 120px;
 }
 
 .refinement-material-slot {
@@ -3031,7 +3028,6 @@ body.auth-view {
     flex-grow: 1;
 }
 
-/* 제련 레벨/경험치 텍스트 스타일 */
 .item-refinement-level {
     position: absolute;
     top: 5px;
@@ -3044,7 +3040,6 @@ body.auth-view {
     z-index: 1;
 }
 
-/* 제련 오라 효과 */
 .slot.refine-aura-blue { box-shadow: 0 0 15px 3px #3498db, inset 0 0 10px 2px rgba(52, 152, 219, 0.5); }
 .slot.refine-aura-purple { box-shadow: 0 0 20px 4px var(--epic-color), inset 0 0 12px 3px rgba(175, 82, 222, 0.5); animation: pulse-purple 2s infinite; }
 .slot.refine-aura-orange { box-shadow: 0 0 25px 5px var(--legendary-color), inset 0 0 15px 4px rgba(255, 149, 0, 0.5); animation: pulse-orange 1.5s infinite; }
@@ -3095,10 +3090,10 @@ body.auth-view {
     padding: 2px 5px;
     border-radius: 4px;
     z-index: 1;
-    color: var(--primal-color); /* 제련 레벨은 태초 색상으로 표시 */
+    color: var(--primal-color); 
 }
 
-/* 장착 슬롯 및 인벤토리 아이템 공용 아우라 효과 */
+
 .slot.refine-aura-blue, .inventory-item.refine-aura-blue { box-shadow: 0 0 15px 3px #3498db, inset 0 0 10px 2px rgba(52, 152, 219, 0.5); }
 .slot.refine-aura-purple, .inventory-item.refine-aura-purple { box-shadow: 0 0 20px 4px var(--epic-color), inset 0 0 12px 3px rgba(175, 82, 222, 0.5); animation: pulse-purple 2s infinite; }
 .slot.refine-aura-orange, .inventory-item.refine-aura-orange { box-shadow: 0 0 25px 5px var(--legendary-color), inset 0 0 15px 4px rgba(255, 149, 0, 0.5); animation: pulse-orange 1.5s infinite; }
@@ -3118,10 +3113,10 @@ body.auth-view {
 }
 
 .refinement-great-success-aura {
-    /* 기존 태초 등급 애니메이션을 활용하여 화려한 효과를 한 번만 재생합니다. */
+
     animation: sparkle-rainbow-15 2s linear 1, lightning 1.5s linear 1;
-    border-style: solid !important; /* 효과가 잘 보이도록 테두리 스타일을 강조합니다. */
-    border-width: 3px !important;   /* 테두리 두께를 강조합니다. */
+    border-style: solid !important; 
+    border-width: 3px !important;   
 }
 
 @keyframes great-success-shimmer {
@@ -3129,7 +3124,7 @@ body.auth-view {
     100% { background-position: 200% 0; }
 }
 
-/* 대성공 시 게이지 바에 적용될 스타일 */
+
 .great-success-bar {
     background: linear-gradient(
         120deg, 
@@ -3147,11 +3142,11 @@ body.auth-view {
 #announcement-banner.great-success {
     background: linear-gradient(
         135deg, 
-        #ffde59, /* 밝은 금색 */
-        #ff9500, /* 주황색 */
-        #ff2d55, /* 미스틱 핑크 */
-        #af52de, /* 에픽 보라 */
-        #00e6d2, /* 태초 청록 */
+        #ffde59, 
+        #ff9500, 
+        #ff2d55, 
+        #af52de, 
+        #00e6d2, 
         #ffde59
     );
     background-size: 300% 300%;
@@ -3160,7 +3155,7 @@ body.auth-view {
     border: 2px solid #fff;
     box-shadow: 0 0 20px 7px rgba(255, 255, 255, 0.8), 
                 0 0 40px 15px rgba(255, 215, 0, 0.7);
-    animation: great-success-flow 4s ease-in-out infinite; /* <-- 애니메이션 이름 변경 */
+    animation: great-success-flow 4s ease-in-out infinite; 
 }
 
 
@@ -3180,37 +3175,35 @@ body.auth-view {
 }
 
 #announcement-banner.great-success {
-    background: linear-gradient(135deg, #28231E, #4A3F35); /* 어두운 황금색 배경 */
-    color: #FFD700; /* 밝은 황금색 텍스트 */
+    background: linear-gradient(135deg, #28231E, #4A3F35); 
+    color: #FFD700; 
     font-weight: 900;
     border: 2px solid #FFD700;
     text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
-    animation: great-success-pulse 1.5s ease-in-out infinite; /* 완전히 새로운 애니메이션 적용 */
+    animation: great-success-pulse 1.5s ease-in-out infinite; 
 }
 
 #announcement-banner.great-success span {
-    text-shadow: 0 0 8px rgba(0, 0, 0, 0.8); /* 텍스트 그림자 통일 */
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
 }
 
 
-/* 2. 기존의 .system-message.great-success-chat 스타일을 모두 삭제하고 아래 코드로 교체하세요. */
 
 .system-message.great-success-chat {
-    background-color: rgba(255, 215, 0, 0.1); /* 은은한 금빛 배경 */
-    border: 1px solid #FFD700; /* 선명한 금색 테두리 */
+    background-color: rgba(255, 215, 0, 0.1);
+    border: 1px solid #FFD700; 
     border-radius: 6px;
-    box-shadow: 0 0 5px rgba(255, 215, 0, 0.3); /* 부드러운 그림자 효과 */
+    box-shadow: 0 0 5px rgba(255, 215, 0, 0.3); 
     text-align: center;
     font-weight: bold;
-    color: #FFD700; /* 가독성 높은 금색 텍스트 */
+    color: #FFD700;
     padding: 10px;
     margin: 8px 0 !important;
-    text-shadow: none; /* <<< 가독성을 위해 텍스트 글로우 효과 제거 */
-    animation: none;   /* <<< 가독성을 위해 배경 애니메이션 제거 */
+    text-shadow: none; 
+    animation: none;  
 }
 
 
-/* ===== DPS 측정 시스템 스타일 시작 ===== */
 
 .dps-result-overview h3, .dps-result-overview h4 {
     margin: 0;
@@ -3234,12 +3227,10 @@ body.auth-view {
     font-weight: bold;
 }
 
-/* DPS 랭킹 리스트 항목 호버 효과 */
 .dps-ranking-entry:hover {
     background-color: rgba(255, 255, 255, 0.05);
 }
 
-/* 채팅 자랑하기 메시지 스타일 (요구사항 7) */
 #chat-messages li.dps-boast-message {
     background-color: rgba(230, 126, 34, 0.1);
     border: 1px solid #e67e22;
@@ -3254,59 +3245,56 @@ body.auth-view {
     background-color: rgba(230, 126, 34, 0.2);
 }
 
-/* 신규: 플레이어 패널 헤더 레이아웃 조정 */
+
 .character-header h2 {
     display: flex;
     align-items: center;
-    gap: 10px; /* 요소들 사이의 간격 */
-    flex-wrap: nowrap; /* 줄바꿈 방지 */
+    gap: 10px; 
+    flex-wrap: nowrap;
 }
 
-/* 신규: 물약 버프 표시 영역 */
 #potion-buffs-display {
     display: flex;
-    flex-direction: column; /* 세로로 정렬 */
+    flex-direction: column; 
     justify-content: center;
-    align-items: flex-start; /* 왼쪽 정렬 */
-    font-size: 0.5em; /* h2 기준 폰트 크기 (작게) */
-    line-height: 1.4; /* 줄 간격 */
-    margin: 0 10px; /* 좌우 여백 */
+    align-items: flex-start;
+    font-size: 0.5em; 
+    line-height: 1.4; 
+    margin: 0 10px; 
     color: var(--text-muted);
 }
 
 .potion-buff-timer {
     font-weight: normal;
-    white-space: nowrap; /* 줄바꿈 방지 */
+    white-space: nowrap; 
 }
 
 .potion-buff-timer .timer {
     font-weight: bold;
-    color: var(--success-color); /* 남은 시간은 강조색으로 표시 */
+    color: var(--success-color); 
 }
 
-/* 플레이어 패널 헤더 레이아웃 */
 .character-header {
     display: flex;
     justify-content: space-between;
-    align-items: center; /* 세로 중앙 정렬 */
+    align-items: center;
 }
 
 .character-header-left {
     display: flex;
-    align-items: center; /* h2와 버프창을 세로 중앙 정렬 */
+    align-items: center; 
     gap: 20px;
 }
 
-/* 물약 버프 표시 영역 */
 #potion-buffs-display {
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: flex-start;
-    font-size: 14px; /* 고정 폰트 크기 */
+    font-size: 14px; 
     line-height: 1.5;
     color: var(--text-muted);
-    border-left: 2px solid var(--border-color); /* 구분선 */
+    border-left: 2px solid var(--border-color); 
     padding-left: 15px;
 }
 
@@ -3322,20 +3310,16 @@ body.auth-view {
 }
 
 #spirit-summon-modal .modal-content {
-    gap: 15px; /* 내부 요소들 간격 추가 */
+    gap: 15px; 
 }
 
 #spirit-summon-buttons button {
-    width: 48%; /* 버튼 너비 조정 */
+    width: 48%; 
     padding: 12px !important;
     font-size: 1.1em !important;
 }
 
-/* ======================================================================= */
-/* PVP 시스템 스타일                                                     */
-/* ======================================================================= */
 
-/* PVP 랭킹 모달 */
 .pvp-ranking-container {
     display: flex;
     gap: 20px;
@@ -3361,7 +3345,7 @@ body.auth-view {
     color: var(--text-muted);
 }
 
-/* PVP 대전 모달 */
+
 .pvp-match-content {
     width: 90%;
     max-width: 1000px;
@@ -3431,7 +3415,6 @@ body.auth-view {
     color: var(--fail-color);
 }
 
-/* PVP 결과 모달 */
 .pvp-result-content {
     text-align: center;
     max-width: 500px;
@@ -3452,7 +3435,7 @@ body.auth-view {
     color: var(--fail-color);
 }
 
-/* PVP 관리 탭 */
+
 .pvp-management-container {
     display: flex;
     flex-direction: column;
@@ -3473,9 +3456,7 @@ body.auth-view {
     width: 60%;
 }
 
-/* ======================================================================= */
-/* PVP 스냅샷 UI 개선 스타일 (최종)                                        */
-/* ======================================================================= */
+
 
 .pvp-snapshot-panel {
     background: rgba(0,0,0,0.2);
@@ -3483,7 +3464,7 @@ body.auth-view {
     padding: 20px;
     border-radius: 8px;
     width: 100%;
-    max-width: 650px; /* 너비를 살짝 늘려 장비 슬롯 공간 확보 */
+    max-width: 650px; 
     margin: 0 auto;
 }
 
@@ -3519,7 +3500,7 @@ body.auth-view {
     margin-bottom: 20px;
 }
 
-/* 스냅샷 UI 내 장비 슬롯 크기 조정 */
+
 .pvp-snapshot-panel .equipment-slots {
     grid-template-columns: repeat(3, 1fr);
     gap: 15px;
@@ -3589,12 +3570,10 @@ body.auth-view {
     border-color: var(--gold-color);
     box-shadow: 0 0 15px var(--legendary-color);
 }
-/* ======================================================================= */
-/* PVP 대전 UI 개편 스타일 (최종)                                        */
-/* ======================================================================= */
+
 .pvp-match-content {
-    width: 95%; /* 화면 너비의 95%를 사용 */
-    max-width: 1600px; /* 최대 너비를 1600px로 늘림 */
+    width: 95%; 
+    max-width: 1600px; 
     gap: 15px;
     display: flex;
     flex-direction: column;
@@ -3604,19 +3583,17 @@ body.auth-view {
     display: flex;
     flex-direction: column;
     gap: 15px;
-    flex-grow: 1; /* 패널이 가용 공간을 채우도록 함 */
+    flex-grow: 1; 
 }
 .pvp-spec-display {
     overflow: hidden;
 }
-/* 대전 UI 내의 스펙 패널 스타일 */
 .pvp-spec-display .player-panel {
     padding: 15px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     background-color: rgba(0,0,0,0.2);
 }
-/* 대전 UI 내 스펙 패널의 폰트 및 슬롯 크기 미세 조정 */
 .pvp-spec-display .player-panel .player-name {
     font-size: 1.3em;
 }
@@ -3643,7 +3620,209 @@ body.auth-view {
 }
 
 #dps-leaderboard-list, #dps-personal-list {
-    max-height: 350px; /* 모달 크기에 맞춰 목록의 최대 높이를 지정합니다. */
-    overflow-y: auto;  /* 내용이 최대 높이를 넘어가면 세로 스크롤바를 자동으로 생성합니다. */
-    padding-right: 15px; /* 스크롤바가 텍스트를 가리지 않도록 오른쪽에 여백을 줍니다. */
+    max-height: 350px; 
+    overflow-y: auto;  
+    padding-right: 15px; 
+}
+
+
+.top-buttons #raid-auction-reopen-btn {
+    background: linear-gradient(45deg, #ff9500, #ffd700);
+    color: #111;
+    font-weight: bold;
+    border: 1px solid #fff;
+    animation: glitter 1.5s infinite;
+}
+
+.raid-auction-content {
+    max-width: 800px;
+    width: 95%;
+}
+
+.raid-auction-body {
+    display: flex;
+    gap: 25px;
+    margin-top: 20px;
+}
+
+.auction-item-display {
+    flex: 1;
+    text-align: center;
+    padding: 20px;
+    background-color: rgba(0,0,0,0.2);
+    border-radius: 8px;
+}
+
+#auction-item-slot {
+    width: 150px;
+    height: 150px;
+    margin: 0 auto 15px auto;
+    border-style: solid;
+}
+
+#auction-item-name {
+    font-size: 1.5em;
+    margin-bottom: 10px;
+}
+
+#auction-item-desc {
+    font-size: 1em;
+    color: var(--text-muted);
+    min-height: 40px;
+}
+
+.auction-info-panel {
+    flex: 1.2;
+    display: flex;
+    flex-direction: column;
+}
+
+.auction-timer {
+    font-size: 3em;
+    font-weight: bold;
+    color: var(--secondary-color);
+    text-align: center;
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px var(--secondary-color);
+}
+
+.auction-status {
+    background-color: rgba(0,0,0,0.2);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.auction-status p {
+    font-size: 1.2em;
+    line-height: 1.8;
+    display: flex;
+    justify-content: space-between;
+}
+
+.bid-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+}
+
+.bid-input-wrapper {
+    display: flex;
+    gap: 10px;
+}
+
+#auction-bid-input {
+    flex-grow: 1;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color-dark);
+    color: var(--text-color);
+    font-size: 1em;
+}
+
+#auction-bid-manual-btn {
+    padding: 0 25px;
+}
+
+#auction-bid-immediate-btn {
+    padding: 15px;
+    font-size: 1.1em;
+    font-weight: bold;
+}
+
+#auction-bid-immediate-btn.disabled {
+    background-color: #555;
+    cursor: not-allowed;
+    text-shadow: none;
+}
+
+.auction-message {
+    margin-top: 15px;
+    text-align: center;
+    color: var(--fail-color);
+    min-height: 20px;
+}
+
+.raid-auction-sequence {
+    font-size: 1.2em;
+    color: var(--text-muted);
+    width: 100%; 
+    text-align: right; 
+    padding-right: 10px;
+    margin-top: -10px; 
+}
+
+
+#raid-auction-chat-container {
+    margin-top: 20px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 15px;
+}
+
+#raid-auction-chat-messages {
+    height: 300px; 
+    overflow-y: auto; 
+    padding: 10px;
+    background-color: rgba(0,0,0,0.2);
+    border-radius: 6px;
+}
+
+
+#raid-auction-chat-messages li {
+    padding: 6px 10px;
+    line-height: 1.5;
+    font-size: 1.1em;
+    word-break: break-all;
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
+
+#raid-auction-chat-messages li .username {
+    font-weight: 700;
+    color: var(--secondary-color);
+    margin-right: 8px;
+    cursor: default;
+    user-select: none;
+}
+
+#raid-auction-modal h2 small {
+    display: block;
+    font-size: 0.5em;
+    font-weight: normal;
+    color: var(--text-muted);
+    margin-top: 5px;
+}
+
+
+#raid-auction-chat-form {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+#raid-auction-chat-input {
+    flex-grow: 1;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color-dark);
+    color: var(--text-color);
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 1em;
+}
+
+#raid-auction-chat-form button {
+    padding: 0 20px;
+    border: none;
+    background: var(--primary-color);
+    color: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.bid-controls .bid-input-wrapper,
+.bid-controls #auction-bid-immediate-btn {
+    width: 100%;
 }

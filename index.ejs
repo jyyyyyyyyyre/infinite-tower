@@ -66,6 +66,50 @@
         </div>
     </div>
 	
+
+<div id="raid-auction-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content raid-auction-content">
+        <span class="close-button">&times;</span>
+        <h2>⚔️ 월드보스 전리품 경매</h2>
+        <div id="raid-auction-body" class="raid-auction-body">
+            <div class="auction-item-display">
+                <div id="auction-item-slot" class="enhancement-slot"></div>
+                <h3 id="auction-item-name">경매 아이템 정보 로딩 중...</h3>
+                <p id="auction-item-desc"></p>
+            </div>
+            <div class="auction-info-panel">
+                <div id="auction-timer-display" class="auction-timer">--:--</div>
+                
+                <div class="auction-status">
+                    <p>현재 입찰가: <span id="auction-current-price" class="gold-text">0 G</span></p>
+                    <p>최고 입찰자: <span id="auction-highest-bidder">없음</span></p>
+                </div>
+
+                <div class="bid-controls">
+                    <div class="bid-input-wrapper">
+                        <input type="number" id="auction-bid-input" placeholder="입찰할 골드 입력">
+                        <button id="auction-bid-manual-btn" class="action-btn">입찰</button>
+                    </div>
+                    <button id="auction-bid-immediate-btn" class="action-btn list-auction-btn">즉시 입찰 (+5%)</button>
+                    <div id="raid-auction-sequence" class="raid-auction-sequence">
+                        </div>
+                </div>
+
+                <div id="auction-message-display" class="auction-message"></div>
+            </div>
+        </div>
+		<div id="raid-auction-chat-container">
+            <ul id="raid-auction-chat-messages" class="feed-list"></ul>
+			<form id="raid-auction-chat-form">
+                <input id="raid-auction-chat-input" autocomplete="off" placeholder="메시지를 입력하세요 "/>
+                <button type="submit">전송</button>
+            </form>
+        </div>
+        <div id="raid-auction-sequence" class="raid-auction-sequence">
+            </div>
+    </div>
+</div>
+
  <div id="dps-ranking-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content" style="max-width: 900px;">
             <span class="close-button">&times;</span>

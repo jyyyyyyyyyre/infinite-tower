@@ -87,7 +87,7 @@ const Mail = mongoose.model('Mail', MailSchema);
 const PlayerSnapshotSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     username: { type: String, required: true, index: true },
-    isManualSave: { type: Boolean, default: false, index: true }, // 수동 저장 여부 플래그
+    isManualSave: { type: Boolean, default: false, index: true }, 
     snapshotData: { type: Object, required: true },
     createdAt: { type: Date, default: Date.now, index: true }
 });
@@ -1182,6 +1182,8 @@ let worldBossState = null;
 let worldBossTimer = null;
 let isBossSpawning = false;
 let activeEvents = {}; 
+let auctionState = null;
+let worldBossFightState = null; 
 let eventEndTimer = null; 
 
 
@@ -2220,8 +2222,27 @@ try {
     });
 
     if (worldBossState && worldBossState.isActive) {
-        const serializableState = { ...worldBossState, participants: Object.fromEntries(worldBossState.participants) };
+        const serializableState = { 
+            ...worldBossState, 
+            participants: Object.fromEntries(worldBossState.participants),
+            endTime: worldBossFightState ? worldBossFightState.fightEndTime : null 
+        };
         socket.emit('worldBossUpdate', serializableState);
+    }
+	
+	  if (auctionState && auctionState.currentBids.item) {
+        const remainingTime = auctionState.timer ? auctionState.timer._idleStart + auctionState.timer._idleTimeout - Date.now() : 0;
+
+        socket.emit('auction:rejoin', {
+            item: auctionState.currentBids.item,
+            price: auctionState.currentBids.price,
+            bidder: auctionState.currentBids.bidderUsername,
+            index: auctionState.currentItemIndex + 1,
+            total: auctionState.items.length,
+            stage: auctionState.currentStage,
+            eligibleBidders: auctionState.currentBids.eligibleBidders,
+            remainingTime: Math.max(0, remainingTime) 
+        });
     }
 
     const unreadMailCount = await Mail.countDocuments({ recipientId: player.user, isRead: false });
@@ -2239,6 +2260,9 @@ try {
 
     socket
         .on('dps:start', () => startDpsSession(onlinePlayers[socket.userId]))
+		.on('auction:bid', (bidData) => {
+            handleBid(socket, bidData);
+        })
         .on('upgradeStat', data => upgradeStat(onlinePlayers[socket.userId], data))
         .on('personalRaid:start', () => startPersonalRaid(onlinePlayers[socket.userId]))
         .on('personalRaid:leave', () => endPersonalRaid(onlinePlayers[socket.userId], false))
@@ -2388,15 +2412,15 @@ try {
         return;
     }
 
-    if (commandOrTarget === '공지' || commandOrTarget === '보스소환') {
-        if (commandOrTarget === '공지') {
-            const noticeMessage = args.join(' ');
-            io.emit('globalAnnouncement', noticeMessage);
-            io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: noticeMessage, title: player.equippedTitle });
+   if (commandOrTarget === '공지' || commandOrTarget === '보스소환') {
+            if (commandOrTarget === '공지') {
+                const noticeMessage = args.join(' ');
+                io.emit('globalAnnouncement', noticeMessage);
+                io.emit('chatMessage', { type: 'announcement', username: adminUsername, role: 'admin', message: noticeMessage, title: player.equippedTitle });
+            }
+            if (commandOrTarget === '보스소환') spawnWorldBoss(); 
+            return;
         }
-        if (commandOrTarget === '보스소환') spawnWorldBoss();
-        return;
-    }
 
     if (commandOrTarget === '보스제거') {
         if (!worldBossState || !worldBossState.isActive) {
@@ -4259,6 +4283,14 @@ const attackerForSim = {
             const player = onlinePlayers[socket.userId];
             if(player) {
                 try {
+                    if (worldBossFightState && worldBossFightState.timeTrack.has(socket.userId)) {
+                        const tracker = worldBossFightState.timeTrack.get(socket.userId);
+                        if (tracker.joinTime) {
+                            tracker.totalTime += new Date() - tracker.joinTime;
+                            tracker.joinTime = null; 
+                        }
+                    }
+
                     const saveData = { ...player };
                     delete saveData.socket;
                     delete saveData.attackTarget;
@@ -4266,7 +4298,6 @@ const attackerForSim = {
                 } catch (error) {
                     console.error(`[저장 실패] 유저: ${player.username} 데이터 저장 중 오류 발생:`, error);
                 }
-
             }
             delete onlinePlayers[socket.userId];
         });
@@ -4444,48 +4475,38 @@ function gameTick(player) {
      let titleWBBonus = (titleEffects && titleEffects.worldBossDamage) ? (1 + titleEffects.worldBossDamage) : 1;
      let titleWBContributionBonus = (titleEffects && titleEffects.worldBossContribution) ? (1 + titleEffects.worldBossContribution) : 1;
 
-     if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
-         let pDmg = Math.max(1, (player.stats.total.attack || 0) - (worldBossState.defense || 0));
-         
-         if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
-             const bloodthirstDamage = worldBossState.maxHp * 0.003;
-             pDmg += bloodthirstDamage;
-             player.currentHp = player.stats.total.hp;
-             pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(bloodthirstDamage)}</span>의 추가 피해를 입히고 체력을 모두 회복합니다!`);
-          
-             if (weapon?.prefix === '포식자') {
-                 const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
-                 addBuff(player, 'predator_state', '포식', duration, {});
-             }
-             if (armor?.prefix === '포식자') {
-                 addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
-             }
-         }
-         
-         pDmg *= titleWBBonus;
-         worldBossState.currentHp = Math.max(0, (worldBossState.currentHp || 0) - pDmg);
+   if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
+        let pDmg = 0;
+        
+        if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
+            pDmg = 100000000000; 
+            player.currentHp = player.stats.total.hp;
+            pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(pDmg)}</span>의 피해를 입히고 체력을 모두 회복합니다!`);
+        } else {
+            pDmg = Math.max(1, (player.stats.total.attack || 0));
+        }
+        
+        pDmg *= titleWBBonus;
 
-         if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 10000);
-         if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 15000);
-         
-         const userId = player.user.toString();
-         const participant = worldBossState.participants.get(userId) || { username: player.username, damageDealt: 0 };
-         const contributionDamage = pDmg * titleWBContributionBonus;
-         participant.damageDealt = (participant.damageDealt || 0) + contributionDamage;
-         worldBossState.participants.set(userId, participant);
-         const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + (p.damageDealt || 0), 0);
-         const myShare = totalDamage > 0 ? (participant.damageDealt / totalDamage) * 100 : 0;
-         player.socket.emit('myBossContributionUpdate', { myContribution: participant.damageDealt, myShare: myShare });
-         if (!player.worldBossContribution) player.worldBossContribution = { damageDealt: 0, bossId: null };
-         player.worldBossContribution.damageDealt = participant.damageDealt;
-         player.worldBossContribution.bossId = worldBossState.bossId;
-         if (worldBossState.currentHp <= 0) { 
-             worldBossState.lastHitter = player.user.toString();
-             onWorldBossDefeated(); 
-         }
-         sendState(player.socket, player, calcMonsterStats(player));
-         return;
-     }
+        if (player.equipment.earring?.id === 'acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 10000);
+        if (player.equipment.earring?.id === 'primal_acc_earring_01' && Math.random() < 0.03) applyAwakeningBuff(player, 15000);
+        
+        const userId = player.user.toString();
+        const participant = worldBossState.participants.get(userId) || { userId: player.user, username: player.username, damageDealt: 0 };
+        participant.damageDealt += pDmg;
+        worldBossState.participants.set(userId, participant);
+
+        if (worldBossFightState && !worldBossFightState.timeTrack.has(userId)) {
+             worldBossFightState.timeTrack.set(userId, { joinTime: new Date(), totalTime: 0 });
+        }
+
+        const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + (p.damageDealt || 0), 0);
+        const myShare = totalDamage > 0 ? (participant.damageDealt / totalDamage) * 100 : 0;
+        player.socket.emit('myBossContributionUpdate', { myContribution: participant.damageDealt, myShare: myShare });
+        
+        sendState(player.socket, player, calcMonsterStats(player));
+        return;
+    }
 
     if (player.isInFoundryOfTime) {
          if (!player.foundryMonster || player.foundryMonster.hp <= 0) {
@@ -6571,151 +6592,6 @@ function unequipPet(player) {
     updateFameScore(player.socket, player);
 checkStateBasedTitles(player);
 }
-async function onWorldBossDefeated() {
-    if (!worldBossState || !worldBossState.isActive) return;
-
-    console.log('[월드보스] 처치 완료! 보상 분배를 시작합니다.');
-    worldBossState.isActive = false;
-    await WorldBossState.updateOne({ uniqueId: 'singleton' }, { $set: { isActive: false, currentHp: 0 } });
-
-    const totalDamage = Array.from(worldBossState.participants.values()).reduce((sum, p) => sum + p.damageDealt, 0);
-    if (totalDamage <= 0) {
-        io.emit('worldBossDefeated');
-        worldBossState = null;
-        return;
-    }
-
-    const defeatedMessage = `[월드보스] 🔥 ${worldBossState.name} 🔥 처치 완료! 보상 분배를 시작합니다.`;
-    io.emit('globalAnnouncement', defeatedMessage);
-    io.emit('chatMessage', { isSystem: true, message: defeatedMessage });
-
-    const sortedParticipants = Array.from(worldBossState.participants.entries()).sort((a, b) => b[1].damageDealt - a[1].damageDealt);
-    const rewardLedger = new Map();
-
-    for (const [userIdString, participant] of sortedParticipants) {
-        if (!rewardLedger.has(userIdString)) {
-            rewardLedger.set(userIdString, { gold: 0, items: [], username: participant.username });
-        }
-        const userRewards = rewardLedger.get(userIdString);
-        const contributionPercent = (participant.damageDealt / totalDamage) * 100;
-
-const goldReward = Math.floor(WORLD_BOSS_CONFIG.REWARDS.GOLD * (participant.damageDealt / totalDamage));
-        if (goldReward > 0) userRewards.gold += goldReward;
-
-        if (contributionPercent >= 0) userRewards.items.push(createItemInstance('boss_participation_box'));
-
-        if (contributionPercent >= 1) userRewards.items.push(createItemInstance('rift_shard_abyss', 5));
-        if (contributionPercent >= 5) userRewards.items.push(createItemInstance('rift_shard_abyss', 20));
-        
-        if (contributionPercent >= 10) {
-            if (Math.random() < 0.10) {
-                const mysticPool = ['w005', 'a005', 'acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
-                const randomMysticId = mysticPool[Math.floor(Math.random() * mysticPool.length)];
-                const mysticItem = createItemInstance(randomMysticId);
-                userRewards.items.push(mysticItem);
-                
-                const itemNameHTML = `<span class="${mysticItem.grade}">${mysticItem.name}</span>`;
-                const winMessage = `${participant.username}님이 기여도 ${contributionPercent.toFixed(2)}% 달성으로 미스틱 아이템 ${itemNameHTML}를 획득하였습니다!!`;
-                io.emit('chatMessage', { isSystem: true, message: `🎉 ${winMessage}` });
-            }
-        }
-    }
-    
-
-    if (sortedParticipants.length > 0) {
-        const [winnerIdString, winnerParticipant] = sortedParticipants[0];
-        let primalWinMessage = '';
-        if (Math.random() < 0.01) {
-            const primalPool = ['primal_w01', 'primal_a01'];
-            const randomPrimalId = primalPool[Math.floor(Math.random() * primalPool.length)];
-            const primalItem = createItemInstance(randomPrimalId);
-            rewardLedger.get(winnerIdString).items.push(primalItem);
-            
-            const itemNameHTML = `<span class="Primal">${primalItem.name}</span>`;
-            const bannerMessage = `★★★★★ ${winnerParticipant.username}님이 1등 보상으로 태초 아이템 [${primalItem.name}] 획득에 성공했습니다! ★★★★★`;
-            io.emit('globalAnnouncement', bannerMessage, { style: 'primal' });
-            primalWinMessage = `1등: ${winnerParticipant.username}님!!! <span class="Primal">Primal 등급 획득에 성공했습니다!!!</span>`;
-        } else {
-            primalWinMessage = `1등: ${winnerParticipant.username}님!!! 아쉽지만 Primal 등급 획득에 실패했습니다.`;
-        }
-        io.emit('chatMessage', { isSystem: true, message: primalWinMessage });
-    }
-
-
-    for (const [userIdString, finalRewards] of rewardLedger.entries()) {
-        const recipientObjectId = new mongoose.Types.ObjectId(userIdString);
-
-        if (finalRewards.gold > 0) {
-            await sendMail(recipientObjectId, '월드보스', { gold: finalRewards.gold, description: "기여도 보상" });
-        }
-        for (const item of finalRewards.items) {
-            await sendMail(recipientObjectId, '월드보스', { item: item, description: "기여도 보상" });
-        }
-        
-        const onlinePlayer = onlinePlayers[userIdString];
-        if (onlinePlayer) {
-            pushLog(onlinePlayer, "[월드보스] 보상이 우편함으로 모두 발송되었습니다! 확인해주세요.");
-        }
-    }
-io.emit('chatMessage', { isSystem: true, message: "전원에게 기여도에 따른 보상이 지급되었습니다. 우편함을 확인하세요." });
-
-    for (const [userIdString, participant] of worldBossState.participants.entries()) {
-        if (participant.damageDealt > 0) {
-            const onlinePlayer = onlinePlayers[userIdString];
-            if (onlinePlayer) {
-                if (onlinePlayer.titleCounters) onlinePlayer.titleCounters.wbParticipateCount = (onlinePlayer.titleCounters.wbParticipateCount || 0) + 1;
-                if ((onlinePlayer.titleCounters?.wbParticipateCount || 0) >= 10) grantTitle(onlinePlayer, '[토벌대원]');
-                if (onlinePlayer.equipment.weapon?.id === 'w001') grantTitle(onlinePlayer, '[날먹최강자]');
-            }
-        }
-    }
-    if (worldBossState.lastHitter) {
-        const lastHitterId = worldBossState.lastHitter;
-        const onlineLastHitter = onlinePlayers[lastHitterId];
-        if (onlineLastHitter?.titleCounters) {
-            onlineLastHitter.titleCounters.wbLastHitCount = (onlineLastHitter.titleCounters.wbLastHitCount || 0) + 1;
-            if (onlineLastHitter.titleCounters.wbLastHitCount >= 5) grantTitle(onlineLastHitter, '[용사]');
-        }
-    }
-    
-    await GameData.updateMany(
-        { "worldBossContribution.bossId": worldBossState.bossId },
-        { $set: { worldBossContribution: { damageDealt: 0, bossId: null } } }
-    );
-
-    for (const player of Object.values(onlinePlayers)) {
-        sendState(player.socket, player, calcMonsterStats(player));
-    }
-
-    io.emit('worldBossDefeated');
-    worldBossState = null;
-}
-
-async function spawnWorldBoss() {
-    if (worldBossState && worldBossState.isActive) return;
-    const newBossId = new mongoose.Types.ObjectId().toString();
-    const newBossData = {
-        uniqueId: 'singleton',
-        bossId: newBossId,
-        name: "영원한 흉몽",
-        maxHp: WORLD_BOSS_CONFIG.HP,
-        currentHp: WORLD_BOSS_CONFIG.HP,
-        attack: WORLD_BOSS_CONFIG.ATTACK,
-        defense: WORLD_BOSS_CONFIG.DEFENSE,
-        isActive: true,
-        participants: new Map(),
-        spawnedAt: new Date()
-    };
-    const savedState = await WorldBossState.findOneAndUpdate({ uniqueId: 'singleton' }, newBossData, { upsert: true, new: true });
-    worldBossState = savedState.toObject();
-    worldBossState.participants = new Map();
-    console.log(`[월드보스] ${worldBossState.name}가 출현했습니다! (ID: ${worldBossState.bossId})`);
-    const serializableState = { ...worldBossState, participants: {} };
-    io.emit('worldBossSpawned', serializableState);
-    io.emit('chatMessage', { isSystem: true, message: `[월드보스] 거대한 악의 기운과 함께 파멸의 군주가 모습을 드러냈습니다!` });
-    io.emit('globalAnnouncement', `[월드보스] ${worldBossState.name}가 출현했습니다!`);
-}
-
 
 const AUTO_SAVE_INTERVAL = 10000;
 setInterval(() => {
@@ -6777,9 +6653,7 @@ function scheduleDailyReset(io) {
 }
 
 function checkAndSpawnBoss() {
-    if ((worldBossState && worldBossState.isActive) || isBossSpawning) {
-        return;
-    }
+    if (worldBossState && worldBossState.isActive) return;
 
     const now = new Date();
     const kstOffset = 9 * 60 * 60 * 1000;
@@ -6788,12 +6662,13 @@ function checkAndSpawnBoss() {
     const kstHour = kstNow.getUTCHours();
     const kstMinutes = kstNow.getUTCMinutes();
 
-    if ((kstHour === 19 && kstMinutes === 0) || (kstHour === 22 && kstMinutes === 0)) {
+
+   if (kstHour === 18 && kstMinutes === 27) {
+        if (isBossSpawning) return;
         isBossSpawning = true;
-        console.log(`[스케줄러] 정해진 시간 (${kstHour}시)이 되어 월드보스를 소환합니다.`);
-        spawnWorldBoss().finally(() => {
-            setTimeout(() => { isBossSpawning = false; }, 60000);
-        });
+        console.log(`[스케줄러] 정해진 시간 (20시)이 되어 월드보스 전투를 시작합니다.`);
+        spawnWorldBoss(); 
+        setTimeout(() => { isBossSpawning = false; }, 60000);
     }
 }
 
@@ -7086,6 +6961,7 @@ async function checkOfflinePlayers() {
 }
 
 setInterval(checkOfflinePlayers, CHECK_OFFLINE_INTERVAL);
+setInterval(cleanupDuplicateConnections, 60000); 
 
 async function rerollItemPrefix(player, itemUid) {
     if (!player || !itemUid) return;
@@ -7468,5 +7344,523 @@ setInterval(() => {
     const onlineUserIds = Object.keys(onlinePlayers);
     createAndCleanupSnapshots(onlineUserIds, false); 
 }, 3600000); 
+
+function startAuction(top5, highLevel, lowLevel) {
+    auctionState = {
+        items: [],
+        currentItemIndex: -1,
+        currentStage: 0, 
+        participantGroups: {
+            top5: top5,
+            highLevel: highLevel,
+            lowLevel: lowLevel,
+        },
+        currentBids: {},
+        timer: null,
+        antiSnipeCooldownUntil: null,
+    };
+    
+
+    io.emit('auction:start');
+
+    processNextAuctionItem();
+}
+function processNextAuctionItem() {
+    if (!auctionState) return;
+
+    if (auctionState.currentItemIndex === -1 || auctionState.currentItemIndex >= auctionState.items.length - 1) {
+        auctionState.currentStage++; 
+        
+        let currentGroup;
+        let announcement = "";
+        let itemPool = [];
+
+        const payloadToEmit = {
+            item: null, 
+            price: 1000000,
+            bidder: '없음',
+            index: 0,
+            total: 0,
+            stage: auctionState.currentStage,
+            eligibleBidders: []
+        };
+
+        if (auctionState.currentStage === 1) { // Top 5 경매
+            currentGroup = auctionState.participantGroups.top5;
+            const top5Usernames = currentGroup.map(id => {
+                const player = onlinePlayers[id];
+                return player ? player.username : null;
+            }).filter(Boolean);
+ announcement = `기여자 Top 5 특별 경매를 시작합니다! 대상자: ${top5Usernames.join(', ')} 님입니다!`;
+          itemPool = [
+                { type: 'primal_gear', weight: 5 },
+                { type: 'gold_jackpot_high', weight: 15 },
+                { type: 'mythic_egg', weight: 10 },
+                { type: 'shard_large', weight: 10 },
+                { type: 'shard_medium', weight: 20 },
+                { type: 'stone_box_large', weight: 10 },
+                { type: 'radiant_soulstone_large', weight: 10 },
+                { type: 'radiant_soulstone_medium', weight: 10 },
+                { type: 'radiant_soulstone_small', weight: 10 },
+            ];
+            payloadToEmit.eligibleBidderNames = top5Usernames;
+        } else if (auctionState.currentStage === 2) { // ...
+            currentGroup = auctionState.participantGroups.highLevel;
+            announcement = `100만 층 이상 상위 랭커 경매를 시작합니다!`;
+            itemPool = [
+                { type: 'primal_gear', weight: 10 },
+                { type: 'gold_jackpot_high', weight: 10 },
+                { type: 'mythic_egg', weight: 15 },
+                { type: 'shard_medium', weight: 20 },
+                { type: 'shard_small', weight: 10 },
+                { type: 'stone_box_medium', weight: 10 },
+                { type: 'radiant_soulstone_large', weight: 5 },
+                { type: 'radiant_soulstone_medium', weight: 10 },
+                { type: 'radiant_soulstone_small', weight: 10 },
+            ];
+        } else if (auctionState.currentStage === 3) { // ...
+            currentGroup = auctionState.participantGroups.lowLevel;
+             announcement = `100만 층 미만 일반 경매를 시작합니다!`;
+            itemPool = [
+                { type: 'gold_jackpot_low', weight: 5 },
+                { type: 'mythic_egg', weight: 15 },
+                { type: 'mystic_gear', weight: 20 },
+                { type: 'rift_shard', weight: 25 },
+                { type: 'potion_box', weight: 25 },
+                { type: 'stone_box_small', weight: 10 },
+            ];
+        } else {
+            endAuction(); 
+            return;
+        }
+
+        io.emit('chatMessage', { isSystem: true, message: `[경매] ${announcement}` });
+
+        if (!currentGroup || currentGroup.length === 0) {
+            io.emit('chatMessage', { isSystem: true, message: `[경매] 해당 단계의 경매 참여 대상자가 없어 다음 단계로 넘어갑니다.` });
+            auctionState.items = [];
+            auctionState.currentItemIndex = -1;
+            processNextAuctionItem(); 
+            return;
+        }
+        
+        auctionState.items = generateAuctionItems(itemPool);
+        auctionState.currentItemIndex = -1;
+    }
+
+    auctionState.currentItemIndex++;
+    
+    const currentItem = auctionState.items[auctionState.currentItemIndex];
+    let eligibleBidders = [];
+    if (auctionState.currentStage === 1) eligibleBidders = auctionState.participantGroups.top5;
+    else if (auctionState.currentStage === 2) eligibleBidders = auctionState.participantGroups.highLevel;
+    else if (auctionState.currentStage === 3) eligibleBidders = auctionState.participantGroups.lowLevel;
+    
+    auctionState.currentBids = {
+        item: currentItem,
+        price: 1000000,
+        bidderId: null,
+        bidderUsername: '없음',
+        eligibleBidders: eligibleBidders
+    };
+    
+    clearTimeout(auctionState.timer);
+    auctionState.timer = setTimeout(endCurrentAuctionItem, 20000);
+
+
+    const finalPayload = {
+        item: currentItem,
+        price: auctionState.currentBids.price,
+        bidder: auctionState.currentBids.bidderUsername,
+        index: auctionState.currentItemIndex + 1,
+        total: auctionState.items.length,
+        stage: auctionState.currentStage,
+        eligibleBidders: eligibleBidders
+    };
+
+    if (auctionState.currentStage === 1) {
+        const top5Usernames = auctionState.participantGroups.top5.map(id => onlinePlayers[id]?.username || null).filter(Boolean);
+        finalPayload.eligibleBidderNames = top5Usernames;
+    }
+
+    io.emit('auction:newItem', finalPayload);
+}
+
+
+function generateAuctionItems(pool) {
+    const items = [];
+    const itemCount = Math.floor(Math.random() * 3) + 1;
+    const primalItems = ['primal_w01', 'primal_a01', 'primal_acc_necklace_01', 'primal_acc_earring_01', 'primal_acc_wristwatch_01', 'primal_random_box'];
+    const mysticItems = ['w005', 'a005', 'acc_necklace_01', 'acc_earring_01', 'acc_wristwatch_01'];
+    const potions = ['gold_potion', 'drop_potion', 'stat_potion'];
+
+    for (let i = 0; i < itemCount; i++) {
+        const totalWeight = pool.reduce((sum, item) => sum + item.weight, 0);
+        let rand = Math.random() * totalWeight;
+        let chosenType = null;
+        for (const item of pool) {
+            rand -= item.weight;
+            if (rand <= 0) {
+                chosenType = item.type;
+                break;
+            }
+        }
+        
+        let generatedItem = null;
+        switch (chosenType) {
+
+            case 'primal_gear':
+                generatedItem = createItemInstance(primalItems[Math.floor(Math.random() * primalItems.length)]);
+                break;
+            case 'mythic_egg':
+                generatedItem = createItemInstance('pet_egg_mythic');
+                break;
+            case 'stone_box_large':
+                generatedItem = { ...createItemInstance('form_locking_stone'), name: '형상의 고정석 상자', description: '낙찰 시 100 ~ 200개 획득', _quantityRange: [100, 200] };
+                break;
+            case 'stone_box_medium':
+                generatedItem = { ...createItemInstance('form_locking_stone'), name: '형상의 고정석 상자', description: '낙찰 시 50 ~ 150개 획득', _quantityRange: [50, 150] };
+                break;
+            case 'stone_box_small':
+                 generatedItem = { ...createItemInstance('form_locking_stone'), name: '형상의 고정석 상자', description: '낙찰 시 10 ~ 50개 획득', _quantityRange: [10, 50] };
+                break;
+            case 'radiant_soulstone_large':
+                generatedItem = { ...createItemInstance('soulstone_radiant'), name: '찬란한 영혼석 묶음', description: '낙찰 시 100 ~ 300개 획득', _quantityRange: [100, 300] };
+                break;
+            case 'radiant_soulstone_medium':
+                generatedItem = { ...createItemInstance('soulstone_radiant'), name: '찬란한 영혼석 묶음', description: '낙찰 시 50 ~ 300개 획득', _quantityRange: [50, 300] };
+                break;
+            case 'radiant_soulstone_small':
+                generatedItem = { ...createItemInstance('soulstone_radiant'), name: '찬란한 영혼석 묶음', description: '낙찰 시 1 ~ 200개 획득', _quantityRange: [1, 200] };
+                break;
+            case 'shard_large':
+                generatedItem = { ...createItemInstance('rift_shard_abyss'), name: '심연의 파편', description: '낙찰 시 5,000 ~ 10,000개 획득', _quantityRange: [5000, 10000] };
+                break;
+            case 'shard_medium':
+                generatedItem = { ...createItemInstance('rift_shard_abyss'), name: '심연의 파편', description: '낙찰 시 1,000 ~ 5,000개 획득', _quantityRange: [1000, 5000] };
+                break;
+            case 'shard_small':
+                generatedItem = { ...createItemInstance('rift_shard_abyss'), name: '심연의 파편', description: '낙찰 시 100 ~ 500개 획득', _quantityRange: [100, 500] };
+                break;
+            case 'gold_jackpot_high':
+                generatedItem = { id: 'gold_jackpot', name: '황금빛 행운', grade: 'Primal', image: 'gold_pouch.png', description: '낙찰 시 1원 ~ 10조 골드 사이의 랜덤한 골드를 획득합니다!', _quantityRange: [1, 10000000000000] };
+                break;
+            case 'gold_jackpot_low':
+                 generatedItem = { id: 'gold_jackpot', name: '황금빛 행운', grade: 'Mystic', image: 'gold_pouch.png', description: '낙찰 시 1원 ~ 1조 골드 사이의 랜덤한 골드를 획득합니다!', _quantityRange: [1, 1000000000000] };
+                break;
+
+            case 'mystic_gear':
+                generatedItem = createItemInstance(mysticItems[Math.floor(Math.random() * mysticItems.length)]);
+                break;
+            case 'potion_box':
+                const potionId = potions[Math.floor(Math.random() * potions.length)];
+                generatedItem = { ...createItemInstance(potionId), name: `${itemData[potionId].name} 상자`, description: '낙찰 시 1 ~ 5개 획득', _quantityRange: [1, 5] };
+                break;
+            case 'rift_shard':
+                generatedItem = { ...createItemInstance('rift_shard'), name: '균열의 파편', description: '낙찰 시 1,000 ~ 10,000개 획득', _quantityRange: [1000, 10000] };
+                break;
+        }
+        if (generatedItem) items.push(generatedItem);
+    }
+    return items;
+}
+
+
+function handleBid(bidderSocket, bidData) {
+    if (!auctionState || !auctionState.currentBids.item) return;
+    
+    const { price, isImmediate } = bidData;
+    const bidderId = bidderSocket.userId;
+    const bidderUsername = bidderSocket.username;
+
+    if (!auctionState.currentBids.eligibleBidders.includes(bidderId)) {
+        bidderSocket.emit('auction:message', '이번 경매의 입찰 대상이 아닙니다.');
+        return;
+    }
+    
+    if (auctionState.currentBids.bidderId === bidderId) {
+        bidderSocket.emit('auction:message', '이미 최고 입찰자입니다.');
+        return;
+    }
+
+    if (isImmediate && auctionState.antiSnipeCooldownUntil && new Date() < auctionState.antiSnipeCooldownUntil) {
+        bidderSocket.emit('auction:message', '다른 유저의 고액 입찰로 인해 잠시 후 이용해주세요.');
+        return;
+    }
+
+    if (price <= auctionState.currentBids.price) {
+        bidderSocket.emit('auction:message', '이미 더 높은 가격에 입찰되었습니다.');
+        return;
+    }
+    
+    const player = onlinePlayers[bidderId];
+    if (!player || player.gold < price) {
+        bidderSocket.emit('auction:message', '소지한 골드가 부족합니다.');
+        return;
+    }
+
+    const priceIncreaseRatio = price / auctionState.currentBids.price;
+    if (!isImmediate && priceIncreaseRatio >= 2) {
+        auctionState.antiSnipeCooldownUntil = new Date(Date.now() + 2500);
+    } else {
+        auctionState.antiSnipeCooldownUntil = null;
+    }
+
+    auctionState.currentBids.price = price;
+    auctionState.currentBids.bidderId = bidderId;
+    auctionState.currentBids.bidderUsername = bidderUsername;
+
+    clearTimeout(auctionState.timer);
+    auctionState.timer = setTimeout(endCurrentAuctionItem, 15000); 
+
+    io.emit('auction:update', {
+        price: auctionState.currentBids.price,
+        bidder: auctionState.currentBids.bidderUsername,
+        antiSnipeActive: !!auctionState.antiSnipeCooldownUntil
+    });
+}
+async function endCurrentAuctionItem() {
+    if (!auctionState) return;
+    
+    const winningBid = auctionState.currentBids;
+    const item = winningBid.item;
+
+    if (winningBid.bidderId) { 
+        const winnerId = winningBid.bidderId;
+        const winnerUsername = winningBid.bidderUsername;
+        const finalPrice = winningBid.price;
+
+        io.emit('chatMessage', { isSystem: true, message: `[경매] <span class="${item.grade}">${item.name}</span> 아이템이 ${winnerUsername}님에게 ${finalPrice.toLocaleString()} G에 낙찰되었습니다.` });
+
+        const fee = Math.floor(finalPrice * 0.10);
+        const totalDividend = finalPrice - fee;
+        const distributionGroup = winningBid.eligibleBidders;
+
+        if (distributionGroup.length > 0) {
+            const dividendPerPerson = Math.floor(totalDividend / distributionGroup.length);
+            io.emit('chatMessage', { isSystem: true, message: `[경매] 참여 자격 대상자 전원에게 분배금 ${dividendPerPerson.toLocaleString()} G가 우편으로 지급됩니다.` });
+            
+            if (dividendPerPerson > 0) {
+                for (const participantId of distributionGroup) {
+                    try {
+                        await sendMail(participantId, '경매 시스템', { gold: dividendPerPerson, description: `${item.name} 낙찰 분배금` });
+                    } catch (error) {
+                        console.error(`[경매 분배금 오류] ID: ${participantId} 에게 분배금 메일 발송 실패:`, error);
+                    }
+                }
+            }
+        }
+
+        const winner = onlinePlayers[winnerId];
+        if (winner) {
+            winner.gold -= finalPrice;
+            if (winner.gold < 0) pushLog(winner, `[경매] 골드가 부족하여 소지 골드가 음수가 되었습니다.`);
+        } else {
+            await GameData.updateOne({ user: winnerId }, { $inc: { gold: -finalPrice } });
+        }
+        
+
+        if (item.id === 'gold_jackpot') {
+            const [min, max] = item._quantityRange;
+            const goldWon = Math.floor(Math.random() * (max - min + 1)) + min;
+            
+            await sendMail(winnerId, '경매 시스템', { gold: goldWon, description: `'${item.name}' 당첨` });
+            
+            const winnerData = onlinePlayers[winnerId];
+            if(winnerData) {
+               pushLog(winnerData, `[경매] <span class="${item.grade}">${item.name}</span>에 당첨되어 ${goldWon.toLocaleString()} G를 우편으로 획득했습니다!`);
+            }
+        } else {
+
+            let finalItem; 
+            if (item._quantityRange) {
+                const [min, max] = item._quantityRange;
+                const quantity = Math.floor(Math.random() * (max - min + 1)) + min;
+                const baseItem = createItemInstance(item.id, quantity);
+                finalItem = { ...baseItem, name: item.name.replace(' 상자', '') };
+            } else {
+                finalItem = item;
+            }
+
+            await sendMail(winnerId, '경매 시스템', { item: finalItem, description: `${finalItem.name} 낙찰` });
+        }
+
+        
+    } else { 
+        io.emit('chatMessage', { isSystem: true, message: `[경매] <span class="${item.grade}">${item.name}</span> 아이템이 유찰되었습니다.` });
+    }
+
+    processNextAuctionItem();
+}
+
+function endAuction() {
+    io.emit('auction:end');
+    auctionState = null;
+    console.log('[경매] 모든 경매가 종료되었습니다.');
+}
+
+
+async function distributeParticipationRewards() {
+    if (!worldBossFightState) return;
+
+    const now = new Date();
+    for (const participant of worldBossFightState.participants.values()) {
+        if (participant.joinTime) {
+            participant.totalTime += now - participant.joinTime;
+            participant.joinTime = null;
+        }
+    }
+
+    const threeMinutesInMs = 3 * 60 * 1000;
+
+    for (const [userId, data] of worldBossFightState.participants.entries()) {
+        const boxCount = data.totalTime >= threeMinutesInMs ? 10 : 1;
+        const rewardItem = createItemInstance('boss_participation_box', boxCount);
+        
+        try {
+            await sendMail(userId, '월드보스 시스템', { item: rewardItem, description: `참여 시간 보상` });
+        } catch (error) {
+            console.error(`[월드보스 보상 오류] ID: ${userId} 에게 참여 상자 발송 실패:`, error);
+        }
+    }
+}
+
+
+
+
+async function spawnWorldBoss() {
+    if (worldBossState && worldBossState.isActive) return;
+    const newBossId = new mongoose.Types.ObjectId().toString();
+    const bossName = "영원한 흉몽";
+
+    const savedState = await WorldBossState.findOneAndUpdate(
+        { uniqueId: 'singleton' },
+        {
+            uniqueId: 'singleton',
+            bossId: newBossId,
+            name: bossName,
+            maxHp: WORLD_BOSS_CONFIG.HP, 
+            currentHp: WORLD_BOSS_CONFIG.HP,
+            attack: WORLD_BOSS_CONFIG.ATTACK,
+            defense: WORLD_BOSS_CONFIG.DEFENSE,
+            isActive: true,
+            participants: new Map(),
+            spawnedAt: new Date()
+        },
+        { upsert: true, new: true }
+    );
+    
+    worldBossState = savedState.toObject();
+    worldBossState.participants = new Map();
+    
+    worldBossFightState = {
+        fightEndTime: new Date(Date.now() + 5 * 60 * 1000),
+        timeTrack: new Map() 
+    };
+
+    console.log(`[월드보스] ${bossName}와의 5분간의 전투를 시작합니다! (ID: ${newBossId})`);
+
+    io.emit('worldBoss:start', {
+        name: bossName,
+        endTime: worldBossFightState.fightEndTime
+    });
+    io.emit('chatMessage', { isSystem: true, message: `[월드보스] 거대한 악의 기운과 함께 ${bossName}이(가) 모습을 드러냈습니다! (5분 제한)` });
+    io.emit('globalAnnouncement', `[월드보스] ${bossName}가 출현했습니다! 5분간 전투가 시작됩니다!`);
+
+    setTimeout(onWorldBossDefeated, 5 * 60 * 1000);
+}
+
+async function onWorldBossDefeated() {
+    if (!worldBossState || !worldBossState.isActive) return;
+
+    console.log('[월드보스] 5분 전투 시간이 종료되었습니다. 보상 지급 및 경매를 시작합니다.');
+    worldBossState.isActive = false;
+    try {
+        await WorldBossState.updateOne({ uniqueId: 'singleton' }, { $set: { isActive: false } });
+    } catch(error) {
+        console.error('[DB 오류] 전투 종료 후 월드보스 상태 업데이트 실패:', error);
+    }
+
+    const now = new Date();
+    for (const [userId, data] of worldBossFightState.timeTrack.entries()) {
+        if (data.joinTime) { 
+            data.totalTime += now - data.joinTime;
+        }
+        const boxCount = data.totalTime >= (3 * 60 * 1000) ? 10 : 1;
+        const rewardItem = createItemInstance('boss_participation_box', boxCount);
+        try {
+            await sendMail(userId, '월드보스 시스템', { item: rewardItem, description: `참여 시간 보상` });
+        } catch (error) {
+            console.error(`[월드보스 보상 오류] ID: ${userId} 에게 참여 상자 발송 실패:`, error);
+        }
+    }
+
+
+    const allParticipantIds = Array.from(worldBossState.participants.keys());
+    if (allParticipantIds.length === 0) {
+        io.emit('worldBossDefeated');
+        worldBossState = null;
+        worldBossFightState = null;
+        return;
+    }
+
+    const sortedParticipants = Array.from(worldBossState.participants.values()).sort((a, b) => b.damageDealt - a.damageDealt);
+    
+    const participantGameData = await GameData.find({ user: { $in: allParticipantIds } }).select('user maxLevel').lean();
+    const gameDataMap = new Map(participantGameData.map(data => [data.user.toString(), data]));
+
+    const top5Contributors = sortedParticipants.slice(0, 5).map(p => p.userId.toString());
+    const highLevelContributors = [];
+    const lowLevelContributors = [];
+
+    for (const userId of allParticipantIds) {
+        const data = gameDataMap.get(userId);
+        if (data) {
+            data.maxLevel >= 1000000 ? highLevelContributors.push(userId) : lowLevelContributors.push(userId);
+        }
+    }
+
+    startAuction(top5Contributors, highLevelContributors, lowLevelContributors);
+    
+    await GameData.updateMany({ "worldBossContribution.bossId": worldBossState.bossId }, { $set: { worldBossContribution: { damageDealt: 0, bossId: null } } });
+    io.emit('worldBossDefeated');
+    worldBossState = null;
+    worldBossFightState = null;
+}
+
+
+async function cleanupDuplicateConnections() {
+    const connectedSockets = await io.sockets.fetchSockets();
+    const userSockets = new Map();
+
+    for (const socket of connectedSockets) {
+        if (socket.userId) {
+            if (!userSockets.has(socket.userId)) {
+                userSockets.set(socket.userId, []);
+            }
+            userSockets.get(socket.userId).push(socket);
+        }
+    }
+
+    for (const [userId, sockets] of userSockets.entries()) {
+        if (sockets.length > 1) {
+            sockets.sort((a, b) => new Date(b.handshake.time) - new Date(a.handshake.time));
+            const latestSocket = sockets[0];
+            const username = latestSocket.username;
+
+            console.log(`[중복 접속 감지] ${username} 계정에서 ${sockets.length}개의 연결을 발견했습니다. 최신 연결만 남기고 정리합니다.`);
+
+            for (let i = 1; i < sockets.length; i++) {
+                const oldSocket = sockets[i];
+                oldSocket.emit('forceDisconnect', { message: '새로운 위치에서 접속하여 이 연결을 종료합니다.' });
+                oldSocket.disconnect(true);
+            }
+
+            if (onlinePlayers[userId] && onlinePlayers[userId].socket.id !== latestSocket.id) {
+                onlinePlayers[userId].socket = latestSocket;
+            }
+        }
+    }
+}
 
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));

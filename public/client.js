@@ -720,6 +720,8 @@ let currentEssenceItem = null;
 let selectedScrollItem = null;
 let selectedTargetItem = null;
 let refinementExpTable = [];
+let worldBossTimerInterval = null;
+
 function renderDpsResult(record, isNewBest, isTop3, isViewingDetails = false) {
     const { modals } = elements;
     currentViewedDpsRecord = record; 
@@ -1043,6 +1045,23 @@ function selectScrollMaterial(materialItem) {
 }
     const elements = {
         gold: document.getElementById('gold'),
+		  auction: {
+            modal: document.getElementById('raid-auction-modal'),
+            body: document.getElementById('raid-auction-body'),
+            itemSlot: document.getElementById('auction-item-slot'),
+            itemName: document.getElementById('auction-item-name'),
+            itemDesc: document.getElementById('auction-item-desc'),
+            timerDisplay: document.getElementById('auction-timer-display'),
+            currentPrice: document.getElementById('auction-current-price'),
+            highestBidder: document.getElementById('auction-highest-bidder'),
+            bidInput: document.getElementById('auction-bid-input'),
+            manualBtn: document.getElementById('auction-bid-manual-btn'),
+            immediateBtn: document.getElementById('auction-bid-immediate-btn'),
+            message: document.getElementById('auction-message-display'),
+            sequence: document.getElementById('raid-auction-sequence'),
+            title: document.querySelector('#raid-auction-modal h2'), 
+            closeBtn: document.querySelector('#raid-auction-modal .close-button')
+        },
         player: { 
             panel: document.querySelector('.player-panel'), 
             hpBar: document.getElementById('player-hp-bar'), 
@@ -3736,33 +3755,77 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
             button.className = 'explore'; 
         }
     });
-    socket.on('worldBossSpawned', (bossState) => { elements.worldBoss.container.style.display = 'flex'; socket.emit('setAttackTarget', 'monster'); updateWorldBossUI(bossState); });
-    socket.on('worldBossUpdate', (bossState) => {
-        if (!bossState || !bossState.isActive) { elements.worldBoss.container.style.display = 'none'; return; };
-        if (elements.worldBoss.container.style.display !== 'flex') { elements.worldBoss.container.style.display = 'flex'; }
-        updateWorldBossUI(bossState);
-    });
+
     socket.on('worldBossDefeated', () => { elements.worldBoss.container.style.display = 'none'; selectedInventoryItemUid = null; updateEnhancementPanel(null); });
+
     
-    socket.on('myBossContributionUpdate', (contributionData) => {
+   socket.on('worldBossUpdate', (bossState) => {
+        if (!bossState || !bossState.isActive) { 
+            elements.worldBoss.container.style.display = 'none'; 
+            return; 
+        };
+        if (elements.worldBoss.container.style.display !== 'flex') { 
+            elements.worldBoss.container.style.display = 'flex'; 
+        }
+        updateWorldBossUI(bossState);
+
+        if (bossState.endTime) {
+            const endTime = new Date(bossState.endTime);
+            clearInterval(worldBossTimerInterval);
+
+            worldBossTimerInterval = setInterval(() => {
+                const remaining = Math.max(0, endTime - new Date());
+                const minutes = String(Math.floor(remaining / 60000)).padStart(2, '0');
+                const seconds = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+                
+                const existingText = elements.worldBoss.contribution.textContent;
+                const contributionText = existingText.includes("|") ? existingText.substring(0, existingText.indexOf("|")).trim() : `내 기여도: 0 (0.00%)`;
+                
+                elements.worldBoss.contribution.textContent = `${contributionText} | 남은 시간: ${minutes}:${seconds}`;
+
+                if (remaining <= 0) {
+                    clearInterval(worldBossTimerInterval);
+                }
+            }, 1000);
+        }
+    });
+   socket.on('myBossContributionUpdate', (contributionData) => {
         if (contributionData) {
             const myContribution = contributionData.myContribution || 0;
             const myShare = contributionData.myShare || 0;
-            elements.worldBoss.contribution.textContent = `내 기여도: ${formatInt(myContribution)} (${myShare.toFixed(2)}%)`;
+            const contributionText = `내 기여도: ${formatInt(myContribution)} (${myShare.toFixed(2)}%)`;
+
+            const existingText = elements.worldBoss.contribution.textContent;
+            if(existingText.includes("|")) {
+                const timerText = existingText.substring(existingText.indexOf("|"));
+                elements.worldBoss.contribution.textContent = `${contributionText} ${timerText}`;
+            } else {
+                elements.worldBoss.contribution.textContent = contributionText;
+            }
         }
     });
 
-    function updateWorldBossUI(bossState) {
+ function updateWorldBossUI(bossState) {
         if (!bossState) return;
         elements.worldBoss.name.textContent = `🔥 ${bossState.name} 🔥`;
-        const currentHp = bossState.currentHp || 0; 
-        const maxHp = bossState.maxHp || 1; 
-        const hpPercent = (currentHp / maxHp) * 100;
-        elements.worldBoss.hpBar.style.width = `${hpPercent}%`;
-        elements.worldBoss.hpText.textContent = `${formatInt(currentHp)} / ${formatInt(maxHp)}`;
+        elements.worldBoss.hpBar.style.width = `100%`;
+        elements.worldBoss.hpBar.style.background = 'linear-gradient(45deg, #af52de, #ff2d55)';
+        elements.worldBoss.hpText.innerHTML = `<span style="font-size: 1.2em;">∞</span>`;
     }
     elements.chat.form.addEventListener('submit', (e) => { e.preventDefault(); e.stopPropagation();  const message = elements.chat.input.value.trim(); if (message) { socket.emit('chatMessage', message); elements.chat.input.value = ''; } });
-
+  const auctionChatForm = document.getElementById('raid-auction-chat-form');
+    const auctionChatInput = document.getElementById('raid-auction-chat-input');
+    if (auctionChatForm && auctionChatInput) {
+        auctionChatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const message = auctionChatInput.value.trim();
+            if (message) {
+                socket.emit('chatMessage', message);
+                auctionChatInput.value = '';
+            }
+        });
+    }
     elements.chat.messages.addEventListener('click', (e) => {
         const targetUsernameSpan = e.target.closest('[data-username]');
         if (targetUsernameSpan) {
@@ -3865,6 +3928,13 @@ document.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('c
     }
 
     elements.chat.messages.appendChild(item);
+	
+	 const auctionChat = document.getElementById('raid-auction-chat-messages');
+        if (auctionChat && elements.auction.modal.style.display === 'flex') {
+            const clonedMessage = item.cloneNode(true);
+            auctionChat.appendChild(clonedMessage);
+            auctionChat.scrollTop = auctionChat.scrollHeight;
+        }
     
     if (type === 'dps_boast' && recordId) {
         item.addEventListener('click', () => {
@@ -5065,7 +5135,292 @@ document.getElementById('pvp-abort-button').addEventListener('click', () => {
 if (potionTimerInterval) clearInterval(potionTimerInterval);
 potionTimerInterval = setInterval(updatePotionTimersUI, 1000);
 
+    let auctionTimerInterval = null;
 
+    function createAuctionReopenButton() {
+        const existingBtn = document.getElementById('raid-auction-reopen-btn');
+        if (existingBtn) return;
+
+        const topButtons = document.querySelector('.top-buttons');
+        const reopenBtn = document.createElement('button');
+        reopenBtn.id = 'raid-auction-reopen-btn';
+        reopenBtn.textContent = '⚔️ 경매';
+        reopenBtn.addEventListener('click', () => {
+            elements.auction.modal.style.display = 'flex';
+        });
+        topButtons.appendChild(reopenBtn);
+    }
+
+    function removeAuctionReopenButton() {
+        const reopenBtn = document.getElementById('raid-auction-reopen-btn');
+        if (reopenBtn) {
+            reopenBtn.remove();
+        }
+    }
+
+  socket.on('auction:start', () => {
+        elements.auction.modal.style.display = 'flex';
+        createAuctionReopenButton();
+
+        const mainChat = document.getElementById('chat-messages');
+        const auctionChat = document.getElementById('raid-auction-chat-messages');
+        if (mainChat && auctionChat) {
+            auctionChat.innerHTML = mainChat.innerHTML;
+            auctionChat.scrollTop = auctionChat.scrollHeight;
+        }
+    });
+
+
+socket.on('auction:update', (data) => {
+    const { price, bidder, antiSnipeActive } = data;
+    elements.auction.currentPrice.textContent = `${price.toLocaleString()} G`;
+    elements.auction.highestBidder.textContent = bidder;
+    elements.auction.bidInput.value = '';
+    elements.auction.message.textContent = '';
+
+    let timeLeft = 20;
+    clearInterval(auctionTimerInterval);
+    const updateTimer = () => {
+        if (timeLeft <= 0) {
+            elements.auction.timerDisplay.textContent = "00:00";
+            clearInterval(auctionTimerInterval);
+            return;
+        }
+        const minutes = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+        const seconds = String(timeLeft % 60).padStart(2, '0');
+        elements.auction.timerDisplay.textContent = `${minutes}:${seconds}`;
+        timeLeft--;
+    };
+    updateTimer();
+    auctionTimerInterval = setInterval(updateTimer, 1000);
+
+    if (antiSnipeActive) {
+        elements.auction.immediateBtn.classList.add('disabled');
+        elements.auction.immediateBtn.disabled = true;
+        setTimeout(() => {
+            elements.auction.immediateBtn.classList.remove('disabled');
+            if (elements.auction.bidInput.placeholder === "입찰할 골드 입력") {
+                elements.auction.immediateBtn.disabled = false;
+            }
+        }, 2500);
+    }
+});
+socket.on('auction:rejoin', (data) => {
+        const { item, price, bidder, index, total, stage, eligibleBidders, remainingTime } = data;
+        
+        createAuctionReopenButton();
+        elements.auction.modal.style.display = 'flex';
+
+        switch(stage) {
+            case 1: elements.auction.title.textContent = "⚔️ 기여자 Top 5 특별 경매"; break;
+            case 2: elements.auction.title.textContent = "⚔️ 100만 층 이상 상위 랭커 경매"; break;
+            case 3: elements.auction.title.textContent = "⚔️ 100만 층 미만 일반 경매"; break;
+            default: elements.auction.title.textContent = "⚔️ 월드보스 전리품 경매";
+        }
+
+        elements.auction.itemSlot.innerHTML = createItemHTML(item, { showName: false, showEffect: false });
+        elements.auction.itemName.innerHTML = `<span class="${item.grade}">${item.name}</span>`;
+        elements.auction.itemDesc.textContent = item.description;
+        elements.auction.currentPrice.textContent = `${price.toLocaleString()} G`;
+        elements.auction.highestBidder.textContent = bidder;
+        elements.auction.bidInput.value = '';
+        elements.auction.message.textContent = '';
+        elements.auction.sequence.textContent = `${index} / ${total}`;
+
+        const amIEligible = eligibleBidders.includes(window.myUserId);
+        elements.auction.manualBtn.disabled = !amIEligible;
+        elements.auction.bidInput.disabled = !amIEligible;
+        
+        if (amIEligible) {
+            elements.auction.immediateBtn.disabled = false;
+            elements.auction.immediateBtn.textContent = '즉시 입찰 (+5%)';
+            elements.auction.bidInput.placeholder = "입찰할 골드 입력";
+        } else {
+            elements.auction.immediateBtn.disabled = true;
+            elements.auction.immediateBtn.textContent = '경매 참여 대상이 아닙니다';
+            elements.auction.bidInput.placeholder = "경매 참여 대상이 아닙니다";
+        }
+
+        let timeLeft = Math.ceil(remainingTime / 1000);
+        clearInterval(auctionTimerInterval);
+        
+        const updateTimer = () => {
+            if (timeLeft <= 0) {
+                elements.auction.timerDisplay.textContent = "00:00";
+                clearInterval(auctionTimerInterval);
+                return;
+            }
+            const minutes = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+            const seconds = String(timeLeft % 60).padStart(2, '0');
+            elements.auction.timerDisplay.textContent = `${minutes}:${seconds}`;
+            timeLeft--;
+        };
+        updateTimer();
+        auctionTimerInterval = setInterval(updateTimer, 1000);
+    });
+socket.on('auction:newItem', (data) => {
+        const { item, price, bidder, index, total, stage, eligibleBidders } = data;
+        
+       switch(stage) {
+            case 1:
+                const names = data.eligibleBidderNames || [];
+                elements.auction.title.innerHTML = `⚔️ 기여자 Top 5 특별 경매<br><small>(${names.join(', ')})</small>`;
+                break;
+            case 2:
+                elements.auction.title.textContent = `⚔️ 100만 층 이상 상위 랭커 경매 (${eligibleBidders.length}명)`;
+                break;
+            case 3:
+                elements.auction.title.textContent = `⚔️ 100만 층 미만 일반 경매 (${eligibleBidders.length}명)`;
+                break;
+            default:
+                elements.auction.title.textContent = "⚔️ 월드보스 전리품 경매";
+        }
+
+        elements.auction.itemSlot.innerHTML = createItemHTML(item, { showName: false, showEffect: false });
+        elements.auction.itemName.innerHTML = `<span class="${item.grade}">${item.name}</span>`;
+        elements.auction.itemDesc.textContent = item.description;
+        elements.auction.currentPrice.textContent = `${price.toLocaleString()} G`;
+        elements.auction.highestBidder.textContent = bidder;
+        elements.auction.bidInput.value = '';
+        elements.auction.message.textContent = '';
+        elements.auction.sequence.textContent = `${index} / ${total}`;
+
+        const amIEligible = eligibleBidders.includes(window.myUserId);
+        elements.auction.manualBtn.disabled = !amIEligible;
+        elements.auction.bidInput.disabled = !amIEligible;
+        
+        if (amIEligible) {
+            elements.auction.immediateBtn.disabled = false;
+            elements.auction.immediateBtn.textContent = '즉시 입찰 (+5%)';
+            elements.auction.bidInput.placeholder = "입찰할 골드 입력";
+        } else {
+            elements.auction.immediateBtn.disabled = true;
+            elements.auction.immediateBtn.textContent = '경매 참여 대상이 아닙니다';
+            elements.auction.bidInput.placeholder = "경매 참여 대상이 아닙니다";
+        }
+
+        let timeLeft = 20; 
+        clearInterval(auctionTimerInterval);
+        
+        const updateTimer = () => {
+            if (timeLeft <= 0) {
+                elements.auction.timerDisplay.textContent = "00:00";
+                clearInterval(auctionTimerInterval);
+                return;
+            }
+            const minutes = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+            const seconds = String(timeLeft % 60).padStart(2, '0');
+            elements.auction.timerDisplay.textContent = `${minutes}:${seconds}`;
+            timeLeft--;
+        };
+        updateTimer();
+        auctionTimerInterval = setInterval(updateTimer, 1000);
+    });
+	
+socket.on('auction:update', (data) => {
+
+        const fullData = {
+            ...data,
+            item: document.getElementById('auction-item-slot').innerHTML, 
+            index: parseInt(elements.auction.sequence.textContent.split(' / ')[0]),
+            total: parseInt(elements.auction.sequence.textContent.split(' / ')[1]),
+            stage: auctionState.currentStage, 
+        };
+
+        
+        elements.auction.currentPrice.textContent = `${data.price.toLocaleString()} G`;
+        elements.auction.highestBidder.textContent = data.bidder;
+        elements.auction.bidInput.value = '';
+        elements.auction.message.textContent = '';
+        
+        let timeLeft = 20; 
+        clearInterval(auctionTimerInterval);
+
+        const updateTimer = () => {
+             if (timeLeft <= 0) {
+                elements.auction.timerDisplay.textContent = "00:00";
+                clearInterval(auctionTimerInterval);
+                return;
+            }
+            const minutes = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+            const seconds = String(timeLeft % 60).padStart(2, '0');
+            elements.auction.timerDisplay.textContent = `${minutes}:${seconds}`;
+            timeLeft--;
+        };
+        updateTimer();
+        auctionTimerInterval = setInterval(updateTimer, 1000);
+
+        if (data.antiSnipeActive) {
+            elements.auction.immediateBtn.classList.add('disabled');
+            elements.auction.immediateBtn.disabled = true;
+            setTimeout(() => {
+                elements.auction.immediateBtn.classList.remove('disabled');
+                if (elements.auction.bidInput.placeholder === "입찰할 골드 입력") {
+                    elements.auction.immediateBtn.disabled = false;
+                }
+            }, 2500);
+        }
+    });
+    
+    socket.on('auction:message', (message) => {
+        elements.auction.message.textContent = message;
+        setTimeout(() => {
+             elements.auction.message.textContent = '';
+        }, 2000);
+    });
+
+    socket.on('auction:end', () => {
+        clearInterval(auctionTimerInterval);
+        elements.auction.modal.style.display = 'none';
+        removeAuctionReopenButton();
+    });
+
+    elements.auction.manualBtn.addEventListener('click', () => {
+        const price = parseInt(elements.auction.bidInput.value, 10);
+        if (!isNaN(price) && price > 0) {
+            socket.emit('auction:bid', { price, isImmediate: false });
+        }
+    });
+    
+    elements.auction.bidInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            elements.auction.manualBtn.click();
+        }
+    });
+
+    elements.auction.immediateBtn.addEventListener('click', () => {
+        const currentPrice = parseInt(elements.auction.currentPrice.textContent.replace(/[^0-9]/g, ''), 10);
+        const newPrice = Math.floor(currentPrice * 1.05);
+        socket.emit('auction:bid', { price: newPrice, isImmediate: true });
+    });
+
+    elements.auction.closeBtn.addEventListener('click', () => {
+        elements.auction.modal.style.display = 'none';
+    });
+
+socket.on('worldBoss:start', (data) => {
+        elements.worldBoss.container.style.display = 'flex';
+        updateWorldBossUI(data);
+        
+        const endTime = new Date(data.endTime);
+        clearInterval(worldBossTimerInterval);
+
+        worldBossTimerInterval = setInterval(() => {
+            const remaining = Math.max(0, endTime - new Date());
+            const minutes = String(Math.floor(remaining / 60000)).padStart(2, '0');
+            const seconds = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+            
+            const existingText = elements.worldBoss.contribution.textContent;
+            const contributionText = existingText.includes("|") ? existingText.substring(0, existingText.indexOf("|")).trim() : `내 기여도: 0 (0.00%)`;
+            
+            elements.worldBoss.contribution.textContent = `${contributionText} | 남은 시간: ${minutes}:${seconds}`;
+
+            if (remaining <= 0) {
+                clearInterval(worldBossTimerInterval);
+            }
+        }, 1000);
+    });
+	
 }
 function renderCodex({ allItems, discovered, totalItemCount, discoveredCount, completionPercentage }) {
     const modal = document.getElementById('codex-modal');
