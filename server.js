@@ -2446,6 +2446,19 @@ try {
     }
 
     const commandOrTarget = command; 
+	
+	
+	if (commandOrTarget === '전체저장') {
+        const onlineUserIds = Object.keys(onlinePlayers);
+        if (onlineUserIds.length === 0) {
+            return pushLog(player, '[관리자] 저장할 온라인 유저가 없습니다.');
+        }
+        await createAndCleanupSnapshots(onlineUserIds, true);
+        const message = `[관리자] 현재 접속 중인 모든 유저(${onlineUserIds.length}명)의 데이터를 수동 저장했습니다.`;
+        pushLog(player, message);
+        io.emit('chatMessage', { isSystem: true, message });
+        return;
+    }
 
     if (commandOrTarget === 'dps초기화') {
         try {
