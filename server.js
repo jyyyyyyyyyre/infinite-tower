@@ -411,6 +411,9 @@ app.get('/', (req, res) => {
 });
 
 const adminItemAlias = {
+	 '영혼석1': 'soulstone_faint',
+    '영혼석2': 'soulstone_glowing',
+    '영혼석3': 'soulstone_radiant',
 '파편': 'rift_shard_abyss',
 '바하정수': 'bahamut_essence',
 '소울스톤공': 'soulstone_attack',
@@ -2230,9 +2233,14 @@ try {
         socket.emit('worldBossUpdate', serializableState);
     }
 	
-	  if (auctionState && auctionState.currentBids.item) {
-        const remainingTime = auctionState.timer ? auctionState.timer._idleStart + auctionState.timer._idleTimeout - Date.now() : 0;
+	 if (auctionState && auctionState.currentBids.item) {
+        if (auctionState.isSpecialAuction) {
+            if (!auctionState.participantGroups.allOnline.includes(socket.userId)) {
+                auctionState.participantGroups.allOnline.push(socket.userId);
+            }
+        }
 
+        const remainingTime = auctionState.timer ? auctionState.timer._idleStart + auctionState.timer._idleTimeout - Date.now() : 0;
         socket.emit('auction:rejoin', {
             item: auctionState.currentBids.item,
             price: auctionState.currentBids.price,
@@ -2241,7 +2249,8 @@ try {
             total: auctionState.items.length,
             stage: auctionState.currentStage,
             eligibleBidders: auctionState.currentBids.eligibleBidders,
-            remainingTime: Math.max(0, remainingTime) 
+            remainingTime: Math.max(0, remainingTime),
+			customTitle: auctionState.auctionTitle
         });
     }
 
@@ -2342,20 +2351,101 @@ try {
 
                if (socket.role === 'admin' && trimmedMsg.startsWith('/')) {
     const args = trimmedMsg.substring(1).split(' ').filter(arg => arg.length > 0);
-    const commandOrTarget = args.shift().toLowerCase();
+    const command = args.shift().toLowerCase();
     const adminUsername = socket.username;
 
-    if (commandOrTarget === '전체저장') {
-        const onlineUserIds = Object.keys(onlinePlayers);
-        if (onlineUserIds.length === 0) {
-            return pushLog(player, '[관리자] 저장할 온라인 유저가 없습니다.');
+   if (command === '경매') {
+        if (auctionState) {
+            return pushLog(onlinePlayers[socket.userId], '[관리자] 이미 다른 경매(월드보스 또는 특별 경매)가 진행 중입니다.');
         }
-        await createAndCleanupSnapshots(onlineUserIds, true);
-        const message = `[관리자] 현재 접속 중인 모든 유저(${onlineUserIds.length}명)의 데이터를 수동 저장했습니다.`;
-        pushLog(player, message);
-        io.emit('chatMessage', { isSystem: true, message });
+
+        let delayInSeconds = 0;
+        let customTitle = "관리자 특별 경매";
+        const itemArgs = [];
+
+        const fullArgString = args.join(' ');
+        const timeMatch = fullArgString.match(/시간:(\d+)/);
+        const titleMatch = fullArgString.match(/이름:(.+)/);
+
+        if (timeMatch) {
+            delayInSeconds = parseInt(timeMatch[1], 10);
+        }
+        if (titleMatch) {
+            customTitle = titleMatch[1].trim();
+        }
+
+        const remainingArgs = fullArgString.replace(/시간:\d+/g, '').replace(/이름:.+/g, '').trim().split(' ').filter(arg => arg.length > 0);
+
+        if (remainingArgs.length === 0) {
+            return pushLog(onlinePlayers[socket.userId], '[관리자] 사용법: /경매 [아이템] 이름:[제목] 시간:[초]');
+        }
+        
+        if (isNaN(delayInSeconds) || delayInSeconds < 0) {
+            return pushLog(onlinePlayers[socket.userId], '[관리자] 잘못된 시간 값입니다.');
+        }
+
+        const itemsToAuction = [];
+        for (const arg of remainingArgs) {
+            const [aliasPart, quantityPart] = arg.split(':');
+            const itemId = adminItemAlias[aliasPart];
+
+            if (!itemId && aliasPart.toLowerCase() !== '골드') {
+                return pushLog(onlinePlayers[socket.userId], `[관리자] 잘못된 아이템 단축어입니다: ${aliasPart}`);
+            }
+
+            let item;
+            if (aliasPart.toLowerCase() === '골드') {
+                item = { id: 'gold_jackpot', name: '황금빛 행운', grade: 'Primal', image: 'gold_pouch.png' };
+            } else {
+                item = createItemInstance(itemId);
+            }
+
+            if (quantityPart) {
+                if (quantityPart.includes('~')) {
+                    const [min, max] = quantityPart.split('~').map(Number);
+                    if (isNaN(min) || isNaN(max) || min < 0 || max < min) {
+                        return pushLog(onlinePlayers[socket.userId], `[관리자] 잘못된 범위 지정입니다: ${quantityPart}`);
+                    }
+                    const unit = (aliasPart.toLowerCase() === '골드') ? '원' : '개';
+                    item.description = `낙찰 시 ${min.toLocaleString()} ~ ${max.toLocaleString()}${unit} 사이의 랜덤 보상을 획득합니다.`;
+                    item._quantityRange = [min, max];
+                } else {
+                    const quantity = Number(quantityPart);
+                    if (isNaN(quantity) || quantity <= 0) {
+                        return pushLog(onlinePlayers[socket.userId], `[관리자] 잘못된 수량 지정입니다: ${quantityPart}`);
+                    }
+                    item.quantity = quantity;
+                }
+            }
+            itemsToAuction.push(item);
+        }
+
+        if (itemsToAuction.length > 0) {
+            if (delayInSeconds > 0) {
+                let countdown = delayInSeconds;
+                io.emit('chatMessage', { isSystem: true, message: `[경매] ${countdown}초 후에 '👑 ${customTitle}' 경매가 시작됩니다!` });
+                
+                const countdownInterval = setInterval(() => {
+                    countdown -= 10;
+                    if (countdown > 0) {
+                        io.emit('chatMessage', { isSystem: true, message: `[경매] ${countdown}초 후에 '👑 ${customTitle}' 경매가 시작됩니다!` });
+                    } else {
+                        clearInterval(countdownInterval);
+                    }
+                }, 10000);
+
+                setTimeout(() => {
+                    startSpecialAuction(itemsToAuction, customTitle);
+                }, delayInSeconds * 1000);
+
+            } else {
+                startSpecialAuction(itemsToAuction, customTitle);
+            }
+        }
         return;
     }
+
+    const commandOrTarget = command; 
 
     if (commandOrTarget === 'dps초기화') {
         try {
@@ -7376,15 +7466,50 @@ function startAuction(top5, highLevel, lowLevel) {
 function processNextAuctionItem() {
     if (!auctionState) return;
 
+    if (auctionState.isSpecialAuction) {
+        auctionState.currentItemIndex++;
+        if (auctionState.currentItemIndex >= auctionState.items.length) {
+            endAuction();
+            return;
+        }
+        const currentItem = auctionState.items[auctionState.currentItemIndex];
+        const eligibleBidders = auctionState.participantGroups.allOnline;
+
+        auctionState.currentBids = {
+            item: currentItem,
+            price: 1000000,
+            bidderId: null,
+            bidderUsername: '없음',
+            eligibleBidders: eligibleBidders
+        };
+
+        clearTimeout(auctionState.timer);
+        auctionState.timer = setTimeout(endCurrentAuctionItem, 20000);
+
+        io.emit('auction:newItem', {
+            item: currentItem,
+            price: auctionState.currentBids.price,
+            bidder: auctionState.currentBids.bidderUsername,
+            index: auctionState.currentItemIndex + 1,
+            total: auctionState.items.length,
+            stage: 0,
+            eligibleBidders: eligibleBidders,
+			customTitle: auctionState.auctionTitle
+        });
+        return; 
+    }
+    
+
     if (auctionState.currentItemIndex === -1 || auctionState.currentItemIndex >= auctionState.items.length - 1) {
-        auctionState.currentStage++; 
+        auctionState.currentStage++;
         
         let currentGroup;
         let announcement = "";
         let itemPool = [];
+        
 
         const payloadToEmit = {
-            item: null, 
+            item: null,
             price: 1000000,
             bidder: '없음',
             index: 0,
@@ -7393,52 +7518,33 @@ function processNextAuctionItem() {
             eligibleBidders: []
         };
 
-        if (auctionState.currentStage === 1) { // Top 5 경매
+        if (auctionState.currentStage === 1) {
             currentGroup = auctionState.participantGroups.top5;
-            const top5Usernames = currentGroup.map(id => {
-                const player = onlinePlayers[id];
-                return player ? player.username : null;
-            }).filter(Boolean);
- announcement = `기여자 Top 5 특별 경매를 시작합니다! 대상자: ${top5Usernames.join(', ')} 님입니다!`;
-          itemPool = [
-                { type: 'primal_gear', weight: 5 },
-                { type: 'gold_jackpot_high', weight: 15 },
-                { type: 'mythic_egg', weight: 10 },
-                { type: 'shard_large', weight: 10 },
-                { type: 'shard_medium', weight: 20 },
-                { type: 'stone_box_large', weight: 10 },
-                { type: 'radiant_soulstone_large', weight: 10 },
-                { type: 'radiant_soulstone_medium', weight: 10 },
-                { type: 'radiant_soulstone_small', weight: 10 },
+            const top5Usernames = currentGroup ? currentGroup.map(id => (onlinePlayers[id]?.username || null)).filter(Boolean) : [];
+            announcement = `기여자 Top 5 특별 경매를 시작합니다! 대상자: ${top5Usernames.join(', ')} 님입니다!`;
+            itemPool = [
+                { type: 'primal_gear', weight: 5 }, { type: 'gold_jackpot_high', weight: 15 }, { type: 'mythic_egg', weight: 10 },
+                { type: 'shard_large', weight: 10 }, { type: 'shard_medium', weight: 20 }, { type: 'stone_box_large', weight: 10 },
+                { type: 'radiant_soulstone_large', weight: 10 }, { type: 'radiant_soulstone_medium', weight: 10 }, { type: 'radiant_soulstone_small', weight: 10 },
             ];
             payloadToEmit.eligibleBidderNames = top5Usernames;
-        } else if (auctionState.currentStage === 2) { // ...
+        } else if (auctionState.currentStage === 2) {
             currentGroup = auctionState.participantGroups.highLevel;
             announcement = `100만 층 이상 상위 랭커 경매를 시작합니다!`;
             itemPool = [
-                { type: 'primal_gear', weight: 10 },
-                { type: 'gold_jackpot_high', weight: 10 },
-                { type: 'mythic_egg', weight: 15 },
-                { type: 'shard_medium', weight: 20 },
-                { type: 'shard_small', weight: 10 },
-                { type: 'stone_box_medium', weight: 10 },
-                { type: 'radiant_soulstone_large', weight: 5 },
-                { type: 'radiant_soulstone_medium', weight: 10 },
-                { type: 'radiant_soulstone_small', weight: 10 },
+                { type: 'primal_gear', weight: 10 }, { type: 'gold_jackpot_high', weight: 10 }, { type: 'mythic_egg', weight: 15 },
+                { type: 'shard_medium', weight: 20 }, { type: 'shard_small', weight: 10 }, { type: 'stone_box_medium', weight: 10 },
+                { type: 'radiant_soulstone_large', weight: 5 }, { type: 'radiant_soulstone_medium', weight: 10 }, { type: 'radiant_soulstone_small', weight: 10 },
             ];
-        } else if (auctionState.currentStage === 3) { // ...
+        } else if (auctionState.currentStage === 3) {
             currentGroup = auctionState.participantGroups.lowLevel;
-             announcement = `100만 층 미만 일반 경매를 시작합니다!`;
+            announcement = `100만 층 미만 일반 경매를 시작합니다!`;
             itemPool = [
-                { type: 'gold_jackpot_low', weight: 5 },
-                { type: 'mythic_egg', weight: 15 },
-                { type: 'mystic_gear', weight: 20 },
-                { type: 'rift_shard', weight: 25 },
-                { type: 'potion_box', weight: 25 },
-                { type: 'stone_box_small', weight: 10 },
+                { type: 'gold_jackpot_low', weight: 5 }, { type: 'mythic_egg', weight: 15 }, { type: 'mystic_gear', weight: 20 },
+                { type: 'rift_shard', weight: 25 }, { type: 'potion_box', weight: 25 }, { type: 'stone_box_small', weight: 10 },
             ];
         } else {
-            endAuction(); 
+            endAuction();
             return;
         }
 
@@ -7448,7 +7554,7 @@ function processNextAuctionItem() {
             io.emit('chatMessage', { isSystem: true, message: `[경매] 해당 단계의 경매 참여 대상자가 없어 다음 단계로 넘어갑니다.` });
             auctionState.items = [];
             auctionState.currentItemIndex = -1;
-            processNextAuctionItem(); 
+            processNextAuctionItem();
             return;
         }
         
@@ -7475,7 +7581,6 @@ function processNextAuctionItem() {
     clearTimeout(auctionState.timer);
     auctionState.timer = setTimeout(endCurrentAuctionItem, 20000);
 
-
     const finalPayload = {
         item: currentItem,
         price: auctionState.currentBids.price,
@@ -7486,7 +7591,7 @@ function processNextAuctionItem() {
         eligibleBidders: eligibleBidders
     };
 
-    if (auctionState.currentStage === 1) {
+    if (auctionState.currentStage === 1 && auctionState.participantGroups.top5) {
         const top5Usernames = auctionState.participantGroups.top5.map(id => onlinePlayers[id]?.username || null).filter(Boolean);
         finalPayload.eligibleBidderNames = top5Usernames;
     }
@@ -7871,4 +7976,26 @@ async function cleanupDuplicateConnections() {
     }
 }
 
+function startSpecialAuction(items, title = "관리자 특별 경매") { 
+    const onlineUserIds = Object.keys(onlinePlayers);
+
+    auctionState = {
+        items: items,
+        currentItemIndex: -1,
+        currentStage: 0, 
+        isSpecialAuction: true, 
+        auctionTitle: title, 
+        participantGroups: {
+            allOnline: onlineUserIds 
+        },
+        currentBids: {},
+        timer: null,
+        antiSnipeCooldownUntil: null,
+    };
+    
+    io.emit('auction:start');
+    io.emit('chatMessage', { isSystem: true, message: `[경매] '👑 ${title}' 을(를) 시작합니다!` });
+
+    processNextAuctionItem();
+}
 server.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));

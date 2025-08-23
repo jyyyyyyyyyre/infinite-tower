@@ -5262,6 +5262,10 @@ socket.on('auction:newItem', (data) => {
         const { item, price, bidder, index, total, stage, eligibleBidders } = data;
         
        switch(stage) {
+ case 0:
+                const titleText = data.customTitle || "관리자 특별 경매";
+                elements.auction.title.textContent = `👑 ${titleText} (${eligibleBidders.length}명)`;
+                break;
             case 1:
                 const names = data.eligibleBidderNames || [];
                 elements.auction.title.innerHTML = `⚔️ 기여자 Top 5 특별 경매<br><small>(${names.join(', ')})</small>`;
