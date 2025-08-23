@@ -5175,7 +5175,7 @@ socket.on('auction:update', (data) => {
     const { price, bidder, antiSnipeActive } = data;
     elements.auction.currentPrice.textContent = `${price.toLocaleString()} G`;
     elements.auction.highestBidder.textContent = bidder;
-    elements.auction.bidInput.value = '';
+  //  elements.auction.bidInput.value = '';
     elements.auction.message.textContent = '';
 
     let timeLeft = 20;

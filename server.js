@@ -4478,10 +4478,18 @@ function gameTick(player) {
    if (worldBossState && worldBossState.isActive && player.attackTarget === 'worldBoss') {
         let pDmg = 0;
         
-        if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
+      if (player.stats.total.bloodthirst > 0 && Math.random() < player.stats.total.bloodthirst / 100) {
             pDmg = 100000000000; 
             player.currentHp = player.stats.total.hp;
             pushLog(player, `[피의 갈망] 효과가 발동하여 <span class="fail-color">${formatInt(pDmg)}</span>의 피해를 입히고 체력을 모두 회복합니다!`);
+            
+            if (weapon?.prefix === '포식자') {
+                const duration = (armor?.prefix === '포식자') ? 5000 : 3000;
+                addBuff(player, 'predator_state', '포식', duration, {});
+            }
+            if (armor?.prefix === '포식자') {
+                addBuff(player, 'predator_endurance', '광전사의 인내', 10000, {});
+            }
         } else {
             pDmg = Math.max(1, (player.stats.total.attack || 0));
         }
