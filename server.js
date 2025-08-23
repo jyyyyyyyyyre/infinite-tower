@@ -6671,7 +6671,7 @@ function checkAndSpawnBoss() {
     const kstMinutes = kstNow.getUTCMinutes();
 
 
-   if (kstHour === 20 && kstMinutes === 00) {
+  if ((kstHour === 20 || kstHour === 22) && kstMinutes === 0) {
         if (isBossSpawning) return;
         isBossSpawning = true;
         console.log(`[스케줄러] 정해진 시간 (20시)이 되어 월드보스 전투를 시작합니다.`);
