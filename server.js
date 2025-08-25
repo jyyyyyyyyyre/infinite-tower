@@ -7737,7 +7737,7 @@ function handleBid(bidderSocket, bidData) {
     auctionState.currentBids.bidderUsername = bidderUsername;
 
     clearTimeout(auctionState.timer);
-    auctionState.timer = setTimeout(endCurrentAuctionItem, 15000); 
+    auctionState.timer = setTimeout(endCurrentAuctionItem, 20000); 
 
     io.emit('auction:update', {
         price: auctionState.currentBids.price,
@@ -7925,6 +7925,23 @@ async function onWorldBossDefeated() {
     const allParticipantIds = Array.from(worldBossState.participants.keys());
     if (allParticipantIds.length === 0) {
         io.emit('worldBossDefeated');
+    const participantIds = Array.from(worldBossState.participants.keys());
+    for (const userId of participantIds) {
+        const participant = onlinePlayers[userId];
+        if (participant) {
+            if (participant.stateBeforeBossAttack === 'exploring') {
+                participant.isExploring = true;
+            } else {
+                participant.isExploring = false;
+            }
+            participant.attackTarget = 'monster';
+            participant.stateBeforeBossAttack = null;
+            if (participant.socket) {
+                participant.socket.emit('attackTargetChanged', 'monster');
+                pushLog(participant, "[월드보스] 전투가 종료되어 일반 몬스터를 공격합니다.");
+            }
+        }
+    }
         worldBossState = null;
         worldBossFightState = null;
         return;
